@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S 使用问题总汇 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / K8S 使用问题总汇</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>🧯 K8S 使用问题总汇
+    <small>安装失败 / 磁盘 / 挂载 / 权限 / 拉不下镜像 / 线上数据库磁盘 —— 现象 → 原因 → 解决方案,按报错关键词对号入座</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#c1">集群安装失败(kubeadm 高频报错)</a></li>
+    <li><a href="#c2">磁盘问题(磁盘满 / DiskPressure 驱逐)</a></li>
+    <li><a href="#c3">挂载问题(NFS / subPath / multi-attach)</a></li>
+    <li><a href="#c4">权限问题(Permission denied / RBAC)</a></li>
+    <li><a href="#c5">拉不下镜像(ImagePullBackOff)</a></li>
+    <li><a href="#c6">线上数据库磁盘满(止血 + PVC 扩容)</a></li>
+    <li><a href="#c7">通用排障三板斧 + 状态速查表</a></li>
+    <li><a href="#c8">节点能跑多少 Pod(maxPods 查询与调整)</a></li>
+  </ol>
+</nav>
+<!-- ================= 1. 集群安装失败 ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>集群安装失败 —— kubeadm 高频报错</h2>
+  <p>90% 的安装失败都卡在 <code>kubeadm init</code> 的预检(preflight)阶段,报错会直接告诉你原因,逐条修复即可:</p>
+  <table>
+    <tr><th>报错关键词</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>[ERROR Swap]: running with swap on</code></td><td>没关 swap,kubelet 起不来</td><td><code>swapoff -a</code> + 注释 <code>/etc/fstab</code> swap 行</td></tr>
+    <tr><td><code>[ERROR DirAvailable-/var/lib/etcd]: is not empty</code></td><td>上次 init 失败的数据残留</td><td><code>kubeadm reset -f</code> 后清空 <code>/var/lib/etcd/*</code></td></tr>
+    <tr><td><code>[ERROR Port-10250]: already in use</code></td><td>端口被老 kubelet/别的进程占用</td><td><code>ss -lntp | grep 10250</code> 找到并停掉</td></tr>
+    <tr><td><code>failed to pull image ... no space left on device</code></td><td>磁盘满,组件镜像拉不下来</td><td>按第 02 节清磁盘,再重跑 init</td></tr>
+    <tr><td><code>container runtime is not running</code></td><td>containerd 没起 / sock 路径配错</td><td><code>systemctl enable --now containerd</code>,用 <code>crictl ps</code> 验证</td></tr>
+    <tr><td><code>connect: connection refused (6443)</code></td><td>apiserver 没起来</td><td><code>journalctl -u kubelet -n 100</code> 看真实原因</td></tr>
+  </table>
+
+  <h3>标准修复流程(命令可直接复制)</h3>
+  <pre><code># 1. 关闭 swap(新手第一大坑,处理完重启也不会复活)
+swapoff -a
+sed -ri 's@^(/.*\sswap\s.*)@#\1@' /etc/fstab
+free -h                        # Swap 一行必须全是 0
+
+# 2. 容器运行时自检
+systemctl enable --now containerd
+crictl ps                      # 能正常执行(哪怕空列表)说明 runtime OK
+
+# 3. 上次失败后的"彻底重来"(试错阶段最常用)
+kubeadm reset -f
+rm -rf /var/lib/etcd/* /etc/cni/net.d/* $HOME/.kube/config
+iptables -F &amp;&amp; ipvsadm -C 2&gt;/dev/null
+
+# 4. 重新 init(image-repository 建议直接给国内源,避免第 05 节的坑)
+kubeadm init \
+  --image-repository=registry.aliyuncs.com/google_containers \
+  --pod-network-cidr=10.244.0.0/16 \
+  --service-cidr=10.96.0.0/12
+
+# 5. init 成功后按提示三连(否则 kubectl 连不上)
+mkdir -p $HOME/.kube &amp;&amp; cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+kubectl get nodes              # 能打印节点表即成功</code></pre>
+
+  <div class="warn"><b>⚠️ 注意:</b><code>kubeadm reset</code> 只回滚集群组件,<b>不会</b>删除 PVC 数据、NFS 目录和手动装的 CNI 二进制;重装前请单独确认。</div>
+</section>
+<!-- ================= 2. 磁盘问题 ================= -->
+<section id="c2">
+  <h2><span class="no">02</span>磁盘问题 —— 磁盘满 / DiskPressure 驱逐</h2>
+  <p>节点磁盘可用率低于阈值(默认 <code>nodefs.available&lt;10%</code>、<code>imagefs.available&lt;15%</code>)时,kubelet 会把节点标记为 <code>DiskPressure</code> 并<b>驱逐 Pod</b>。</p>
+
+  <h3>典型现象</h3>
+  <pre><code># 节点被打了磁盘压力标签
+kubectl describe node qingfeng | grep -A2 DiskPressure
+  DiskPressure   True   KubeletHasDiskPressure   kubelet has disk pressure
+
+# 大批 Pod 被驱逐(Evicted)
+kubectl get pods -A | grep -i evicted
+harbor   harbor-core-5d7c9f8b-x2k9p   Evicted   0   23h
+
+# 应用写文件直接报错(数据库最常见,见第 06 节)
+IOError: [Errno 28] No space left on device</code></pre>
+
+  <h3>排查:先找到磁盘被谁吃掉</h3>
+  <pre><code># 1. 总览:运行时与 kubelet 所在分区
+df -h /var/lib/containerd /var/lib/kubelet
+
+# 2. 三大户逐一定位(镜像层 / 容器日志 / journald)
+du -h --max-depth=1 /var/lib/containerd | sort -rh | head
+du -h --max-depth=1 /var/log/pods     | sort -rh | head   # 容器 stdout 日志
+journalctl --disk-usage</code></pre>
+
+  <h3>清理(按安全顺序执行)</h3>
+  <pre><code># 1. 删"没有任何 Pod 在用"的镜像(最安全、见效最快)
+crictl rmi --prune
+
+# 2. 收缩 journald 系统日志,只保留 3 天
+journalctl --vacuum-time=3d
+
+# 3. 清理已被驱逐/失败的 Pod 残留
+kubectl delete pods -A --field-selector=status.phase=Failed
+
+# 4. 长效:限制单容器日志体积(/var/lib/kubelet/config.yaml)
+containerLogMaxSize: 50Mi
+containerLogMaxFiles: 3
+# 改完 systemctl restart kubelet</code></pre>
+
+  <h3>兜底:临时下调驱逐阈值(只救急,清完就改回)</h3>
+  <pre><code># /var/lib/kubelet/config.yaml
+evictionHard:
+  nodefs.available: "5%"
+  imagefs.available: "5%"
+# systemctl restart kubelet 后 DiskPressure 会自动恢复为 False</code></pre>
+
+  <div class="warn"><b>⚠️ 千万别:</b>直接 <code>rm -rf /var/lib/containerd/io.containerd.*</code> 里的目录 —— 会把正在用的镜像/快照删坏;删镜像必须走 <code>crictl rmi</code>。</div>
+</section>
+
+<!-- ================= 3. 挂载问题 ================= -->
+<section id="c3">
+  <h2><span class="no">03</span>挂载问题 —— Volume / PVC 挂载失败</h2>
+  <p>Pod 卡在 <code>ContainerCreating</code> 十有八九是挂载问题,Events 里必有答案:</p>
+
+  <h3>第一步:看 Events 定位</h3>
+  <pre><code>kubectl describe pod mysql-0 | sed -n '/Events:/,$p'
+kubectl get events -A --sort-by=.lastTimestamp | grep -iE 'volume|mount|attach'
+
+# PVC 是否 Bound?Pending 多半是 PV/StorageClass 没配好
+kubectl get pvc -A</code></pre>
+
+  <h3>高频报错对照表</h3>
+  <table>
+    <tr><th>Events 报错</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>mount.nfs: access denied by server</code></td><td>NFS exports 白名单没放行 / root_squash</td><td>编辑 <code>/etc/exports</code> 加节点网段 + <code>no_root_squash</code>,<code>exportfs -rv</code></td></tr>
+    <tr><td><code>mount: wrong fs type, bad option</code></td><td>节点没装 NFS 客户端</td><td><code>yum install -y nfs-utils</code>(Debian 系:nfs-common)</td></tr>
+    <tr><td><code>hostPath path check failed ... not exist</code></td><td>宿主机目录不存在</td><td>提前 <code>mkdir -p</code>;或 hostPath type 用 <code>DirectoryOrCreate</code></td></tr>
+    <tr><td><code>Multi-Attach error for volume ... exclusively attached</code></td><td>RWO 卷还被旧 Pod(或残留 attachment)占着</td><td>删旧 Pod;<code>kubectl get volumeattachments</code> 查残留并删</td></tr>
+    <tr><td><code>subPath ... is not found</code></td><td>subPath 指向的文件/目录不存在</td><td>initContainer 先创建;<code>kubectl explain pod.spec.containers.volumeMounts.subPath</code></td></tr>
+    <tr><td>ConfigMap 改了 Pod 里不生效</td><td><b>subPath 挂载不会热更新</b>(设计如此)</td><td>重启 Pod;或改用目录挂载(自动更新,延迟 ~1 分钟)</td></tr>
+  </table>
+
+  <pre><code># NFS 服务端标准配置(/etc/exports)示例
+/data/nfs/mysql  *(rw,sync,no_subtree_check,no_root_squash)
+
+# 服务端生效 + 客户端验证(节点上先手工 mount 一次,能通 K8S 里才能通)
+exportfs -rv
+mount -t nfs 192.168.10.10:/data/nfs/mysql /mnt &amp;&amp; ls /mnt &amp;&amp; umount /mnt</code></pre>
+
+  <div class="tip"><b>💡 经验:</b>凡是挂载报错,先在<b>Pod 所在节点</b>上用同样的参数手工 mount 一次 —— 手工能挂上说明是 K8S 配置问题;手工也挂不上就是 NFS/存储端问题,思路立刻清晰。</div>
+</section>
+<!-- ================= 4. 权限问题 ================= -->
+<section id="c4">
+  <h2><span class="no">04</span>权限问题 —— Permission denied / RBAC</h2>
+
+  <h3>① 挂载目录没写权限(数据库类应用第一名坑)</h3>
+  <pre><code># 现象:Pod 反复 CrashLoopBackOff,logs 里是经典的 permission denied
+kubectl logs mysql-0 -n prod
+mkdir: cannot create directory '/var/lib/mysql': Permission denied
+
+# 解决:Pod securityContext 加 fsGroup(让 kubelet 把卷 chown 给该组)
+#      fsGroup 的值 = 镜像内运行业务的系统用户组 id(mysql 官方镜像为 999)
+spec:
+  securityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsGroup: 999</code></pre>
+
+  <h3>② SELinux 拦截(CentOS / RHEL 常见)</h3>
+  <pre><code># 快速判断:临时关闭后能写了,就是 SELinux 的锅
+setenforce 0          # 临时 Permissive(重启失效)
+
+# 正确做法(别长期关闭):给目录打容器标签
+chcon -Rt svirt_sandbox_file_t /data/nfs/mysql
+# 永久生效用 semanage fcontext -a -t svirt_sandbox_file_t "/data/nfs/mysql(/.*)?" &amp;&amp; restorecon -Rv /data/nfs/mysql</code></pre>
+
+  <h3>③ RBAC / 认证类报错</h3>
+  <table>
+    <tr><th>报错</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>Forbidden: User "system:anonymous" cannot get ...</code></td><td>kubeconfig 没带凭证 / 权限未绑定</td><td>检查 <code>KUBECONFIG</code>;给 SA 绑 Role/ClusterRole</td></tr>
+    <tr><td><code>x509: certificate has expired</code></td><td>集群证书到期(常伴随节点时间不准)</td><td><code>ntpdate</code> 校时;<code>kubeadm certs renew all</code> + 重启控制面</td></tr>
+    <tr><td><code>You must be logged in to the server (Unauthorized)</code></td><td>client 证书/ token 失效</td><td>重新分发 <code>admin.conf</code> 或重新签发用户证书</td></tr>
+  </table>
+  <pre><code># 权限自检两连:我是谁 / 我能不能
+kubectl config current-context
+kubectl auth can-i get pods -n prod          # 回答 yes/no,一目了然
+kubectl auth can-i '*' '*' --as=system:serviceaccount:prod:deploy-sa
+
+# 看证书还剩多久
+kubeadm certs check-expiration</code></pre>
+
+  <div class="tip"><b>💡 定位口诀:</b>容器内报 <code>Permission denied</code> → 先 <code>fsGroup</code>;节点上手工写也失败 → 查 <code>SELinux/目录属主</code>;kubectl 报 <code>Forbidden/Unauthorized</code> → 查 <code>RBAC/证书</code>。三类权限别混。</div>
+</section>
+
+<!-- ================= 5. 拉不下镜像 ================= -->
+<section id="c5">
+  <h2><span class="no">05</span>拉不下镜像 —— ImagePullBackOff</h2>
+
+  <h3>典型现象与四类根因</h3>
+  <pre><code>kubectl get pods -n web
+nginx-6b7f5d8c-x9k2p   0/1   ImagePullBackOff   0   3m
+
+kubectl describe pod nginx-6b7f5d8c-x9k2p -n web | grep -A3 "Failed to pull"
+  Failed to pull image "nginx:1.27": failed to pull and unpack ... i/o timeout</code></pre>
+  <table>
+    <tr><th>Events 里的报错</th><th>根因</th><th>跳转方案</th></tr>
+    <tr><td><code>manifest unknown / not found</code></td><td>镜像名或 Tag 写错</td><td>方案 A</td></tr>
+    <tr><td><code>i/o timeout / no route to host</code></td><td>国内网络拉不到 Docker Hub</td><td>方案 B(加速器)</td></tr>
+    <tr><td><code>toomanyrequests / rate limited</code></td><td>Docker Hub 限流</td><td>方案 B / C</td></tr>
+    <tr><td><code>unauthorized: authentication required</code></td><td>私有仓库没带凭证</td><td>方案 D(imagePullSecrets)</td></tr>
+    <tr><td><code>exec format error</code></td><td>架构不匹配(x86 机器拉了 arm64 镜像)</td><td>换 <code>nginx:1.27-amd64</code> 类带架构 Tag</td></tr>
+  </table>
+
+  <h3>方案 A:先确认镜像真的存在</h3>
+  <pre><code># 在任意节点上手工拉一次,报 not found 就是名字/Tag 写错
+crictl pull nginx:1.27</code></pre>
+
+  <h3>方案 B:containerd 配置国内加速(一劳永逸)</h3>
+  <pre><code># 1. /etc/containerd/config.toml 启用 certs.d 目录(v2 推荐方式)
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+
+# 2. 给 docker.io 配加速源:/etc/containerd/certs.d/docker.io/hosts.toml
+server = "https://docker.io"
+[host."https://docker.m.daocloud.io"]
+  capabilities = ["pull", "resolve"]
+
+# 3. 重启生效(改了配置不重启 = 白改)
+systemctl restart containerd
+crictl pull nginx:1.27        # 现在应该秒拉
+
+# 4. sandbox/pause 镜像也超时的话,init 第一步就卡死 —— 顺手改同文件里
+#    sandbox_image = "registry.aliyuncs.com/google_containers/pause:3.10"</code></pre>
+
+  <h3>方案 C:离线导入(内网/保密环境终极方案)</h3>
+  <pre><code># 有网机器上导出,拷进内网节点导入(注意必须是 k8s.io 命名空间)
+ctr -n k8s.io images import nginx-1.27.tar
+crictl images | grep nginx   # 能看到即成功,Pod 会自动重试拉起</code></pre>
+
+  <h3>方案 D:私有仓库认证(Harbor 等)</h3>
+  <pre><code># 1. 建拉取凭证(用户名里 $ 记得转义,Robot 账号常见)
+kubectl create secret docker-registry regcred -n web \
+  --docker-server=harbor.qingfeng.local \
+  --docker-username='robot$ci' \
+  --docker-password='Harbor12345'
+
+# 2. Pod/Deployment spec 里引用
+spec:
+  imagePullSecrets:
+  - name: regcred</code></pre>
+
+  <div class="tip"><b>💡 私仓完整实践</b>(Robot 账号、CI 推送、admission webhook 排障)见 <a href="harbor.html">Harbor 安装与使用</a>;修改镜像后不想等退避重试,<code>kubectl delete pod xxx</code> 重建最快。</div>
+</section>
+<!-- ================= 6. 线上数据库磁盘 ================= -->
+<section id="c6">
+  <h2><span class="no">06</span>线上数据库磁盘满 —— 止血 → 扩容 → 防复发</h2>
+  <p>数据库是最怕磁盘满的工作负载:一旦写不进 binlog/数据文件,MySQL 会把自己挂起来,业务直接中断。处理顺序永远是<b>先止血保服务,再扩容,最后防复发</b>。</p>
+
+  <h3>现象确认(告警 90%+ 或已写入失败)</h3>
+  <pre><code># 1. PVC 使用率告警
+kubectl get pvc data-mysql -n prod
+NAME        STATUS   VOLUME     CAPACITY   ...
+data-mysql  Bound    pvc-8f3..  20Gi
+
+# 2. 进容器看实际占用(看挂载点,不是根分区)
+kubectl exec -it mysql-0 -n prod -- df -h /var/lib/mysql
+/dev/sdb   20G   18.5G   1.5G  93% /var/lib/mysql
+
+# 3. 是数据涨了还是日志涨了?
+kubectl exec -it mysql-0 -n prod -- sh -c 'du -sh /var/lib/mysql/* | sort -rh | head'
+# binlog.0000xx  动辄几十 G —— 最常见的元凶
+# ibdata1 / ib_logfile0 —— 真实数据/redo,不能删</code></pre>
+
+  <h3>第一步:止血(只清日志,绝不动数据文件)</h3>
+  <pre><code># 1. binlog 立刻瘦身:只保留最近 2 天
+kubectl exec -it mysql-0 -n prod -- \
+  mysql -uroot -p"$PW" -e "PURGE BINARY LOGS BEFORE NOW() - INTERVAL 2 DAY;"
+
+# 2. 慢日志/错误日志轮转(>&gt; 清空不换句柄,不断连接)
+kubectl exec -it mysql-0 -n prod -- sh -c '&gt; /var/log/mysql/slow.log'
+
+# 3. 临时表/备份残留确认后再删(先看时间戳,别一把梭)</code></pre>
+
+  <h3>第二步:PVC 在线扩容(业务不中断)</h3>
+  <pre><code># 前提 1:StorageClass 必须允许扩容
+kubectl get sc
+NAME       PROVISIONER      ALLOWVOLUMEEXPANSION
+nfs-sc     nfs-provisioner  true        ← 允许,继续
+local-sc   kubernetes.io/no-provisioner  false   ← 本地盘不支持在线扩,只能迁移
+
+# 直接 patch 目标容量(只能扩大,永远不能缩小!)
+kubectl patch pvc data-mysql -n prod \
+  -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+# 盯进度:先等 controller 扩 PV,再等文件系统在线 expand(xfs/ext4 均支持)
+kubectl get pvc data-mysql -n prod -w
+
+# 容器内验证(无需重启 Pod)
+kubectl exec -it mysql-0 -n prod -- df -h /var/lib/mysql
+/dev/sdb   50G   18.5G   32G  37% /var/lib/mysql</code></pre>
+
+  <h3>第三步:防复发</h3>
+  <pre><code># 1. binlog 自动过期(my.cnf [mysqld],3 天)
+binlog_expire_logs_seconds = 259200
+max_binlog_size            = 512M
+
+# 2. 容器日志限制(见第 02 节 containerLogMaxSize)
+# 3. 监控告警阈值提前到 75%,别等 90% 才动手</code></pre>
+
+  <div class="warn"><b>⚠️ 两条红线:</b>① <b>永远不要</b>手工删除 <code>/var/lib/mysql</code> 下的 <code>ibdata1</code>、<code>binlog.index</code> 等文件(想清 binlog 用 SQL <code>PURGE</code>);② PVC 扩容只能<b>扩大</b>,缩容不支持;local PV / hostPath 无法在线扩,唯一路径是"新 PVC + 逻辑备份迁移 + 切换"。</div>
+</section>
+
+<!-- ================= 7. 通用排障 ================= -->
+<section id="c7">
+  <h2><span class="no">07</span>通用排障三板斧 + 状态速查表</h2>
+  <p>不管什么问题,先跑这三条,80% 的答案就在输出里:</p>
+  <pre><code>kubectl describe pod &lt;pod&gt; -n &lt;ns&gt;                    # Events 区 = 病历本
+kubectl logs &lt;pod&gt; -n &lt;ns&gt; --tail=100 --previous   # 应用自己的报错(--previous 看上一次崩溃)
+kubectl get events -A --sort-by=.lastTimestamp | tail -20   # 全集群最近发生了什么</code></pre>
+
+  <table>
+    <tr><th>Pod 状态</th><th>大概率方向</th><th>跳转</th></tr>
+    <tr><td><code>ImagePullBackOff / ErrImagePull</code></td><td>镜像拉取失败</td><td><a href="#c5">第 05 节</a></td></tr>
+    <tr><td><code>ContainerCreating</code> 卡住</td><td>挂载失败 / 拉镜像慢</td><td><a href="#c3">第 03 节</a> / <a href="#c5">05</a></td></tr>
+    <tr><td><code>CrashLoopBackOff</code></td><td>权限 / 配置 / 应用启动报错</td><td><a href="#c4">第 04 节</a> + logs</td></tr>
+    <tr><td><code>Evicted</code></td><td>磁盘 / 内存压力驱逐</td><td><a href="#c2">第 02 节</a></td></tr>
+    <tr><td><code>Pending</code></td><td>资源不足 / PVC 没绑定 / 节点选择器不匹配</td><td><a href="#c3">第 03 节</a></td></tr>
+    <tr><td><code>CreateContainerConfigError</code></td><td>secret/configmap/subPath 不存在</td><td><a href="#c3">第 03 节</a></td></tr>
+  </table>
+
+  <div class="tip"><b>💡 更多命令细节</b>(查看全家桶、exec、rollout、jsonpath)见 <a href="k8s-cmd.html">kubectl 常用命令速查</a>;Harbor Pending 23h / webhook 断链两大实录见 <a href="harbor.html">Harbor 安装与使用</a>。</div>
+</section>
+
+<!-- ================= 8. 节点能跑多少 Pod ================= -->
+<section id="c8">
+  <h2><span class="no">08</span>节点能跑多少 Pod —— maxPods 查询与调整</h2>
+
+  <h3>查询命令(两条就够)</h3>
+  <pre><code># 1. 最多能跑几个:读节点 status.allocatable.pods(kubelet 上报的可分配上限)
+kubectl get node qingfeng -o jsonpath='{.status.allocatable.pods}'; echo
+110
+
+# 2. 已经用了多少:describe 的 Allocated resources 段,盯 pods 那一行
+kubectl describe node qingfeng | grep -A8 'Allocated resources'
+  Resource           Requests      Limits
+  cpu                850m (21%)    300m (7%)
+  memory             690Mi (9%)    512Mi (7%)
+  ephemeral-storage  0 (0%)        0 (0%)
+  pods               7 (6%)        0 (0%)      ← 已分配 7 个 / 上限 110
+
+# 附加:所有节点容量一览表
+kubectl get nodes -o custom-columns='NODE:.metadata.name,MAX-PODS:.status.allocatable.pods'
+NODE       MAX-PODS
+qingfeng   110
+
+# 多节点集群:全部节点的 Pod 容量"总和"(jsonpath 逐行取出再 awk 累加)
+kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.pods}{"\n"}{end}' \
+  | awk '{s+=$1} END{print "集群 Pod 总容量:", s}'
+
+# 明细 + 合计一起看(表格末尾追加 TOTAL 行)
+kubectl get nodes -o custom-columns='NODE:.metadata.name,MAX-PODS:.status.allocatable.pods' \
+  | awk 'NR&gt;1{print; s+=$2} END{print "--------"; printf "TOTAL\t%d\n", s}'
+
+# 对比"已经用了多少":集群当前 Pod 总数 / 只数 Running
+kubectl get pods -A --no-headers | wc -l
+kubectl get pods -A --field-selector=status.phase=Running --no-headers | wc -l</code></pre>
+
+  <h3>110 是怎么评估出来的?</h3>
+  <ul>
+    <li><b>不是算出来的,是默认值:</b>110 来自 kubelet 参数 <code>--max-pods</code>(即 KubeletConfiguration 的 <code>maxPods: 110</code>),kubelet 启动时把它写进 <code>status.capacity.pods</code> 并上报 apiserver —— 这是社区经验值,兼顾每个 Pod 的进程/内存开销。</li>
+    <li><b>默认值不一定真是 110:</b>发行版/云厂商常会定制(实测 FKE 集群节点为 <code>100</code>) —— 所以别硬编码 110,以 <code>allocatable.pods</code> 查询结果为准;"集群总容量" = 各节点 allocatable.pods 逐个相加(见上方 jsonpath+awk 命令)。</li>
+    <li><b>真正还能不能调度,是调度器综合判断:</b><code>min(maxPods, 剩余 CPU requests, 剩余内存 requests, CNI 剩余 IP)</code>。所以即便 pods 显示 (6%) 很空闲,CPU 100% 照样 <code>Pending</code>(见第 07 节状态表)。</li>
+    <li><b>隐性上限还有三个:</b>CNI 每节点 Pod CIDR(Flannel 默认 /24 = 254 个 IP)、节点级 PID 上限(每 Pod 至少 1 个容器进程)、云厂商 CNI(如阿里云 Terway / AWS VPC CNI 按 ENI×辅助 IP 数限制,此时 maxPods 由厂商参数决定)。</li>
+  </ul>
+
+  <h3>后期可以修改吗 —— 可以,只改 kubelet,不用动集群</h3>
+  <pre><code># 1. 先确认当前生效值(节点上的 kubelet 配置)
+grep maxPods /var/lib/kubelet/config.yaml
+maxPods: 110
+
+# 2. 改成目标值(如 200)
+sed -i 's/^maxPods:.*/maxPods: 200/' /var/lib/kubelet/config.yaml
+
+# 3. 重启 kubelet 生效(节点上执行,秒级,不影响已运行 Pod)
+systemctl restart kubelet
+
+# 4. 验证:上报的 allocatable.pods 已变成新值
+kubectl get node qingfeng -o jsonpath='{.status.allocatable.pods}'; echo
+200</code></pre>
+
+  <div class="warn"><b>⚠️ 调大之前先确认:</b>maxPods 只解"数量名额",不解资源 —— CPU/内存(第 02 节磁盘同理)、CNI IP 池、PID 上限真的撑得住才能调;云托管集群(ACK/EKS/GKE)的默认值和改法由厂商参数/CNI 决定,别直接改托管节点。调小则要谨慎:低于当前已运行 Pod 数会导致节点被判超卖。</div>
+
+  <h3>易混点:node 和 namespace 是两种东西,别搞混</h3>
+  <p><code>kubectl get node qingfeng</code> 查的是<b>节点</b>(一台真实的机器,本集群单节点就叫 qingfeng) —— maxPods 是<b>节点</b>属性,所以要 get node;而 namespace 是集群里的<b>逻辑分区</b>(default / kube-system / harbor ...),只负责把资源分组隔离,和节点没有包含关系。</p>
+  <table>
+    <tr><th></th><th>node 节点</th><th>namespace 命名空间</th></tr>
+    <tr><td>是什么</td><td>一台跑容器的机器(kubelet 所在)</td><td>集群内的逻辑分组/虚拟小集群</td></tr>
+    <tr><td>典型名字</td><td>qingfeng、worker-01</td><td>default、kube-system、harbor、prod</td></tr>
+    <tr><td>查看命令</td><td><code>kubectl get nodes</code></td><td><code>kubectl get ns</code></td></tr>
+    <tr><td>Pod 数量上限</td><td><code>maxPods</code>(kubelet,默认 110)</td><td><code>ResourceQuota</code> 的 <code>pods: N</code>(不配则不限)</td></tr>
+  </table>
+  <pre><code># 查看某个命名空间
+kubectl get ns                       # 列出全部命名空间
+kubectl get ns harbor -o wide        # 看某个 ns 的状态
+kubectl describe ns harbor           # 详情:标签、资源配额(Quota)、状态
+
+# "看一个 ns 里的东西"(最常见诉求,用 -n 指定)
+kubectl get pods -n harbor           # 该 ns 的 Pod
+kubectl get all -n harbor            # Pod/Svc/Deploy 一次全看
+kubectl get pods -A                  # 想全看就去掉 -n 加 -A
+
+# ns 级别的 Pod 数上限 = ResourceQuota(不建就没有限制)
+kubectl get resourcequota -n harbor
+# 给 harbor ns 限制最多 50 个 Pod:
+kubectl create quota pod-limit -n harbor --hard=pods=50</code></pre>
+  <div class="tip"><b>💡 一句话分清:</b>node 管"在哪台机器上跑、最多跑几个"(maxPods);namespace 管"资源属于哪个组、组里能用多少"(ResourceQuota) —— 查前者 <code>get node</code>,查后者 <code>get ns</code>,查"某个组里的资源"要加 <code>-n</code>。</div>
+</section>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 现象 → 原因 → 解决方案,持续补充中(2026-10-21)</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

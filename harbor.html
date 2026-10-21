@@ -67,13 +67,14 @@
 <div class="wrap">
 <header class="doc">
   <h1>🐳 Harbor 安装与使用
-    <small>私有镜像仓库:K8S+Helm 部署(双副本共用一个 PVC)→ 日常运维 → 登录/打标/推送实战 → Robot 对接 CI → 标签保留策略</small>
+    <small>私有镜像仓库:K8S+Helm 部署(单节点 hostPath 独立 PVC)→ 流量链路 NGINX→Ingress→Svc→Pod → 日常运维 → 实战推送 → Robot 对接 CI → 标签保留 → Pending 23h 排障实录</small>
   </h1>
 </header>
 
 <nav class="toc">
   <b>📑 目录</b>
   <ol>
+    <li><a href="#h3b">流量链路:NGINX→Ingress→Svc→Pod</a></li>
     <li><a href="#h1">Harbor 是什么</a></li>
     <li><a href="#h2">安装准备</a></li>
     <li><a href="#h3">安装步骤</a></li>
@@ -81,10 +82,137 @@
     <li><a href="#h5">实战:存一个 nginx 镜像</a></li>
     <li><a href="#h6">CI 对接:Robot 账号</a></li>
     <li><a href="#h7">标签保留策略</a></li>
+    <li><a href="#h7b">排障实录:Pending 23 小时</a></li>
     <li><a href="#h8">常见问题</a></li>
   </ol>
 </nav>
 
+<!-- ================= 0. 流量链路架构 ================= -->
+<section id="h3b">
+  <h2><span class="no">00</span>流量链路架构:NGINX → Ingress → Svc → Pod(实景)</h2>
+  <p>Harbor 对外只有一个域名 <code>harbor.ergesanbaishou.com</code>,背后是五层接力。<b>Host 请求头</b>是贯穿全程的路由钥匙 —— 外层 NGINX 一旦不透传它,Ingress 立刻 404:</p>
+
+  <div class="flow">浏览器 / docker client(办公网)
+    │  http://harbor.ergesanbaishou.com      Host: harbor.ergesanbaishou.com
+    ▼
+┌───────────────────────────────────────────────────┐
+│ ① 外层 NGINX(办公网入口机)                          │
+│    /etc/nginx/conf.d/harbor.ergesanbaishou.com.conf│
+│    upstream → 10.18.170.34:32588(ingress NodePort) │
+│    ★ proxy_set_header Host $host ← 灵魂行,丢了必404│
+└────────────────────────┬──────────────────────────┘
+                         ▼  NodePort 32588
+┌───────────────────────────────────────────────────┐
+│ ② ingress-nginx(ns: ingress-nginx)                 │
+│    svc ingress-harbor-nginx-controller             │
+│    ClusterIP 10.106.98.186   80:32588  443:31443   │
+│    controller Pod ×1(node: qingfeng)               │
+└────────────────────────┬──────────────────────────┘
+                         ▼  按 Host 匹配规则
+┌───────────────────────────────────────────────────┐
+│ ③ Ingress harbor-ingress(ns: harbor,class: nginx)  │
+│    /v2  /api/  /service/  /c/ → harbor-core  :80   │← API/镜像协议
+│    /                          → harbor-portal:80   │← UI 首页
+└────────────────────────┬──────────────────────────┘
+                         ▼  ClusterIP
+┌───────────────────────────────────────────────────┐
+│ ④ Service → Pod(ns: harbor,node: qingfeng)         │
+│  harbor-core     10.102.185.70:80 → ×2 双副本      │
+│  harbor-portal   10.110.19.4:80   → ×2 双副本      │
+│  harbor-registry 10.110.89.208:5000/8080 → ×2      │
+│    (镜像推拉,由 core 反代 /v2 流量进入)             │
+└────────────────────────┬──────────────────────────┘
+                         ▼  仅集群内部调用
+┌───────────────────────────────────────────────────┐
+│ ⑤ 内部依赖(不在公网流量链路上)                       │
+│  harbor-database 5432(postgres,StatefulSet 单实例) │
+│  harbor-redis    6379(缓存,StatefulSet 单实例)     │
+│  harbor-jobservice 80(retention/GC 定时任务)       │
+└───────────────────────────────────────────────────┘</div>
+
+  <h3>环节① 外层 NGINX 反代配置(完整文件)</h3>
+  <p>办公网机器访问域名 → 打到外层 NGINX(80) → 转发进 K8S 的 ingress-nginx NodePort。<b>注意 upstream 端口是 32588 不是 80</b>,这是 NodePort 映射:</p>
+  <pre><code># /etc/nginx/conf.d/harbor.ergesanbaishou.com.conf
+# =========================================================
+# harbor.ergesanbaishou.com → K8S ingress-nginx → harbor(harbor空间)
+# 外层nginx:80 → ingress-nginx NodePort:32588 → svc:80 → pod
+# =========================================================
+upstream harbor_ergesanbaishou {
+    server 10.18.170.34:32588;     # ★ ingress-nginx 的 NodePort(80 对外映射)
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name harbor.ergesanbaishou.com;
+
+    access_log /var/log/nginx/harbor.access.log;
+    error_log  /var/log/nginx/harbor.error.log;
+
+    location / {
+        proxy_pass http://harbor_ergesanbaishou;
+
+        # ★★★ 灵魂行:透传 Host,Ingress 全靠它分流,丢了必 404 ★★★
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket 支持(可选,有需要就留着)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        # 镜像层上传可能很大,超时放宽
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}</code></pre>
+  <h3>环节③ Harbor Ingress 清单(k8s/harbor-ingress.yaml)</h3>
+  <p>Harbor 的流量分两类:<b>UI 静态页走 portal</b>,<b>API 与镜像协议(/v2)走 core</b>。core 内部再反代 registry 的 5000 端口 —— 所以 Ingress 只需两个后端:</p>
+  <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harbor-ingress
+  namespace: harbor
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"    # 镜像层大,不限制上传体积
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"   # 外层暂走 HTTP
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: harbor.ergesanbaishou.com
+      http:
+        paths:
+          - path: /v2       # docker push/pull 协议入口
+            pathType: Prefix
+            backend: {service: {name: harbor-core, port: {number: 80}}}
+          - path: /api/     # UI/CI 调用的 REST API
+            pathType: Prefix
+            backend: {service: {name: harbor-core, port: {number: 80}}}
+          - path: /service/
+            pathType: Prefix
+            backend: {service: {name: harbor-core, port: {number: 80}}}
+          - path: /c/       # CVE 漏洞数据
+            pathType: Prefix
+            backend: {service: {name: harbor-core, port: {number: 80}}}
+          - path: /         # 其余全部 = UI 静态页
+            pathType: Prefix
+            backend: {service: {name: harbor-portal, port: {number: 80}}}</code></pre>
+
+  <h3>链路验证(逐环节 curl)</h3>
+  <pre><code># ③④ 环节:直连 ingress-nginx,手动带 Host(绕过外层 NGINX)
+curl -H "Host: harbor.ergesanbaishou.com" http://10.18.170.34:32588/api/v2.0/health
+# {"components":[...全部 healthy...],"status":"healthy"}
+
+# ①② 环节:走域名过外层 NGINX(办公网机器上)
+curl http://harbor.ergesanbaishou.com/api/v2.0/health
+# 同上 = 全链路通;若 404 = 外层 NGINX 没透传 Host;若超时 = upstream 端口/防火墙错</code></pre>
+
+  <div class="warn"><b>⚠️ 踩坑实录:创建 Ingress 报 "failed calling webhook validate.nginx.ingress.kubernetes.io"。</b>ingress-nginx 的准入 webhook 引用的 service <code>ingress-harbor-nginx-controller-admission</code> 不存在(装第二套 controller 时改名没对齐)→ 所有新建 Ingress 被 API Server 拦截。修复:把 webhook 指回真实存在的 admission service:<code>kubectl patch validatingwebhookconfiguration ingress-nginx-admission --type='json' -p='[{"op":"replace","path":"/webhooks/0/clientConfig/service/name","value":"ingress-nginx-controller-admission"}]'</code></div>
+
+  <div class="tip"><b>💡 错误码速判:</b><b>404</b> = Ingress 规则没匹配上(缺规则/Host 没透传);<b>502/503</b> = 规则匹配了但后端 Pod 没 Ready;<b>超时/拒绝</b> = 外层 upstream 端口或防火墙配错。</div>
+</section>
 <!-- ================= 1. Harbor 是什么 ================= -->
 <section id="h1">
   <h2><span class="no">01</span>Harbor 是什么</h2>
@@ -105,7 +233,7 @@
     <tr><th>依赖</th><th>要求</th><th>检查命令</th></tr>
     <tr><td>K8S 集群</td><td>1.20+,预留约 2C / 3G(Harbor 全家桶资源)</td><td><code>kubectl get nodes</code></td></tr>
     <tr><td>Helm</td><td>v3.x(Harbor 官方 chart 的唯一安装方式)</td><td><code>helm version</code></td></tr>
-    <tr><td>Ingress Controller</td><td>已装 ingress-nginx(本环境 NodePort 31588)</td><td><code>kubectl -n ingress-nginx get svc</code></td></tr>
+    <tr><td>Ingress Controller</td><td>已装 ingress-nginx(harbor 专用 NodePort 32588,老入口 31588)</td><td><code>kubectl -n ingress-nginx get svc</code></td></tr>
     <tr><td>共享存储 ★</td><td>NFS 等 RWX 后端,预建 PVC <code>harbor-data-rwx</code>(建议 100Gi+)</td><td><code>kubectl get pvc -n harbor</code></td></tr>
   </table>
   <div class="warn"><b>⚠️ 为什么必须 RWX:</b>registry 要跑 <b>2 副本共用同一个 PVC</b>,存储必须支持 <b>ReadWriteMany</b>(多节点同时读写)。默认 StorageClass 的 RWO 只允许单节点挂载,第二个副本会永远卡在 <code>ContainerCreating</code>。没有现成 NFS 可先单副本跑通,后续再迁。</div>
@@ -199,7 +327,7 @@ EOF</code></pre>
 
 <!-- ================= 3. 安装步骤(K8S + Helm) ================= -->
 <section id="h3">
-  <h2><span class="no">03</span>安装步骤(K8S + Helm,双副本共用一个 PVC)</h2>
+  <h2><span class="no">03</span>安装步骤(K8S + Helm,四组件独立 PVC)</h2>
   <pre><code># ① 装 Helm(任一管理节点)
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
@@ -225,17 +353,22 @@ persistence:
   enabled: true
   imageChartStorage:
     type: filesystem
-  persistentVolumeClaim:                    # ★ 五个组件全部指向同一个 PVC!
+  persistentVolumeClaim:                    # ★ 四组件分别指向第 2 节预建的独立 PVC
     registry:
-      existingClaim: harbor-data-rwx        # 镜像数据(双副本共用,必须 RWX)
+      existingClaim: harbor-registry        # 镜像数据(registry ×2 同节点可共用 RWO)
     jobservice:
-      existingClaim: harbor-data-rwx        # 任务日志
+      existingClaim: harbor-jobservice      # 任务日志
     database:
-      existingClaim: harbor-data-rwx        # 元数据(单实例)
+      existingClaim: harbor-database        # 元数据(单实例)
     redis:
-      existingClaim: harbor-data-rwx        # 缓存
+      existingClaim: harbor-redis           # 缓存
     trivy:
-      existingClaim: harbor-data-rwx        # 漏洞库(启用扫描时)
+      existingClaim: harbor-trivy           # 漏洞库(启用扫描时再预建)
+# ⚠️ 血泪教训(existingClaim 必须与实际 PVC 名一字不差):
+#    本环境曾把四个 existingClaim 全写成 harbor-data-rwx(一个并不存在的 PVC 名),
+#    导致 database/redis/registry Pod Pending 整整 23 小时、core/jobservice 连锁
+#    CrashLoop 236 次(详见 7.5 节排障实录)。写完 values 务必先比对:
+#    kubectl get pvc -n harbor   ←→   values 里的每个 existingClaim
 # ⚠️ 漏配任何一个,集群又没有默认 StorageClass 时,该组件 PVC 永远 Pending → Pod Pending。
 #    补配后要先 kubectl delete pvc <卡住的PVC> 再 helm upgrade(旧 Pending PVC 不会自动绑定)。
 #    删除 PVC 卡在 Terminating = 还有 Pod 引用它(pvc-protection 保护);StatefulSet 的 PVC
@@ -274,12 +407,14 @@ kubectl -n harbor get pods
 # harbor-redis-0                          1/1     Running   ×1(StatefulSet)
 # harbor-trivy-0                          1/1     Running   (启用扫描时)
 
-# ⑥ 验证 Ingress 已生成,集群内先通
+# ⑥ 创建 Harbor Ingress(chart 的 expose.type=ingress 可自动生成;本环境手工管理,见 00 节)
+kubectl apply -f k8s/harbor-ingress.yaml
 kubectl -n harbor get ingress
-curl -H "Host: harbor.ergesanbaishou.com" http://10.18.170.34:31588/api/v2.0/health
-# 返回 {"status":"healthy"} 即成功(31588 = 本环境 ingress-nginx 的 NodePort)</code></pre>
-  <div class="tip"><b>💡 外网访问:</b>与 k8s-web 同一条链路 —— 外层 NGINX 加一个 <code>server_name harbor.ergesanbaishou.com</code> 反代到 NodePort 31588,办公网即可用域名打开 UI、docker login 推拉镜像(别忘了客户端 <code>insecure-registries</code>,见第 8 节①)。</div>
+curl -H "Host: harbor.ergesanbaishou.com" http://10.18.170.34:32588/api/v2.0/health
+# 返回 {"status":"healthy"...} 即成功(32588 = harbor 专用 ingress-nginx 的 NodePort)</code></pre>
+  <div class="tip"><b>💡 外网访问:</b>与 k8s-web 同一条链路 —— 外层 NGINX 加一个 <code>server_name harbor.ergesanbaishou.com</code> 反代到 NodePort 32588(完整配置见 00 节),办公网即可用域名打开 UI、docker login 推拉镜像(别忘了客户端 <code>insecure-registries</code>,见第 8 节①)。</div>
 </section>
+
 <!-- ================= 4. 日常运维(K8S) ================= -->
 <section id="h4">
   <h2><span class="no">04</span>日常运维命令(K8S / Helm)</h2>
@@ -308,7 +443,7 @@ kubectl -n harbor exec deploy/harbor-registry -c registry -- \
 
 # 卸载(chart 名 harbor;PVC 默认保留,数据不丢)
 helm -n harbor uninstall harbor</code></pre>
-  <div class="warn"><b>⚠️ 数据安全:</b>镜像数据在共享 PVC <code>harbor-data-rwx</code>,元数据在 database/redis 的 PVC —— <code>helm uninstall</code> <b>不会删 PVC</b>,误卸载后用相同 <code>existingClaim</code> 重装即可恢复;真要清空才手动 <code>kubectl -n harbor delete pvc</code>。</div>
+  <div class="warn"><b>⚠️ 数据安全:</b>镜像数据在 PVC <code>harbor-registry</code>,元数据在 <code>harbor-database</code>,任务日志在 <code>harbor-jobservice</code> —— <code>helm uninstall</code> <b>不会删 PVC</b>,误卸载后用相同 <code>existingClaim</code> 重装即可恢复;真要清空才手动 <code>kubectl -n harbor delete pvc</code> + 清节点目录 <code>/data/harbor-local/*</code>。</div>
 </section>
 
 <!-- ================= 5. 实战:存一个 nginx 镜像 ================= -->
@@ -393,6 +528,131 @@ Tags:      匹配 Algorithm-aurora*   # ★ tag 匹配用单星;** 是给仓库�
 #   → 时间型规则失效(上述坑之一)→ 加"保留最近 500 个"数量型规则兜底 → Dry Run 验证通过。</code></pre>
 </section>
 
+<!-- ================= 7.5 排障实录 ================= -->
+<section id="h7b">
+  <h2><span class="no">07.5</span>排障实录:database/redis/registry Pending 23 小时</h2>
+  <p>一次真实故障的完整复盘 —— Helm 部署完成后,Pod 状态如下,卡了整整 23 小时:</p>
+  <pre><code>harbor-core-xxx-4vzfj          0/1     CrashLoopBackOff   232   ← 连锁反应
+harbor-core-xxx-rsw8r          0/1     CrashLoopBackOff   233   ← 连锁反应
+harbor-database-0              0/1     Pending              0   ← 源头①
+harbor-jobservice-xxx-8wdcq    0/1     CrashLoopBackOff   280   ← 连锁反应
+harbor-portal-xxx-7nbxp        1/1     Running              0
+harbor-redis-0                 0/1     Pending              0   ← 源头①
+harbor-registry-xxx-gkhsf      0/2     Pending              0   ← 源头①
+harbor-registry-xxx-jpl6x      0/2     Pending              0   ← 源头①</code></pre>
+
+  <h3>排查三步(标准套路,10 分钟定位)</h3>
+  <pre><code># 第 1 步:describe 看 Events,一锤定音
+kubectl -n harbor describe pod harbor-database-0 | tail -5
+# Warning  FailedScheduling  default-scheduler
+#   0/1 nodes are available: persistentvolumeclaim "harbor-data-rwx" not found. not found
+#                                              ^^^^^^^^^^^^^^^^^^ Pod 要的 PVC 不存在!
+
+# 第 2 步:列出实际 PVC,和 Pod 要的比对
+kubectl -n harbor get pvc
+# NAME              STATUS   VOLUME
+# harbor-database   Bound    harbor-pv-database     ← 实际建的是这 4 个
+# harbor-jobservice Bound    harbor-pv-jobservice
+# harbor-redis      Bound    harbor-pv-redis
+# harbor-registry   Bound    harbor-pv-registry
+# 结论:values 里 existingClaim 写的是 harbor-data-rwx,和实际 PVC 名对不上!
+
+# 第 3 步:CrashLoop 的 core 看上个崩溃日志,确认是连锁
+kubectl -n harbor logs harbor-core-xxx-rsw8r --previous | tail -3
+# [FATAL] [/core/main.go:170]: failed to initialize cache:
+#         retry timeout: dial tcp 10.108.219.116:6379: i/o timeout   ← 连不上 redis</code></pre>
+
+  <h3>日志查看全家桶(单 Pod / Deployment / 一条命令看全部)</h3>
+  <pre><code># ① 单个 Pod:sts 的 pod 名固定(harbor-database-0/redis-0),deploy 的带随机后缀(先 get pods 拿全名)
+kubectl -n harbor logs -f harbor-database-0     # -f 实时滚动,排障最常用
+kubectl -n harbor logs -f deploy/harbor-core    # deploy 简写,自动挑一个副本,不用抄全名
+kubectl -n harbor logs -f sts/harbor-database   # sts 简写同理
+kubectl -n harbor logs -f svc/harbor-portal     # svc/ 简写也可(新版 kubectl 自动挑一个后端 Pod,本集群实测可用)
+
+# ⚠ 踩坑实录:logs -f harbor-portal / harbor-portal* / harbor-portal-5d9f48888c 全报 NotFound,为什么?
+#    · 裸名字(不带资源前缀)kubectl 一律按 Pod 名查,而 Pod 要三段全名
+#      harbor-portal-5d9f48888c-7nbxp(deploy名-rs哈希-pod哈希),少一段都查不到;
+#      想省事就带 deploy/ 或 svc/ 前缀(上面两行)
+#    · harbor-portal* 也不行:* 是 shell 通配符,kubectl 不展开,只拿字面量去查
+#    · 概念:Service 本身没有日志!它只是转发规则(iptables/IPVS + DNS 名),不跑进程;
+#      svc/xxx 能看到日志,是 kubectl 帮你解析到后端 Pod —— 日志永远产自 Pod 里的容器。
+#      想知道某个 svc 背后挂着哪些 Pod,查 Endpoints:
+kubectl get endpoints -n harbor harbor-portal   # → 10.244.0.63:8080,10.244.0.64:8080(2 个后端)
+
+# ⚠ 踩坑实录×2:deploy/harbior-redis 报 NotFound,两层原因?
+#    · 拼写:报错里原样回显了 "harbior",和要查的名字一对照就露馅;
+#    · 类型:就算拼对也不行 —— harbor-redis 不是 Deployment 是 StatefulSet!
+#      deploy/sts 名单一条命令全列出(名字就从这查):
+kubectl get deploy,sts -n harbor
+# Deployment(4): harbor-core  harbor-jobservice  harbor-portal  harbor-registry
+# StatefulSet(2): harbor-database  harbor-redis
+#    · 从 Pod 名也能反推类型:两段 harbor-redis-0 = sts(名-序号);
+#      三段 harbor-portal-5d9f48888c-7nbxp = deploy(名-rs哈希-pod哈希)
+#    · 懒人一屏看全(pod/svc/deploy/sts/rs 一次全出):
+kubectl get all -n harbor
+
+# 本环境速查:core/portal/registry/jobservice 用 deploy/xxx;database/redis 用 sts/xxx
+kubectl -n harbor logs -f sts/harbor-redis        # ← redis 的正确打开方式
+
+# ② 进阶开关
+kubectl -n harbor logs harbor-core-xxx --previous        # 看上一次崩溃的日志(CrashLoop 必杀)
+kubectl -n harbor logs harbor-registry-xxx -c registry   # 多容器 Pod 指定容器(registry pod 里有 2 个)
+kubectl -n harbor logs harbor-core-xxx --tail=100        # 只看最后 100 行
+
+# ③ ★ 一条命令看整个命名空间全部 9 个 Pod(本集群实测可用)
+#    按 label 选中所有 Pod;--prefix 每行标 [pod名/容器名];
+#    --max-log-requests 必须给够(默认 5,这里容器共 11 个,给 20)
+kubectl logs -f -n harbor -l app.kubernetes.io/instance=harbor \
+    --prefix --all-containers --max-log-requests=20
+
+# 输出效果(9 个 Pod 的日志汇成一条流,每行自带出处):
+# [pod/harbor-portal-5d9f48888c-kb7tx/portal]  10.244.0.74 "GET / HTTP/1.1" 200
+# [pod/harbor-core-5cf65fb78f-7hpdw/core]      [ERROR] UserLogin: Invalid credentials
+# [pod/harbor-database-0/database]             LOG: checkpoint complete ...
+# [pod/harbor-jobservice-5d55688bb7-sxqml/jobservice] [INFO] reap outdated job stats</code></pre>
+
+  <div class="tip"><b>💡 日志里这条 ERROR 不用慌:</b><code>duplicate key value violates unique constraint "properties_k_key" (skip_audit_log_database) already exists</code> —— core/jobservice 每次启动都往 properties 表插这条配置,已存在就报一下,纯无害;后面跟着一串正常的 <code>checkpoint complete</code> 恰恰证明数据库是健康的。(若追求一条命令看全部的极致体验,可装 <code>stern</code> 工具:<code>stern -n harbor .</code>,本机未装)</div>
+
+  <h3>根因与修复动作</h3>
+  <table>
+    <tr><th>层</th><th>根因</th><th>修复</th></tr>
+    <tr><td>① 调度层<br>(Pending 23h)</td><td>values 四个 <code>existingClaim</code> 全写 <code>harbor-data-rwx</code>,该 PVC 从未创建;实际存在的是 4 个独立 PVC</td><td>strategic patch 三个工作负载,claimName 指回真实 PVC(见下)</td></tr>
+    <tr><td>② 权限层<br>(initdb 失败)</td><td>卷修好后 database 仍崩:<code>initdb: could not create directory /var/lib/postgresql/data/pgdata: Permission denied</code> —— hostPath 目录属主 root:root,postgres(uid 999) 写不进</td><td>节点上 <code>chown 999:999 /data/harbor-local/{database,redis}</code> + <code>chown 10000:10000 /data/harbor-local/{registry,jobservice}</code></td></tr>
+    <tr><td>③ 连锁层<br>(CrashLoop×3)</td><td>core/jobservice 启动时连 redis/database 超时,重试耗尽进程自杀 → 源头恢复后自动好转(退避最长 5 分钟,可删 Pod 立即拉起)</td><td><code>kubectl delete pod</code> 跳过退避等待</td></tr>
+  </table>
+
+  <pre><code># 修复① volumes 按 name 合并 patch,claimName 指回真实 PVC(注意转义)
+kubectl -n harbor patch sts harbor-database --type=strategic \
+  -p '{"spec":{"template":{"spec":{"volumes":[{"name":"database-data",
+  "persistentVolumeClaim":{"claimName":"harbor-database"}}]}}}}'
+kubectl -n harbor patch sts harbor-redis --type=strategic \
+  -p '{"spec":{"template":{"spec":{"volumes":[{"name":"data",
+  "persistentVolumeClaim":{"claimName":"harbor-redis"}}]}}}}'
+kubectl -n harbor patch deploy harbor-registry --type=strategic \
+  -p '{"spec":{"template":{"spec":{"volumes":[{"name":"registry-data",
+  "persistentVolumeClaim":{"claimName":"harbor-registry"}}]}}}}'
+
+# 修复② 节点目录属主(database/redis=999,registry/jobservice=10000)
+chown 999:999     /data/harbor-local/database /data/harbor-local/redis
+chown 10000:10000 /data/harbor-local/registry /data/harbor-local/jobservice
+
+# 修复③ 源头就绪后,删 Pod 跳过 CrashLoop 退避
+kubectl -n harbor delete pod harbor-core-xxx harbor-jobservice-xxx
+
+# 验证:全部 1/1(或 registry 2/2),core API 健康
+kubectl -n harbor get pods
+curl -H "Host: harbor.ergesanbaishou.com" http://10.18.170.34:32588/api/v2.0/health</code></pre>
+
+  <h3>避坑清单(这次学到的)</h3>
+  <ul>
+    <li><b>existingClaim 是"引用"不是"创建"</b>:chart 不会替你建卷,写错名字不报安装错误,只在 Pod 调度时才炸 —— <code>helm install</code> 完第一件事就是 <code>kubectl get pvc -n harbor</code> 与 values 逐个比对</li>
+    <li><b>Pending 看 Events,CrashLoop 看 --previous 日志</b>:两条命令覆盖 90% 的启动故障;连锁崩溃永远先修最上游(Pending 的那个)</li>
+    <li><b>hostPath 目录属主要预设</b>:postgres=999、redis=999、harbor 组件=10000;root 建的目录 Postgres initdb 必然 Permission denied</li>
+    <li><b>patch 只是救急</b>:values 文件里错的 existingClaim 也要同步改掉,否则下次 <code>helm upgrade</code> 会被打回原形,故障复发</li>
+    <li><b>CrashLoop 有自愈能力</b>:依赖恢复后最长 5 分钟退避自动重连,赶时间就删 Pod 立即重启</li>
+  </ul>
+</section>
+
 <!-- ================= 8. 常见问题 ================= -->
 <section id="h8">
   <h2><span class="no">08</span>常见问题(FAQ)</h2>
@@ -440,6 +700,32 @@ kubectl -n harbor annotate pvc harbor-jobservice \
   meta.helm.sh/release-name=harbor meta.helm.sh/release-namespace=harbor
 # 然后重试 helm install</code></pre>
   <div class="warn"><b>⚠️ 副作用提醒:</b>被 Helm 认领后,以后 <code>helm uninstall</code> 会连带删掉这个 PVC(数据在 PV/hostPath 目录里,目录内容不会被 PV 删除清空,重装可恢复)。</div>
+
+  <h3>⑧ Pod 一直 Pending / CrashLoop 快速定位三连</h3>
+  <pre><code>kubectl -n harbor describe pod &lt;pod名&gt; | tail -20   # ① Events:挂卷/调度失败的真实原因
+kubectl -n harbor get pvc                           # ② 卷是否 Bound?引用的 PVC 名真的存在?
+kubectl -n harbor logs &lt;pod名&gt; --previous           # ③ 上一次崩溃日志(连锁崩溃先查上游)</code></pre>
+
+  <h3>⑨ 节点上 docker ps 连不上 —— K8S 和 Docker 不能并存吗?</h3>
+  <p><b>完全能并存,这台节点现在就是活例子:docker 与 containerd 双 active。</b>当时连不上的真相:装集群当天 docker-ce 被卸载(dockerd 二进制没了)、服务被 mask,而 docker CLI 却残留着。排障 + 修复全过程:</p>
+  <pre><code># ① 三连诊断
+kubectl get nodes -o wide                # K8S 运行时 = containerd://2.2.1(1.24+ 直接用 containerd)
+systemctl status docker                  # masked = 被人为屏蔽;unmask 后 start 仍失败就查日志:
+sudo journalctl -u docker -n 20 | grep -i 'not present'
+#    → "/usr/bin/dockerd not present or not executable" = dockerd 包被卸了!
+dpkg -l | grep -E 'docker|containerd'    # docker-ce=rc(已卸载) docker-ce-cli=ii(残留) → 真相大白
+
+# ② 修复:装 Ubuntu 官方 docker.io(依赖系统 containerd,不碰 K8S 运行时,零风险)
+sudo systemctl unmask docker             # 先解除屏蔽(装集群时人为设置的)
+sudo dpkg -r docker-ce-cli               # 卸掉残留 CLI(避免 /usr/bin/docker 文件冲突)
+sudo apt-get install -y docker.io        # v29.1.3,daemon+CLI 一起回来
+sudo systemctl enable --now docker       # 开机自启 + 立即启动
+
+# ③ 验证"真并存":两个 daemon 都活,K8S 容器无感
+docker ps                                # ✅ 正常返回(空列表)
+systemctl is-active docker containerd    # → active + active
+sudo crictl ps | head -3                 # K8S 容器照常 Running,全程零影响</code></pre>
+  <div class="tip"><b>💡 选型关键:</b>别急着重装 docker-ce 官方包 —— 它强制依赖 <code>containerd.io</code>,安装时会替换 K8S 正在用的系统 containerd(unit 重启,容器虽不丢但有无谓风险);<code>docker.io</code> 依赖系统 containerd,与 K8S 天然共存。另记两个概念:K8S 1.24 起移除 dockershim,容器直接交 containerd 跑;<code>docker ps/images</code> 与 <code>crictl ps/images</code> 是两套视角 —— <b>排查 K8S 问题永远用 crictl,推镜像用 docker</b>(第 5 节 login/tag/push 实操现已可在节点直接跑)。</div>
 </section>
 <footer>
   <p>K8S Web · Harbor 安装与使用 · <a href="index.html">返回首页</a> · <a href="ingress.html">Ingress 文档</a></p>

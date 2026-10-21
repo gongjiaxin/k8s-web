@@ -57,6 +57,20 @@
   <div class="sec-title">📚 知识文档</div>
   <div class="grid">
 
+    <a class="card hot" href="k8s-cmd.html">
+      <div class="icon">⌨️</div>
+      <h3>K8S 常用命令速查</h3>
+      <p>kubectl 实战速查:节点/Pod/Service 查看全家桶、describe/logs/events 排障三件套、exec 进容器与端口转发、apply/scale/rollout 变更操作、清单生成 —— 全部附本集群真实命令输出。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-issues.html">
+      <div class="icon">🧯</div>
+      <h3>K8S 使用问题总汇</h3>
+      <p>排障一本通:kubeadm 安装失败(Swap/etcd 残留/端口占用)、磁盘满与 DiskPressure 驱逐、挂载失败(NFS/subPath/multi-attach)、权限拒绝(fsGroup/SELinux/RBAC)、拉不下镜像(国内加速/离线导入/imagePullSecrets),外加线上数据库磁盘满的止血与 PVC 在线扩容实战。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
     <a class="card hot" href="ingress.html">
       <div class="icon">🚪</div>
       <h3>Ingress 使用文档</h3>
@@ -67,7 +81,7 @@
     <a class="card" href="harbor.html">
       <div class="icon">🐳</div>
       <h3>Harbor 安装与使用</h3>
-      <p>私有镜像仓库:K8S+Helm 部署(2 副本共用一个 PVC)、日常运维命令、实战存一个 nginx 镜像(登录/打标/推送)、Robot 账号对接 CI、标签保留策略与排坑实录。</p>
+      <p>私有镜像仓库:K8S+Helm 部署(独立 PVC)、流量链路实景图(外层NGINX→ingress-nginx→Ingress→Svc→Pod)、日常运维命令、实战推送、Robot 账号对接 CI、标签保留策略,外加 Pending 23h / admission webhook 断链两大排障实录。</p>
       <span class="tag">● 已上线 · 点击进入 →</span>
     </a>
 

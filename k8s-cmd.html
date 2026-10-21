@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S 常用命令速查 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / kubectl 常用命令速查</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>⌨️ kubectl 常用命令速查
+    <small>全部命令 + 输出取自本集群(单节点 qingfeng · v1.35.9 · containerd)真实环境,复制即可用</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#c1">集群与节点</a></li>
+    <li><a href="#c2">资源查看全家桶(get)</a></li>
+    <li><a href="#c3">排障三件套(describe/logs/events)</a></li>
+    <li><a href="#c4">进容器与调试(exec/端口转发)</a></li>
+    <li><a href="#c5">变更操作(apply/scale/rollout)</a></li>
+    <li><a href="#c6">清单生成与 API 探索</a></li>
+    <li><a href="#c7">输出格式与实用技巧</a></li>
+  </ol>
+</nav>
+<!-- ================= 1. 集群与节点 ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>集群与节点 —— 先看清脚下的地</h2>
+  <pre><code># 节点清单 + 宽输出:IP/系统/容器运行时,一眼判断节点健康与运行时类型
+kubectl get nodes -o wide
+NAME       STATUS   ROLES           AGE    VERSION   INTERNAL-IP    OS-IMAGE             CONTAINER-RUNTIME
+qingfeng   Ready    control-plane   5d3h   v1.35.9   10.18.170.34   Ubuntu 22.04.5 LTS   containerd://2.2.1
+# STATUS=Ready 才正常;NotReady = 节点失联(kubelet/网络/资源出问题)
+
+# 全部命名空间(集群的"房间"清单)
+kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   5d3h
+ergesanbaishou    Active   5d2h     # 业务:本网站
+harbor            Active   27h      # 业务:Harbor 镜像仓库
+ingress-nginx     Active   2d       # 七层流量入口
+kube-flannel      Active   5d3h     # 网络插件
+kube-system       Active   5d3h     # 控制面组件
+
+# 控制面组件地址(确认 apiserver 在哪)
+kubectl cluster-info
+Kubernetes control plane is running at https://10.18.170.34:6443
+CoreDNS is running at https://.../kube-dns:dns/proxy</code></pre>
+  <div class="tip"><b>💡 第一条习惯:</b>登上一台新集群,先 <code>get nodes</code> 确认全部 Ready 再干活 —— 节点 NotReady 时,后面一切排障都是白费。</div>
+</section>
+
+<!-- ================= 2. 资源查看全家桶 ================= -->
+<section id="c2">
+  <h2><span class="no">02</span>资源查看全家桶(get)—— 90% 的日常</h2>
+
+  <h3>① 看所有命名空间的 Pod(全局体检)</h3>
+  <pre><code>kubectl get pods -A          # -A = 所有命名空间,先看全局有没有红的
+NAMESPACE        NAME                             READY   STATUS    RESTARTS        AGE
+ergesanbaishou   k8s-web-67458f5f78-4wc4g         1/1     Running   0               2d
+harbor           harbor-core-5cf65fb78f-77ckj      1/1     Running   0               3h33m
+harbor           harbor-database-0                 1/1     Running   0               3h34m
+harbor           harbor-portal-5d9f48888c-7nbxp    1/1     Running   0               27h
+ingress-nginx    ingress-nginx-controller-597...  1/1     Running   0               2d
+kube-system      etcd-qingfeng                    1/1     Running   0               5d3h
+qingfeng         nginx-hello-76ff6cbd47-kmx9f     1/1     Running   0               5d2h
+# 状态速判:Running=好 | Pending=调度失败(查describe) |
+# CrashLoopBackOff=进程崩溃(查logs --previous) | Evicted=被节点资源挤压驱逐</code></pre>
+
+  <h3>② 宽输出:Pod IP 落在哪个节点(排网络必备)</h3>
+  <pre><code>kubectl get pods -n harbor -o wide
+NAME                        READY   STATUS    AGE     IP            NODE
+harbor-core-...-77ckj       1/1     Running   3h33m   10.244.0.74   qingfeng
+harbor-database-0           1/1     Running   3h34m   10.244.0.71   qingfeng
+harbor-portal-...-7nbxp     1/1     Running   27h     10.244.0.63   qingfeng
+harbor-redis-0              1/1     Running   3h34m   10.244.0.72   qingfeng
+# -o wide 多出 IP/NODE 列:10.244.x.x 是 Flannel 分的 overlay 地址</code></pre>
+
+  <h3>③ 工作负载 + Service + Endpoints(名字都从这查)</h3>
+  <pre><code>kubectl get deploy,sts -n harbor        # deploy 名单一查便知(sts 是另一类!)
+deployment.apps/harbor-core         2/2     2   2   27h
+deployment.apps/harbor-jobservice   1/1     1   1   27h
+deployment.apps/harbor-portal       2/2     2   2   27h
+deployment.apps/harbor-registry     2/2     2   2   27h
+statefulset.apps/harbor-database    1/1         27h
+statefulset.apps/harbor-redis       1/1         27h
+
+kubectl get svc -n harbor               # Service = 集群内稳定入口
+NAME              TYPE        CLUSTER-IP      PORT(S)             AGE
+harbor-core       ClusterIP   10.102.185.70   80/TCP              27h
+harbor-registry   ClusterIP   10.110.89.208   5000/TCP,8080/TCP   27h
+
+kubectl get endpoints harbor-portal -n harbor   # svc 背后真实挂了哪些 Pod
+NAME            ENDPOINTS                           AGE
+harbor-portal   10.244.0.63:8080,10.244.0.64:8080   27h
+# ENDPOINTS 为 &lt;none&gt; = svc 后面没有健康 Pod(选择器错了/探针全挂)</code></pre>
+  <div class="tip"><b>💡 万能偷懒:</b><code>kubectl get all -n harbor</code> 一屏看全 pod/svc/deploy/sts/rs;日志三姿势、一条命令看全部 Pod 等深度用法见 <a href="harbor.html#h7b" style="color:var(--cyan)">Harbor 排障实录</a>。</div>
+</section>
+<!-- ================= 3. 排障三件套 ================= -->
+<section id="c3">
+  <h2><span class="no">03</span>排障三件套(describe / logs / events)</h2>
+
+  <h3>① describe —— 资源的"体检报告",重点看 Events</h3>
+  <pre><code>kubectl describe pod harbor-database-0 -n harbor | tail -9
+  database-data:
+    Type:        PersistentVolumeClaim (...)
+    ClaimName:   harbor-database      # 挂的哪个 PVC
+QoS Class:       BestEffort
+Tolerations:     node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+Events:          &lt;none&gt;              # 健康时无事件;出问题时这里全是线索
+# 排障时直接看尾部 Events,典型报错:
+#   FailedScheduling ... persistentvolumeclaim "xxx" not found → PVC 名错(本集群真实踩过)
+#   FailedMount ... unable to attach volume → 卷挂载失败
+#   BackOff ... container has run out of memory → OOM 被杀</code></pre>
+
+  <h3>② logs —— 看进程输出,日志永远在 Pod 不在 Service</h3>
+  <pre><code>kubectl logs -f harbor-database-0 -n harbor          # -f 实时滚动
+kubectl logs -f deploy/harbor-core -n harbor        # deploy 简写(自动挑副本,免抄哈希)
+kubectl logs &lt;pod&gt; -n harbor --previous              # ★ 看上一次崩溃的日志(CrashLoop 必杀)
+kubectl logs &lt;pod&gt; -n harbor -c registry --tail=100  # 多容器 Pod 指定容器+只看百行</code></pre>
+
+  <h3>③ events —— 集群级"事件流水",按时间排序</h3>
+  <pre><code>kubectl get events -n harbor --sort-by=.lastTimestamp | tail -5
+# 健康集群输出为空(正常);出问题时 Warning 事件会密集出现,
+# 与 describe 的 Events 是同源数据,但可跨资源、可排序、可持续 watch:
+kubectl get events -A -w --sort-by=.lastTimestamp   # -w 挂着实时盯全集群事件</code></pre>
+  <div class="warn"><b>⚠️ 90% 启动故障 = 三件套两条命令:</b>Pending → <code>describe</code> 看 Events;CrashLoop → <code>logs --previous</code>;连锁崩溃永远先修最上游。完整实战认证见 <a href="harbor.html#h7b" style="color:var(--red)">Pending 23h 排障实录</a>。</div>
+</section>
+
+<!-- ================= 4. 进容器与调试 ================= -->
+<section id="c4">
+  <h2><span class="no">04</span>进容器与调试(exec / 端口转发)</h2>
+  <pre><code># 在容器里执行命令(deploy 简写 + 指定容器,实测输出):
+kubectl exec -n harbor deploy/harbor-portal -c portal -- echo 'hello from container'
+hello from container
+
+# 交互式进容器排障(相当于 docker exec -it)
+kubectl exec -it -n harbor deploy/harbor-core -- sh
+
+# 本地端口转发:不暴露服务,从办公网直接访问集群内 ClusterIP
+kubectl port-forward svc/harbor-portal -n harbor 8080:80
+# Forwarding from 127.0.0.1:8080 -> 8080 → 浏览器开 http://localhost:8080 即可调试
+# Ctrl+C 结束;--address=0.0.0.0 可让局域网访问
+
+# 容器与本地互拷文件
+kubectl cp -n harbor harbor-database-0:/tmp/a.log ./a.log   # 容器 → 本机
+kubectl cp ./b.txt -n harbor harbor-database-0:/tmp/        # 本机 → 容器</code></pre>
+  <div class="tip"><b>💡 临时调试容器:</b>目标镜像里没有 curl/sh 时,用 <code>kubectl run tmp --rm -it --image=nicolaka/netshoot -n harbor -- bash</code> 起一个万能工具箱 Pod,查 DNS/网络连通性后退出即自动删除。</div>
+</section>
+<!-- ================= 5. 变更操作 ================= -->
+<section id="c5">
+  <h2><span class="no">05</span>变更操作(apply / scale / rollout)—— 动手改集群</h2>
+  <pre><code># 声明式应用清单(最常用,可重复执行,幂等)
+kubectl apply -f k8s/harbor-ingress.yaml     # 单文件
+kubectl apply -f k8s/                        # 整个目录一键部署
+kubectl apply -f https://xxx/xxx.yaml        # 直接吃远程 URL
+
+# 删除(支持同款简写;删 ns 会连带删里面所有资源,慎用!)
+kubectl delete -f k8s/harbor-ingress.yaml
+kubectl delete pod harbor-redis-0 -n harbor          # 删 Pod(sts/deploy 会自动重建)
+kubectl delete deploy/harbor-portal -n harbor        # 删 deploy(副本全下线)
+
+# 伸缩副本数
+kubectl scale deploy/harbor-portal -n harbor --replicas=3
+# deployment.apps/harbor-portal scaled → get pods 立刻多出 1 个
+
+# 滚动发布三连
+kubectl rollout status deploy/harbor-portal -n harbor
+# deployment "harbor-portal" successfully rolled out   ← 实测输出
+kubectl rollout restart deploy/harbor-portal -n harbor  # 滚动重启(改了 CM/密钥后常用)
+kubectl rollout undo deploy/harbor-portal -n harbor     # 一键回滚上个版本
+
+# 临时在线编辑(改完保存立即生效,适合调探针/环境变量)
+kubectl edit deploy/harbor-core -n harbor
+
+# 打标签(svc 靠标签找 Pod,标签错=流量断)
+kubectl label pods harbor-portal-xxx -n harbor env=test --overwrite</code></pre>
+  <div class="tip"><b>💡 顺序习惯:</b>改配置 → <code>apply</code> → <code>rollout status</code> 盯到 successfully → <code>get pods</code> 复核;不对就 <code>rollout undo</code>,三步之内必能回到健康态。</div>
+</section>
+
+<!-- ================= 6. 清单生成与 API 探索 ================= -->
+<section id="c6">
+  <h2><span class="no">06</span>清单生成与 API 探索 —— 不写 YAML 也能起服务</h2>
+  <pre><code># 命令行直接生成清单(dry-run + yaml,重定向存文件再改)
+kubectl run nginx-test --image=nginx:1.27 --dry-run=client -o yaml &gt; pod.yaml
+kubectl create deploy web --image=nginx:1.27 --replicas=2 --dry-run=client -o yaml &gt; dep.yaml
+
+# 所有资源类型 + 缩写(写命令提速:po=svc=pvc 都有短名)
+kubectl api-resources | head -13
+NAME                     SHORTNAMES   APIVERSION   NAMESPACED   KIND
+configmaps               cm           v1           true         ConfigMap
+endpoints                ep           v1           true         Endpoints
+events                   ev           v1           true         Event
+namespaces               ns           v1           false        Namespace
+nodes                    no           v1           false        Node
+persistentvolumeclaims   pvc          v1           true         PersistentVolumeClaim
+persistentvolumes        pv           v1           false        PersistentVolume
+pods                     po           v1           true         Pod
+
+# 字段说明书(不记得字段时,问 kubectl 比 Google 快)
+kubectl explain pod.spec.containers.livenessProbe
+KIND:       Pod
+VERSION:    v1
+FIELD: livenessProbe &lt;Probe&gt;
+DESCRIPTION:
+    Periodic probe of container liveness. Container will be restarted if the
+    probe fails. ...
+
+# 资源监控(本集群未装 metrics-server 的真实报错;装完才能用)
+kubectl top nodes
+error: Metrics API not available
+# 修复:kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/... 后即可 top</code></pre>
+</section>
+<!-- ================= 7. 输出格式与实用技巧 ================= -->
+<section id="c7">
+  <h2><span class="no">07</span>输出格式与实用技巧 —— 速查表</h2>
+  <table>
+    <tr><th>写法</th><th>作用</th><th>示例</th></tr>
+    <tr><td><code>-o wide</code></td><td>多列(IP/NODE 等),排网络必备</td><td><code>get pods -o wide</code></td></tr>
+    <tr><td><code>-o yaml</code></td><td>完整对象定义,学习/备份/复刻</td><td><code>get deploy harbor-core -o yaml</code></td></tr>
+    <tr><td><code>-o jsonpath</code></td><td>精准抠字段进脚本</td><td><code>get -o jsonpath='{.items[*].metadata.name}'</code></td></tr>
+    <tr><td><code>-w</code></td><td>挂住持续 watch 变化</td><td><code>get pods -n harbor -w</code></td></tr>
+    <tr><td><code>--show-labels</code></td><td>显示标签(svc↔Pod 靠它关联)</td><td><code>get pods --show-labels</code></td></tr>
+    <tr><td><code>-l k=v</code></td><td>按标签过滤</td><td><code>get pods -l app=harbor</code></td></tr>
+    <tr><td><code>--sort-by</code></td><td>按字段排序</td><td><code>get events --sort-by=.lastTimestamp</code></td></tr>
+    <tr><td><code>-A</code></td><td>所有命名空间</td><td><code>get pods -A</code></td></tr>
+    <tr><td><code>--all-containers</code></td><td>多容器 Pod 全看</td><td><code>logs -l app=harbor --all-containers</code></td></tr>
+  </table>
+  <div class="tip"><b>💡 高频组合拳:</b><code>kubectl get pods -A | grep -v Running</code>(揪出所有异常 Pod)、<code>kubectl get deploy,sts,svc,pvc -n harbor</code>(一次看四类资源)、<code>watch kubectl get pods -n harbor</code>(全屏盯发布过程)。</div>
+</section>
+
+<footer>
+  <p>⚡ K8S 常用命令速查 · 输出均采集自本集群(2026-10-21) · 深度排障见 <a href="harbor.html#h7b">Harbor 排障实录</a> / 流量链路见 <a href="harbor.html#h3b">架构图</a></p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>
+
+
+
+
