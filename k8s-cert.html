@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S 证书:域名 SSL(443) 与集群内部 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / K8S 证书管理</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>🔐 K8S 证书管理
+    <small>⭐A1 即本环境真实部署配置 k8s.ergesanbaishou.com:现有 80 版 + 443 升级版,可直接抄 &nbsp;|&nbsp; A 域名 SSL(443):两类证书辨析、挂载已有证书、cert-manager、内网自签、报错速查 &nbsp;|&nbsp; B 集群内部证书(pki):kubeadm 签发、SAN 定制、到期续期</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录 · A 域名 SSL(443/Ingress)</b>
+  <ol>
+    <li><a href="#s1">⭐部署方式:外层 NGINX 443 → Ingress(真实配置)</a></li>
+    <li><a href="#s2">先分清:域名 SSL ≠ 集群内部证书</a></li>
+    <li><a href="#s3">部署①:挂载已有证书(Secret+Ingress)</a></li>
+    <li><a href="#s4">部署②:cert-manager 自动签发续期</a></li>
+    <li><a href="#s5">部署③:内网域名自签证书</a></li>
+    <li><a href="#s6">443/SSL 高频报错速查</a></li>
+  </ol>
+  <br><b>📑 目录 · B 集群内部证书(pki/6443)</b>
+  <ol>
+    <li><a href="#c1">证书体系全景(谁签给谁/放在哪)</a></li>
+    <li><a href="#c2">安装部署:kubeadm 自动签发</a></li>
+    <li><a href="#c3">自定义部署:SAN 与有效期</a></li>
+    <li><a href="#c4">openssl 手动生成/替换证书</a></li>
+    <li><a href="#c5">检查到期与一键续期</a></li>
+    <li><a href="#c6">x509 高频报错速查</a></li>
+  </ol>
+</nav>
+<!-- ================= A1. 真实案例:外层 NGINX 443 ================= -->
+<section id="s1">
+  <h2><span class="no">A1</span>⭐ 部署方式:外层 NGINX 443 → Ingress(本环境真实配置 k8s.ergesanbaishou.com)</h2>
+  <p>本环境真实链路:<code>k8s.ergesanbaishou.com</code> → Ingress(<code>hello1.qingfeng.dev</code>)→ nginx-hello(qingfeng 空间)。证书统一挂<b>外层 nginx</b>,在 443 终止 TLS,后面集群内走 http —— <b>一处换证、全站生效</b>,K8s 侧零改动。你机器上现在已有 80 版配置,只需按下面 ② 改 3 处即可升级 HTTPS:</p>
+  <pre><code>浏览器 ──HTTPS:443──▶ 外层NGINX(证书在这,TLS终止)
+                        │ 301(80→443)
+                        └──HTTP:31588──▶ ingress-nginx(NodePort) ──▶ svc:8080 ──▶ pod:80(nginx-hello)</code></pre>
+  <p><b>① 现状 —— 你机器上已有的 80 版配置(原样,可用):</b></p>
+  <pre><code># /etc/nginx/conf.d/k8s.ergesanbaishou.com.conf
+# hello1.qingfeng.dev → K8s Ingress → nginx-hello(qingfeng 空间)
+# 外层 nginx:80 → ingress-nginx NodePort:31588 → svc:8080 → pod:80
+upstream k8s_ergesanbaishou {
+    server 10.18.170.34:31588;     # ★ ingress-nginx 的 NodePort(80 对应)
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name k8s.ergesanbaishou.com;
+
+    access_log /var/log/nginx/hello1.access.log;
+    error_log  /var/log/nginx/hello1.error.log;
+
+    location / {
+        proxy_pass http://k8s_ergesanbaishou;
+
+        # ★★★ 灵魂行:透传 Host,Ingress 全靠它分流,丢了必 404 ★★★
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version 1.1;              # WebSocket 支持(可选)
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}</code></pre>
+  <p><b>② 升级 HTTPS —— 在上面文件里改 3 处(★ 标出),完整 443 版如下,可整份覆盖:</b></p>
+  <pre><code># /etc/nginx/conf.d/k8s.ergesanbaishou.com.conf —— 443 完整版
+# 浏览器 ──HTTPS:443──▶ 外层NGINX(TLS终止) ──HTTP:31588──▶ ingress ──▶ svc:8080 ──▶ pod:80
+upstream k8s_ergesanbaishou {
+    server 10.18.170.34:31588;     # ★ 改动0:不变,还是 ingress-nginx 的 NodePort
+    keepalive 32;
+}
+
+# ★ 改动1:原 80 的 location 整块删掉,只留一行 301 跳 https
+server {
+    listen 80;
+    server_name k8s.ergesanbaishou.com;
+    return 301 https://$host$request_uri;
+}
+
+# ★ 改动2:新增 443 server(证书两行 + 原来的 location 整块搬进来)
+server {
+    listen       443 ssl;
+    server_name  k8s.ergesanbaishou.com;
+
+    # ★ 证书两行(fullchain 含中间证书;先自签,命令在下面)
+    ssl_certificate     /etc/nginx/ssl/ergesanbaishou.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/ergesanbaishou.com.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL_ergesan:10m;
+
+    access_log /var/log/nginx/hello1.access.log;
+    error_log  /var/log/nginx/hello1.error.log;
+
+    location / {
+        proxy_pass http://k8s_ergesanbaishou;
+
+        # ★★★ 灵魂行:透传 Host,Ingress 全靠它分流,丢了必 404 ★★★
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;   # 443 时=https,ingress 靠它识别原始协议
+
+        proxy_http_version 1.1;              # WebSocket 支持(可选)
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+
+# ★ 改动3:没有正式证书就先自签一把(浏览器会提示不安全,内网可用)
+#   mkdir -p /etc/nginx/ssl
+#   openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+#     -keyout /etc/nginx/ssl/ergesanbaishou.com.key \
+#     -out    /etc/nginx/ssl/ergesanbaishou.com.pem \
+#     -subj "/CN=k8s.ergesanbaishou.com" \
+#     -addext "subjectAltName=DNS:k8s.ergesanbaishou.com,DNS:harbor.ergesanbaishou.com"
+
+# 生效三连
+nginx -t &amp;&amp; systemctl reload nginx
+curl -kv https://k8s.ergesanbaishou.com 2&gt;&amp;1 | grep subject   # 应输出 CN=k8s.ergesanbaishou.com</code></pre>
+  <ul>
+    <li><b>★ 防重定向循环:</b>TLS 已在外层终止,ingress 收到的全是 http —— K8s 侧 Ingress 必须加注解 <code>nginx.ingress.kubernetes.io/ssl-redirect: "false"</code>,否则 80↔443 无限 301。</li>
+    <li><b>★ K8s 侧不用再配 tls:</b>这条链路证书只在外层,Ingress 的 <code>tls:</code> 段可以省;若想让 ingress 层也有一层,才走 <a href="#s3">A3</a> 挂 Secret。</li>
+    <li><b>⚠️ 80→301 模板的例外 —— registry/Harbor 域名:</b><code>/v2/</code> 和 <code>/service/</code> 是 docker registry 协议入口,<b>严禁 301 强跳</b>(docker 跟随重定向会剥掉 Authorization → push 报 unauthorized);443 还要加 <code>proxy_redirect</code> 改写 http Location。完整终版配置见<b>下方 ③</b> 与 <a href="harbor.html">Harbor 文档</a> FAQ ⑩.2~⑩.4(实测踩坑三部曲)。</li>
+    <li><b>★ 多域名复用:</b>同款套路给 <code>harbor.ergesanbaishou.com</code> 建独立 conf 即可 —— upstream 改指 32588(harbor 的 NodePort),证书路径/自签同理;几十个域名全在外层换证,运维只盯 nginx 一个点。</li>
+  </ul>
+  <p><b>③ Harbor 域名的 SSL 终版配置(实测通过,docker push/pull + UI 全通):</b>与普通站点差异极大 —— 80 端口对 <code>/v2/</code>、<code>/service/</code> 必须<b>直反代</b>(token 换发与层上传会走 http),443 必须加 <code>proxy_redirect</code> 把 registry 吐的 http Location 改写成 https:</p>
+  <pre><code># /etc/nginx/conf.d/harbor.ergesanbaishou.com.conf —— 80+443 终版
+upstream harbor_ergesanbaishou {
+    server 10.18.170.34:32588;     # harbor 的 ingress NodePort(http)
+    keepalive 32;
+}
+
+# 80:/v2/ 和 /service/ 直接反代(registry 协议严禁 301);其余路径跳 https 给 UI
+server {
+    listen 80;
+    server_name harbor.ergesanbaishou.com;
+
+    location /v2/ {                        # ★ registry 入口,严禁 301
+        proxy_pass http://harbor_ergesanbaishou;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 0;            # push 大镜像层不限
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    location /service/ {                   # ★ token 签发入口,同样严禁 301
+        proxy_pass http://harbor_ergesanbaishou;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location / {                           # 浏览器 UI 才跳 https
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 443:SSL 终止,反代 UI/API
+server {
+    listen       443 ssl;
+    server_name  harbor.ergesanbaishou.com;
+
+    ssl_certificate     /etc/nginx/ssl/harbor.ergesanbaishou.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/harbor.ergesanbaishou.com.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL_harbor:10m;
+
+    access_log /var/log/nginx/harbor-ergesanbaishou.access.log;
+    error_log  /var/log/nginx/harbor-ergesanbaishou.error.log;
+
+    client_max_body_size 0;
+
+    location / {
+        proxy_pass http://harbor_ergesanbaishou;
+        # ★★★ 银弹行:把 registry 返回的 http:// Location 改写成 https,
+        #     否则 PUT 跟 Location 走 80 被杀,报 unauthorized(Harbor FAQ ⑩.4)
+        proxy_redirect ~^http://harbor\.ergesanbaishou\.com(:\d+)?(/.*)$ https://harbor.ergesanbaishou.com$2;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+# 生效: nginx -t &amp;&amp; systemctl reload nginx</code></pre>
+</section>
+
+<!-- ================= A2. 域名 SSL vs 集群内部证书 ================= -->
+<section id="s2">
+  <h2><span class="no">A2</span>先分清:域名 SSL 证书 ≠ 集群内部证书</h2>
+  <p>域名 SSL 就是"浏览器地址栏那把 🔒":保护<b>用户 → 你的网站</b>的 HTTPS(443) 流量,证书绑定<b>你的域名</b>,挂载在 <b>Ingress</b> 上;它和 kubectl 用的集群内部证书(本页 B 部分)是两套完全独立的体系:</p>
+  <table>
+    <tr><th></th><th>域名 SSL 证书(本部分)</th><th>集群内部证书(B 部分)</th></tr>
+    <tr><td>保护什么</td><td>浏览器 → 网站的用户流量</td><td>kubectl/组件之间的管理面通信</td></tr>
+    <tr><td>端口</td><td><b>443</b>(Ingress 终止 TLS)</td><td>6443 / 2379 / 10250</td></tr>
+    <tr><td>绑定什么</td><td><b>你的域名</b> k8s.example.com</td><td>节点名 / kubernetes.default / 集群 IP</td></tr>
+    <tr><td>挂载位置</td><td>TLS Secret → Ingress <code>tls.secretName</code></td><td><code>/etc/kubernetes/pki/</code></td></tr>
+    <tr><td>谁签发</td><td>公共 CA(Let's Encrypt/阿里云/DigiCert)或自签</td><td>kubeadm 自建 CA</td></tr>
+    <tr><td>过期后果</td><td>浏览器红色"不安全"、小程序/App 拒连</td><td>kubectl 连不上集群</td></tr>
+    <tr><td>怎么续</td><td>换 Secret 里的证书 / cert-manager 自动</td><td><code>kubeadm certs renew</code></td></tr>
+  </table>
+  <pre><code># 两条链路看流量,证书各管一段:
+浏览器 ──HTTPS:443──▶ Ingress-nginx ──HTTP:80──▶ Service ──▶ Pod
+         ▲ 域名 SSL 在这里校验(TLS 终止,后面集群内走明文)
+
+kubectl ──HTTPS:6443──▶ apiserver
+         ▲ 内部证书在这里校验(B 部分)</code></pre>
+  <div class="tip"><b>💡 判断口诀:</b><b>浏览器报"不安全" = 域名 SSL 的事(A 部分);kubectl 连不上 = 内部证书的事(B 部分)</b>。排查前先分清走的是哪条链路。</div>
+</section>
+
+<!-- ================= A3. 挂载已有证书 ================= -->
+<section id="s3">
+  <h2><span class="no">A3</span>部署① 挂载已有证书 —— 公司发的/买的证书(Secret + Ingress)</h2>
+  <p>最常见场景:已经从阿里云/公司拿到了域名的证书文件,把它挂到 Ingress 上让网站变 HTTPS。三步搞定:</p>
+  <pre><code># 0. 你拿到的通常是两个文件(可能是 .crt/.key 或 .pem)
+ls
+fullchain.pem  privkey.pem
+# ★ fullchain = 域名证书 + 中间证书链;只放单张证书部分客户端会报"不受信任"
+
+# (pfx 格式先转换)
+# openssl pkcs12 -in cert.pfx -nokeys -out fullchain.pem
+# openssl pkcs12 -in cert.pfx -nocerts -nodes -out privkey.pem
+
+# 1. 存成 TLS Secret(★ namespace 必须和 Ingress 在同一个!)
+kubectl create secret tls web-tls -n web \
+  --cert=fullchain.pem --key=privkey.pem
+
+# 2. Ingress 引用(hosts 必须和证书域名完全一致,包括子域)
+kubectl apply -f - &lt;&lt;EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: web
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - k8s.example.com
+    secretName: web-tls        # ← 第 1 步创建的 Secret
+  rules:
+  - host: k8s.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web
+            port:
+              number: 80
+EOF
+
+# 3. 验证 443 已用新证书
+curl -kv https://k8s.example.com 2&gt;&amp;1 | grep -E 'subject:|expire'
+  subject: CN=k8s.example.com
+  expire date: Jan 20 00:00:00 2027 GMT
+
+# 附:查看 Secret 里证书的域名/到期日
+kubectl get secret web-tls -n web -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d | openssl x509 -noout -subject -enddate</code></pre>
+  <ul>
+    <li><b>更换证书 = 更新 Secret</b>:重新 <code>kubectl create secret tls web-tls --dry-run=client -o yaml | kubectl apply -f -</code>,ingress-nginx 会自动 reload,通常 1 分钟内生效。</li>
+    <li><b>http 自动跳 https</b>:ingress-nginx 配了 tls 后默认跳转;想关掉用注解 <code>nginx.ingress.kubernetes.io/ssl-redirect: "false"</code>。</li>
+  </ul>
+  <div class="warn"><b>⚠️ 常见翻车:</b>① Secret 建在了别的 namespace → Ingress 找不到,仍然走默认假证书(<code>Kubernetes Ingress Controller Fake Certificate</code>);② 证书是 <code>*.example.com</code> 通配符,却用 <code>a.b.example.com</code> 访问 → 通配符只匹配一级子域。</div>
+</section>
+<!-- ================= A4. cert-manager 自动签发 ================= -->
+<section id="s4">
+  <h2><span class="no">A4</span>部署② cert-manager + Let's Encrypt —— 免费证书自动申请/续期</h2>
+  <p>不想每年手动换证书?装 cert-manager,证书<b>自动申请、自动挂载、到期自动续</b>,公网域名全程零人工:</p>
+  <pre><code># 1. 安装 cert-manager(一次性,官方清单)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl -n cert-manager get pods   # 三个 Pod 全 Running 再继续
+
+# 2. 配置签发器(HTTP-01 挑战;前提:域名已公网解析到 Ingress 入口、80 端口可达)
+kubectl apply -f - &lt;&lt;EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@example.com                     # 到期提醒邮件
+    privateKeySecretRef:
+      name: letsencrypt-key
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: nginx
+EOF
+
+# 3a. 用法一(最省事):Ingress 加一个注解即可,Secret 自动生成
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+# (tls.secretName 随便起个名,如 web-tls;cert-manager 会自动创建并填充)
+
+# 3b. 用法二(更显式):Certificate 对象,指定域名清单
+kubectl apply -f - &lt;&lt;EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: web-cert
+  namespace: web                               # ★ 和使用它的 Ingress 同 ns
+spec:
+  secretName: web-tls                          # 签好后证书存在这个 Secret
+  dnsNames:
+  - k8s.example.com
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+EOF
+
+# 4. 盯签发状态(READY=True 即成功,Secret 已生成)
+kubectl get certificate -n web
+NAME       READY   SECRET     AGE
+web-cert   True    web-tls    2m
+# 卡在 False 就:kubectl describe certificate web-cert -n web  看 Events</code></pre>
+  <ul>
+    <li><b>Let's Encrypt 有效期 90 天</b>,cert-manager 会在到期前 30 天自动续 —— 装完基本不用再管。</li>
+    <li><b>测试期用预发环境</b>防限频:server 换成 <code>https://acme-staging-v02.api.letsencrypt.org/directory</code>,调通再切正式。</li>
+    <li><b>通配符证书</b> <code>*.example.com</code> 不支持 HTTP-01,必须走 DNS-01(需配阿里云/Cloudflare 的 DNS Provider token)。</li>
+  </ul>
+  <div class="warn"><b>⚠️ 排查三连:</b>READY=False 先 <code>describe certificate</code> 看 Events → 多半是 80 端口外网不可达(HTTP-01 挑战失败)或域名解析没指向 Ingress;其次 <code>kubectl get challenge -n web</code> 看挑战详情。</div>
+</section>
+
+<!-- ================= A5. 内网自签 ================= -->
+<section id="s5">
+  <h2><span class="no">A5</span>部署③ 内网域名自签证书 —— harbor.xxx.local 这类</h2>
+  <p>内网域名(如 <code>harbor.qingfeng.local</code>)没有公网解析,公共 CA 不给签 → 自己签一把,挂法与 A3 完全相同:</p>
+  <pre><code># 1. 一条命令自签(825 天,SAN 写全所有要访问的域名)
+openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+  -keyout privkey.pem -out fullchain.pem \
+  -subj "/CN=harbor.qingfeng.local" \
+  -addext "subjectAltName=DNS:harbor.qingfeng.local,DNS:registry.qingfeng.local"
+
+# 2. 存 Secret(与 A3 第 1 步相同)
+kubectl create secret tls harbor-tls -n harbor \
+  --cert=fullchain.pem --key=privkey.pem
+
+# 3. Ingress tls 段引用 secretName: harbor-tls(完整写法见 A3)
+
+# 4. 验证
+curl -kv https://harbor.qingfeng.local 2&gt;&amp;1 | grep subject
+  subject: CN=harbor.qingfeng.local</code></pre>
+  <ul>
+    <li><b>浏览器会提示"不是私密连接"</b>属正常 —— 自签证书不在系统信任列表,点"高级→继续访问"即可用。</li>
+    <li><b>想消除告警(企业内推荐):</b>自建一套私有 CA(根 CA 签发域名证书),把<b>根 CA 证书</b>导入员工电脑/CI 机器的信任列表 —— 只导一次,之后该 CA 签的所有证书都绿锁。</li>
+    <li><b>docker pull 私仓不受信:</b>把根 CA 放到节点的 <code>/etc/docker/certs.d/&lt;域名&gt;/ca.crt</code>(containerd 用 <code>/etc/containerd/certs.d/&lt;域名&gt;/hosts.toml</code> 指定 ca)。</li>
+  </ul>
+  <div class="tip"><b>💡 三种部署方式选型:</b>有公网域名 → A4 cert-manager(全自动);证书是买的/公司发的 → A3 挂载;纯内网域名 → A5 自签。详见 <a href="harbor.html">Harbor 文档</a> 的私仓 HTTPS 实战。</div>
+</section>
+<!-- ================= A6. 443/SSL 报错速查 ================= -->
+<section id="s6">
+  <h2><span class="no">A6</span>443/SSL 高频报错速查表</h2>
+  <table>
+    <tr><th>现象</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td>浏览器 <code>ERR_CERT_COMMON_NAME_INVALID</code></td><td>访问的域名 ≠ 证书 SAN(子域写错/通配符层级不符)</td><td>核对证书 SAN 与访问域名;<code>openssl x509 -text</code> 查证书实际域名</td></tr>
+    <tr><td>浏览器"您的连接不是私密连接"</td><td>自签证书 / 证书过期 / 缺中间证书</td><td>自签见 <a href="#s5">A5</a>;过期换证;缺链把中间证书拼进 fullchain</td></tr>
+    <tr><td>Chrome 正常、部分客户端报 unknown authority</td><td>fullchain 只有域名证书没带中间证书</td><td><code>cat 域名.crt 中间.crt &gt; fullchain.pem</code> 重建证书文件</td></tr>
+    <tr><td>http 访问不跳 https</td><td>外层没做 301 / Ingress 没配 tls</td><td>外层 nginx <code>return 301 https://...</code>(见 <a href="#s1">A1</a>);或 Ingress tls 段</td></tr>
+    <tr><td>配置 443 后无限重定向 ERR_TOO_MANY_REDIRECTS</td><td>TLS 在外层终止,Ingress 又强制跳 https</td><td>Ingress 注解 <code>ssl-redirect: "false"</code>(见 <a href="#s1">A1 要点</a>)</td></tr>
+    <tr><td>证书换了但生效的还是旧证书</td><td>nginx 未 reload / 浏览器缓存</td><td><code>nginx -s reload</code>;无痕窗口验证;<code>openssl s_client</code> 看实际下发</td></tr>
+    <tr><td>cert-manager <code>READY=False</code></td><td>HTTP-01 挑战失败(80 不通/解析没指对)</td><td><code>describe certificate</code> 看 Events;放行 80;检查解析(见 <a href="#s4">A4</a>)</td></tr>
+    <tr><td><code>ERR_SSL_VERSION_OR_CIPHER_MISMATCH</code></td><td>证书/私钥不配对(贴错文件)</td><td>比对 modulus:<code>openssl x509 -noout -modulus</code> vs <code>openssl rsa -noout -modulus</code></td></tr>
+    <tr><td>nginx 报 <code>no ssl_certificate is defined</code></td><td>listen 443 ssl 但没写证书两行</td><td>补 <code>ssl_certificate / ssl_certificate_key</code></td></tr>
+    <tr><td>docker push 报 <code>authorization header is required to send HEAD</code></td><td>registry 的 <code>/v2/</code> 被 80→443 301 强跳,重定向剥掉了 Authorization</td><td>80 上 <code>/v2/</code> 直接反代勿 301,其余路径才跳 https(详见 <a href="harbor.html">Harbor 文档</a> FAQ ⑩.2)</td></tr>
+  </table>
+  <div class="tip"><b>💡 万能验证三板斧:</b><code>curl -kv https://域名</code>(看握手证书)→ <code>openssl s_client -connect 域名:443 -servername 域名</code>(看完整链)→ 看错误日志 <code>tail -f /var/log/nginx/*error.log</code>。Ingress 用法见 <a href="ingress.html">Ingress 使用文档</a>。</div>
+</section>
+
+<!-- ================= B1. 证书体系全景 ================= -->
+<section id="c1">
+  <h2><span class="no">B1</span>集群内部证书体系全景 —— 谁签给谁、放在哪</h2>
+  <p>kubeadm 部署的集群,证书全部集中在 <code>/etc/kubernetes/pki/</code>,由根 CA 统一签发;先把目录结构和用途看懂,后面所有操作都不慌:</p>
+  <pre><code>/etc/kubernetes/pki/                          # 集群所有证书的家(root 权限)
+├── ca.crt  ca.key                            # ★ 根 CA,其余证书全由它签(丢了=灾难,必备份)
+├── apiserver.crt  apiserver.key              # ★ API Server 服务端证书(kubectl 连的就是它)
+├── apiserver-kubelet-client.crt  .key        # apiserver → kubelet 的客户端证书
+├── apiserver-etcd-client.crt  .key           # apiserver → etcd 的客户端证书
+├── front-proxy-ca.crt                        # agg API( metrics-server 等)请求头认证 CA
+├── front-proxy-client.crt  .key              # 对应客户端证书
+└── etcd/
+    ├── ca.crt  ca.key                        # etcd 独立 CA(与集群 CA 分开)
+    ├── server.crt  server.key                # etcd 服务端证书
+    ├── peer.crt  peer.key                    # etcd 节点间通信(多节点 etcd)
+    └── healthcheck-client.crt  .key          # 健康检查客户端证书
+
+/etc/kubernetes/*.conf                        # admin/controller-manager/scheduler 的 kubeconfig,
+                                              #   内嵌客户端证书(续期时会一并更新)
+/var/lib/kubelet/pki/                         # kubelet 自己的证书(默认开启自动轮换)</code></pre>
+
+  <table>
+    <tr><th>证书</th><th>谁在用</th><th>认证方向</th><th>默认有效期</th></tr>
+    <tr><td><code>ca.crt</code></td><td>所有组件信任的根</td><td>签发者(不给别人用)</td><td>10 年</td></tr>
+    <tr><td><code>apiserver.crt</code></td><td>kubectl / kubelet / 所有客户端 → apiserver</td><td>服务端(serverAuth)</td><td>1 年</td></tr>
+    <tr><td><code>apiserver-kubelet-client</code></td><td>apiserver → kubelet(logs/exec)</td><td>客户端(clientAuth)</td><td>1 年</td></tr>
+    <tr><td><code>apiserver-etcd-client</code></td><td>apiserver → etcd</td><td>客户端</td><td>1 年</td></tr>
+    <tr><td><code>etcd/server.crt</code></td><td>etcd 对外服务</td><td>服务端</td><td>1 年</td></tr>
+    <tr><td><code>*.conf</code> 内嵌证书</td><td>kubectl / scheduler 等控制面组件</td><td>客户端</td><td>1 年</td></tr>
+    <tr><td>kubelet 客户端证书</td><td>kubelet → apiserver</td><td>客户端</td><td>1 年(自动轮换)</td></tr>
+  </table>
+
+  <div class="tip"><b>💡 记住一条主线:</b><code>kubectl → apiserver.crt</code>(服务端被验证),<code>kubelet/scheduler → *.conf 内嵌证书</code>(客户端被验证),全部回溯信任 <code>ca.crt</code> —— 所以 <b>ca.key 必须备份且不能外泄</b>。</div>
+</section>
+
+<!-- ================= 2. 安装部署:kubeadm 自动签发 ================= -->
+<section id="c2">
+  <h2><span class="no">B2</span>集群安装部署 —— kubeadm 自动签发(标准方式)</h2>
+  <p>用 <code>kubeadm init</code> 安装集群时,证书的"部署"是<b>全自动</b>的:init 在预检后第一步就生成根 CA 和全套组件证书,再启动各静态 Pod —— 这也是推荐方式:</p>
+  <pre><code># init 过程中与证书相关的两行日志:
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "apiserver" certificate and key on disk
+# ↑ 此时已按默认 SAN(kubernetes/节点名/节点IP/10.96.0.1)生成证书
+
+# 部署完成后立即确认证书状态(还能用多久一目了然)
+kubeadm certs check-expiration
+CERTIFICATE                EXPIRES          RESIDUAL   CERTIFICATE AUTHORITY
+apiserver                  Jan 20, 2027..   364d       ca
+apiserver-kubelet-client   Jan 20, 2027..   364d       ca
+apiserver-etcd-client      Jan 20, 2027..   364d       etcd-ca
+...
+ca                         Jan 18, 2036..   3650d      -
+
+# apiserver 是怎么用这些证书的?(静态 Pod 启动参数引用)
+grep -E 'tls-cert|client-ca' /etc/kubernetes/manifests/kube-apiserver.yaml
+  - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+  --tls-private-key-file=/etc/kubernetes/pki/apiserver.key
+  --client-ca-file=/etc/kubernetes/pki/ca.crt
+
+# 指定自定义参数重装/重签时,certificatesDir 也可换位置(默认 /etc/kubernetes/pki)</code></pre>
+  <ul>
+    <li><b>有效期默认:</b>根 CA 10 年、其余组件证书 1 年(kubeadm 1 年一续,见 B5)。</li>
+    <li><b>权限:</b>pki 目录属 root、600/700 权限,不要放宽。</li>
+    <li><b>默认 SAN 内容:</b><code>kubernetes</code>、<code>kubernetes.default</code> 等 Service 名、节点主机名、节点 IP、Service CIDR 首地址(10.96.0.1) —— <b>不含外网 IP/LB VIP</b>,要加就走 B3。</li>
+  </ul>
+
+  <div class="warn"><b>⚠️ 首次部署就做备份:</b><code>cp -r /etc/kubernetes /root/k8s-backup-$(date +%F)</code> —— ca.key 一旦丢失,唯一出路是整集群重建。</div>
+</section>
+<!-- ================= 3. 自定义部署:SAN 与有效期 ================= -->
+<section id="c3">
+  <h2><span class="no">B3</span>自定义部署 —— 指定 SAN 与有效期</h2>
+  <p>默认证书<b>不含</b>外网 IP、域名、负载均衡 VIP —— 一旦 kubectl 用这些地址连 6443 就会报 <code>x509: certificate is valid for ..., not xxx</code>。两种时机配置:</p>
+
+  <h3>时机 A:全新安装时(init 前写进 kubeadm 配置)</h3>
+  <pre><code># kubeadm-init.yaml(v1.31+ 用 v1beta4;旧版集群用 v1beta3,字段相同)
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: v1.35.9
+apiServer:
+  certSANs:                       # ★ 核心字段:apiserver 证书的 SAN 列表
+  - "qingfeng"                    #   节点主机名
+  - "192.168.10.10"               #   节点内网 IP
+  - "10.96.0.1"                   #   Service CIDR 首地址(kubectl 集群内访问)
+  - "k8s.example.com"             #   自定义域名(LB/外网入口)
+  - "192.168.10.100"              #   HA 集群的 LB VIP
+# --- v1.27+ 还可定制签发时长(可选,默认 1 年) ---
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+certificatesExpiration:
+  unitDuration: 8760h             # 单次签发时长,3650d=10年: 87600h
+
+# 用配置文件安装
+kubeadm init --config kubeadm-init.yaml</code></pre>
+
+  <h3>时机 B:集群已运行,追加 SAN 重签 apiserver 证书(最常用)</h3>
+  <pre><code># 1. 把新 SAN 补进配置(或直接编辑现有 kubeadm.yaml 的 certSANs 列表)
+
+# 2. 只重签 apiserver 证书(不动其他组件,ca.key 还在即可)
+kubeadm init phase certs apiserver --config kubeadm-init.yaml
+certsServedAPIServer="apiserver"  [certs] Generating "apiserver" certificate and key
+
+# 3. 让 apiserver 重新加载证书:重启静态 Pod(改 manifest 文件触发 kubelet 拉起新容器)
+mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/ &amp;&amp; sleep 20 &amp;&amp; mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+# 4. 验证 SAN 已包含新地址
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -text | grep -A1 'Alternative'
+   DNS:kubernetes, DNS:qingfeng, DNS:k8s.example.com,
+   IP Address:192.168.10.10, IP Address:10.96.0.1, IP Address:192.168.10.100
+
+# 5. kubectl 用新地址连通验证
+kubectl --server=https://k8s.example.com:6443 get nodes</code></pre>
+
+  <div class="tip"><b>💡 HA 集群:</b>每个控制面节点都要执行"追加 SAN + 重启 apiserver";LB 后面的所有 master 的 apiserver 证书都应包含 <code>LB VIP + 域名</code>。</div>
+</section>
+
+<!-- ================= 4. openssl 手动生成 ================= -->
+<section id="c4">
+  <h2><span class="no">B4</span>openssl 手动生成 / 替换证书</h2>
+  <p>场景:离线环境、想要 10 年长证书、或对接企业自有 CA。生产仍推荐 kubeadm 托管,手动方式一般只替换个别证书。以 apiserver 为例:</p>
+  <pre><code># 0. 备份(动手前必做)
+cp -r /etc/kubernetes/pki /root/pki-backup-$(date +%F)
+
+# 1. 生成根 CA(已有 ca.crt/ca.key 可跳过)
+openssl genrsa -out ca.key 4096
+openssl req -x509 -new -nodes -key ca.key -subj "/CN=qingfeng-ca" -days 3650 -out ca.crt
+
+# 2. 生成 apiserver 私钥 + CSR
+openssl genrsa -out apiserver.key 2048
+openssl req -new -key apiserver.key -subj "/CN=kube-apiserver" -out apiserver.csr
+
+# 3. 写 SAN 扩展文件(serverAuth 用途)
+cat &gt; apiserver.ext &lt;&lt;EOF
+subjectAltName=DNS:kubernetes,DNS:kubernetes.default,DNS:qingfeng,DNS:k8s.example.com,IP:192.168.10.10,IP:10.96.0.1,IP:127.0.0.1
+extendedKeyUsage=serverAuth
+EOF
+
+# 4. 用根 CA 签发(此处签 10 年)
+openssl x509 -req -in apiserver.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -days 3650 -extfile apiserver.ext -out apiserver.crt
+
+# 5. 校验链 + 看 SAN + 看到期日
+openssl verify -CAfile ca.crt apiserver.crt
+openssl x509 -in apiserver.crt -noout -text | grep -A1 'Alternative'
+openssl x509 -in apiserver.crt -noout -enddate
+
+# 6. 替换并重启 apiserver(同 B3 时机 B 第 3 步)
+mv apiserver.crt apiserver.key /etc/kubernetes/pki/
+mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/ &amp;&amp; sleep 20 &amp;&amp; mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/</code></pre>
+
+  <div class="warn"><b>⚠️ 三条红线:</b>① 别动 <code>ca.key</code> 的密码学属性(换了 CA = 全集群证书重签);② 客户端证书(如 <code>*.conf</code> 内嵌)不要手动 openssl 替换,交给 <code>kubeadm certs renew</code>;③ 替换后立即用 <code>kubectl get nodes</code> 验证,失败就回滚备份。</div>
+</section>
+<!-- ================= 5. 检查到期与续期 ================= -->
+<section id="c5">
+  <h2><span class="no">B5</span>检查到期与一键续期 —— 每季度必做</h2>
+  <pre><code># 1. 检查所有证书的剩余时间(在控制面节点执行)
+kubeadm certs check-expiration
+CERTIFICATE                EXPIRES          RESIDUAL   CERTIFICATE AUTHORITY
+apiserver                  Jan 20, 2027     364d       ca
+admin.conf                 Jan 20, 2027     364d       ca
+...
+
+# 2. 单独看某一张证书的到期日
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -enddate
+notAfter=Jan 20 03:12:00 2027 GMT
+
+# 3. 一键续期全部(各证书再延 1 年;需 ca.key 存在)
+kubeadm certs renew all
+certificate embedded in the kubeconfig file for the admin.conf updated
+...
+
+# 4. ★ renew 不会自动重启静态 Pod,必须手动让 apiserver 等重载
+mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/ &amp;&amp; sleep 20 &amp;&amp; \
+mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+# (scheduler/controller-manager/etcd 同理;偷懒可逐个 crictl stop 旧容器)
+
+# 5. kubectl 的 kubeconfig 也内嵌了旧证书,重新拷贝
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+# 6. 验证
+kubectl get nodes &amp;&amp; kubeadm certs check-expiration | head -4</code></pre>
+  <ul>
+    <li><b>kubelet 客户端证书</b>默认 <code>rotateCertificates: true</code> 自动轮换,不用管;服务端证书由 kubelet 自签,apiserver 通过 <code>--kubelet-certificate-authority</code> 校验。</li>
+    <li><b>建议节奏:</b>监控告警配置「剩余 &lt; 90 天」提醒;<code>cron</code> 季度跑一次 <code>check-expiration</code> 也不失为土办法。</li>
+    <li><b>CA 到期(10 年)除外:</b>CA 过期需升级集群或走官方"CA 轮换"流程,复杂得多 —— 平时只需盯 1 年期的组件证书。</li>
+  </ul>
+</section>
+
+<!-- ================= 6. x509 报错速查 ================= -->
+<section id="c6">
+  <h2><span class="no">B6</span>x509 高频报错速查表</h2>
+  <table>
+    <tr><th>报错</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>x509: certificate has expired or is not yet valid</code></td><td>证书真的过期 / 节点时间不同步</td><td>先 <code>ntpdate</code> 校时;再 <code>check-expiration</code> + <a href="#c5">renew(B5 节)</a></td></tr>
+    <tr><td><code>x509: certificate is valid for ..., not xxx</code></td><td>SAN 缺少你访问用的 IP/域名</td><td><code>certSANs</code> 追加后重签 <a href="#c3">(B3 时机 B)</a></td></tr>
+    <tr><td><code>certificate signed by unknown authority</code></td><td>kubeconfig 与集群 CA 不匹配(换过集群/残留旧 config)</td><td>重新分发 <code>admin.conf</code>;检查 <code>KUBECONFIG</code> 变量</td></tr>
+    <tr><td><code>You must be logged in to the server (Unauthorized)</code></td><td>kubeconfig 内嵌客户端证书过期</td><td><code>renew all</code> 后重新 <code>cp admin.conf ~/.kube/config</code></td></tr>
+    <tr><td><code>remote error: tls: bad certificate</code></td><td>双向认证中客户端证书缺失/不受信</td><td>检查 apiserver <code>--client-ca-file</code> 与客户端凭证是否同 CA</td></tr>
+    <tr><td><code>kubeadm certs renew</code> 报 <code>missing CA</code></td><td><code>ca.key</code> 被删/权限错</td><td>从备份恢复 pki;无备份只能重建</td></tr>
+    <tr><td>metrics-server 报 <code>x509: cannot validate certificate</code></td><td>kubelet 自签服务端证书不被信</td><td>metrics-server 加 <code>--kubelet-insecure-tls</code> 或签发 kubelet 服务端证书</td></tr>
+  </table>
+
+  <div class="tip"><b>💡 互链:</b>权限/认证类排障总览见 <a href="k8s-issues.html#c4">问题总汇 · 第 04 节</a>;排障三板斧(describe/logs/events)见 <a href="k8s-issues.html#c7">问题总汇 · 第 07 节</a>。</div>
+</section>
+
+<footer>
+  <p>🔐 K8S 证书管理 · A 域名 SSL(443/Ingress)部署 + B 集群内部证书(pki)续期 (2026-10-21)</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>
