@@ -1,0 +1,83 @@
+# =========================================================
+# k8s-web —— nginx 静态站点,web 根目录指向节点磁盘 /data/git/web
+#
+# 服务器(Linux)上用法:
+#   1) 在节点上放好页面:
+#        mkdir -p /data/git/web
+#        # 把 index.html / ingress.html 放进该目录
+#   2) kubectl apply -f k8s-web.yaml
+#   3) 验证: curl http://<任意节点IP>:32001/
+#
+# ★ 命名空间: ergesanbaishou;NodePort 32001 全集群唯一!
+#   若旧的 test1-ergesanbaishou 还占着 32001,先删掉它:
+#     kubectl delete -f test1-ergesanbaishou.yaml
+#   (或只删 Service: kubectl delete svc test1-ergesanbaishou -n ergesanbaishou)
+#
+# ★ hostPath 要点:
+#   - /data/git/web 指 "Pod 所在节点" 的目录,不是执行 kubectl 的机器!
+#   - 多副本可能调度到不同节点,每个节点都要有页面文件
+#     (想只维护一份:取消 nodeSelector 注释并给节点打标签)
+#   - 修改 /data/git/web 下的页面立即生效,无需重启 Pod
+# =========================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  labels:
+    app: k8s-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-web
+  template:
+    metadata:
+      labels:
+        app: k8s-web
+    spec:
+      # (可选)固定到单一节点,只需维护一份文件:
+      # kubectl label node <节点名> k8s-web=true
+      # nodeSelector:
+      #   k8s-web: "true"
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        # 用 tcpSocket 而非 httpGet:目录为空时 httpGet / 返回 403 会卡住 NotReady
+        readinessProbe:
+          tcpSocket: {port: 80}
+          initialDelaySeconds: 3
+        livenessProbe:
+          tcpSocket: {port: 80}
+          initialDelaySeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits:   {cpu: 200m, memory: 128Mi}
+        volumeMounts:
+        - name: web
+          mountPath: /usr/share/nginx/html    # 容器内 nginx 站点根目录 → 节点 /data/git/web
+      volumes:
+      - name: web
+        hostPath:
+          path: /data/git/web                 # ★ 节点上的真实目录
+          type: DirectoryOrCreate             # 目录不存在时 kubelet 自动创建(空目录访问 / 会 403)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  labels:
+    app: k8s-web
+spec:
+  type: NodePort
+  selector:
+    app: k8s-web
+  ports:
+  - name: http
+    port: 8080                  # ★ 线上 Service 统一开放 8080(集群内/Ingress 访问用它)
+    targetPort: 80              # 容器内 nginx 仍监听 80,这个不用动
+    nodePort: 32001    # 全集群唯一;若 test1 的 Service 还在会冲突,先删它
+# 域名/Ingress 访问方式见同目录 ingress.yaml(入口端口 31588)

@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingress 使用文档 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;} /* 锚点跳转不被 sticky 顶栏遮挡 */
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  .flow{font-family:Consolas,monospace;font-size:13.5px;color:var(--cyan);background:var(--code);
+    border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;white-space:pre;margin:12px 0}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  /* ---- 00 架构图 & 折叠配置 ---- */
+  .arch{display:flex;flex-direction:column;align-items:center;margin:20px 0}
+  .arch-node{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 22px;
+    min-width:300px;max-width:700px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  .arch-node>b{color:var(--cyan);font-size:15px}
+  .arch-node .small{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .arch-node .ha{display:flex;gap:14px;justify-content:center;margin:10px 0 2px}
+  .arch-node .ha span{border:1px dashed var(--line);border-radius:8px;padding:3px 14px;font-size:12.5px;color:var(--txt)}
+  .arch-node .vip{display:inline-block;margin-top:8px;padding:2px 14px;border-radius:999px;
+    border:1px solid rgba(246,173,85,.55);color:var(--orange);font-size:12.5px}
+  .arch-arrow{text-align:center;padding:6px 0;font-size:12.5px;color:var(--muted)}
+  .arch-arrow .down{color:var(--cyan);font-size:16px;line-height:1}
+  .arch-arrow code{font-size:12px}
+  details.cfg{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:var(--code)}
+  details.cfg summary{cursor:pointer;padding:10px 16px;color:var(--cyan);font-weight:600;font-size:14px;user-select:none}
+  details.cfg[open] summary{border-bottom:1px solid var(--line)}
+  details.cfg pre{margin:0;border:none;border-radius:0}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / Ingress 使用指南</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>☸️ Kubernetes Ingress 使用文档
+    <small>从零部署七层流量入口:Controller 安装 → 路由规则 → HTTPS → 灰度发布 → 排障手册</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#c1">什么是 Ingress</a></li>
+    <li value="2"><a href="#c1-vs">Ingress vs 传统 NGINX · 为什么前面再挡一层</a></li>
+    <li value="3"><a href="#c0">⭐ 测试架构总览(实际链路 + 配置全文)</a></li>
+    <li value="4"><a href="#c-online">🚧 线上架构 · 待上线</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. 什么是 Ingress ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>什么是 Ingress</h2>
+  <p>Ingress 是 Kubernetes 中负责 <b>七层(HTTP/HTTPS)流量入口</b> 的资源对象,提供:</p>
+  <ul>
+    <li>基于 <b>域名(host)</b> 和 <b>路径(path)</b> 的路由转发</li>
+    <li><b>TLS 终止</b>(集群入口统一卸载 HTTPS)</li>
+    <li>重写、限流、CORS、超时等增强能力(通过各 Controller 的注解实现)</li>
+  </ul>
+  <div class="warn"><b>⚠️ 最常见的坑:</b>Ingress 资源本身只是"一份规则声明",<b>不处理任何流量</b>。必须部署一个 <b>Ingress Controller</b>(如 ingress-nginx)watch 这些规则并生成实际的反向代理配置,否则创建 Ingress 毫无效果。</div>
+  <table>
+    <tr><th></th><th>Service</th><th>Ingress</th></tr>
+    <tr><td><b>工作层级</b></td><td>四层(TCP/UDP)</td><td>七层(HTTP/HTTPS)</td></tr>
+    <tr><td><b>路由依据</b></td><td>端口</td><td>域名 / 路径 / Header / 权重</td></tr>
+    <tr><td><b>典型用途</b></td><td>集群内服务发现与负载均衡</td><td>统一外部入口、TLS 卸载、灰度</td></tr>
+  </table>
+
+  <h3 id="c1-vs">Ingress vs 传统独立 NGINX</h3>
+  <div class="tip"><b>💡 先说透本质:</b>ingress-nginx 的 Controller 底层<b>就是 nginx</b>,它做的事是把 Ingress 规则"翻译"成 nginx.conf 并热加载。所以两者不是二选一的竞争关系,而是<b>动态 vs 静态、云原生 vs 传统</b>的分工。</div>
+  <table>
+    <tr><th>维度</th><th>传统 NGINX(独立部署)</th><th>K8S Ingress(ingress-nginx)</th></tr>
+    <tr><td><b>配置方式</b></td><td>手改 nginx.conf + <code>reload</code>,改错易滚挂</td><td><code>kubectl apply</code> 声明式,Controller 校验后自动热加载</td></tr>
+    <tr><td><b>服务发现</b></td><td>手写 upstream IP,后端扩容要人跟改</td><td>自动 watch Service/Endpoints,Pod 扩缩自动跟进</td></tr>
+    <tr><td><b>负载均衡</b></td><td>upstream 轮询/权重,目标固定</td><td>跨 Pod 自动分发,支持会话保持等策略</td></tr>
+    <tr><td><b>发布能力</b></td><td>Lua/脚本拼灰度,门槛高</td><td>注解开箱即用:金丝雀、重写、限流、CORS</td></tr>
+    <tr><td><b>多团队协作</b></td><td>一台机器一份 conf,大家挤着改</td><td>每个应用一个 Ingress 资源,命名空间隔离、可审计</td></tr>
+    <tr><td><b>适用后端</b></td><td>任意 IP:端口(虚机/物理机/容器都行)</td><td>只路由 K8S 集群内的 Service</td></tr>
+  </table>
+
+  <h3>为什么在 Ingress 前面再挡一层 NGINX(本环境实际架构)</h3>
+  <div class="flow">                ┌──→ 虚机/物理机上的老应用(静态站点、传统服务)
+ 用户 ──→ 外层NGINX ──┤
+          (主从+VIP)  └──→ K8S NodePort :31588 ──→ ingress-nginx ──→ Pod</div>
+  <ul>
+    <li><b>边缘与集群解耦:</b>对外入口永远是外层的 80/443;集群迁移、重建、换 Controller、NodePort 变更,外层只改一行 <code>upstream</code>,域名和用户无感。</li>
+    <li><b>混合流量调度:</b>同一入口下,老系统(虚机 nginx 站点)与新 K8S 服务共存 —— 按 <code>server_name</code>/<code>location</code> 分流,一部分转虚机、一部分转集群,迁移期两套并行(本环境 hello1/hello2 老站点与 k8s-web 新站点正是这样过渡)。</li>
+    <li><b>统一证书管理:</b>TLS 证书集中在外层续期替换,不必把证书分发进集群 Secret,一处换、处处生效。</li>
+    <li><b>安全加固收口:</b>IP 白名单、限流、防扫描、WAF 挂点统一放外层;集群内 Controller 保持配置简单,减少攻击面。</li>
+    <li><b>集群外高可用:</b>外层主从 + VIP 漂移,入口存活不依赖 K8S 本身 —— 即使整个集群故障,外层仍能返回维护页/兜底页,而不是用户直接超时。</li>
+    <li><b>日志审计统一:</b>边缘访问日志格式统一、集中,排障永远"由外向内"(见第 2 节分层排障命令)。</li>
+  </ul>
+  <div class="warn"><b>⚠️ 代价要心里有数:</b>多一跳转发(毫秒级延迟)、多一层组件要运维、Host 头必须透传(丢了 Ingress 404)。小规模纯 K8S 场景直连 NodePort/LB 也够用;<b>存在"老应用混合、需稳定对外、证书集中管理"需求时,这层才真正物有所值</b> —— 本环境三条全占,所以这么搭。</div>
+</section>
+
+<!-- ================= 2. 测试架构总览 ================= -->
+<section id="c0">
+  <h2><span class="no">02</span>⭐ 测试架构总览 —— 本环境实际链路</h2>
+  <p>域名 <code>k8s.ergesanbaishou.com</code> 的完整流量路径:集群外的<b>外层 NGINX(主从架构)</b> 作为统一入口,再进集群内 <b>Ingress → Service → Pod</b>。下面是本站真实部署的架构图与全部配置文件。</p>
+
+  <div class="arch">
+    <div class="arch-node">
+      <b>👤 用户浏览器</b>
+      <div class="small">http://k8s.ergesanbaishou.com · hosts/DNS 解析到<b>外层 NGINX 机器</b>(不是 K8S 节点!)</div>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span><br>HTTP :80</div>
+
+    <div class="arch-node">
+      <b>🏠 外层 NGINX(主从架构)</b>
+      <div class="ha"><span>NGINX-Master(主)</span><span>NGINX-Backup(备)</span></div>
+      <div class="vip">VIP 漂移 · 存活方接管 :80</div>
+      <div class="small">配置:<code>/etc/nginx/conf.d/k8s.ergesanbaishou.com.conf</code>(必须以 <b>.conf</b> 结尾!)</div>
+      <div class="small">职责:统一入口 · 按 server_name 分流 · 透传 Host(灵魂行)</div>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span><br><code>proxy_pass → 10.18.170.34:31588</code><br>★ <code>proxy_set_header Host $host</code> —— 透传域名,丢了 Ingress 必 404</div>
+
+    <div class="arch-node">
+      <b>🧱 K8S 节点 NodePort :31588</b>
+      <div class="small">集群 HTTP 统一入口(kube-proxy 在每个节点都监听该端口)</div>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span></div>
+
+    <div class="arch-node">
+      <b>🚪 ingress-nginx-controller(Pod · ns: ingress-nginx)</b>
+      <div class="small">watch Ingress 规则 → 动态生成 nginx 反代配置 → 按 <b>Host 头</b>分流</div>
+      <div class="small">部署:<code>ingress-nginx-deploy.yaml</code>(v1.13.9)· 入口端口由 <code>ingress.yaml</code> 第二段固定为 31588</div>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span><br>命中规则 <code>host: k8s.ergesanbaishou.com</code> + <code>path: /</code></div>
+
+    <div class="arch-node">
+      <b>🔌 Service k8s-web :8080(ns: ergesanbaishou)</b>
+      <div class="small">另挂 NodePort <b>32001</b> —— 绕过整个 ingress 链路直连测试用(curl 节点:32001)</div>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span><br>selector <code>app: k8s-web</code> → Endpoints(Pod IP:80)</div>
+
+    <div class="arch-node">
+      <b>📦 Pod nginx:alpine × 2(Deployment: k8s-web)</b>
+      <div class="small">容器内 <code>/usr/share/nginx/html</code> ← hostPath 节点目录 <code>/data/git/web</code>(本站所有 html 放这里)</div>
+      <div class="small">改页面文件即时生效,无需重启 Pod</div>
+    </div>
+  </div>
+
+  <h3>🧭 分层职责速查</h3>
+  <table>
+    <tr><th>层</th><th>组件</th><th>端口</th><th>对应文件 / 对象</th></tr>
+    <tr><td>统一入口</td><td>外层 NGINX 主从</td><td>:80</td><td><code>k8s.ergesanbaishou.com.conf</code>(配置①)</td></tr>
+    <tr><td>集群入口</td><td>ingress-nginx-controller</td><td>NodePort 31588</td><td><code>ingress-nginx-deploy.yaml</code>(配置④)+ <code>ingress.yaml</code> 第二段(配置③)</td></tr>
+    <tr><td>路由规则</td><td>Ingress k8s-web</td><td>—</td><td><code>ingress.yaml</code> 第一段(配置③)</td></tr>
+    <tr><td>服务发现</td><td>Service k8s-web</td><td>8080 / 32001</td><td><code>k8s-web.yaml</code> 第二段(配置②)</td></tr>
+    <tr><td>工作负载</td><td>Deployment k8s-web ×2</td><td>容器 :80</td><td><code>k8s-web.yaml</code> 第一段(配置②)</td></tr>
+    <tr><td>站点内容</td><td>hostPath 目录</td><td>—</td><td>节点磁盘 <code>/data/git/web/*.html</code></td></tr>
+  </table>
+
+  <h3>📄 配置① 外层 NGINX:/etc/nginx/conf.d/k8s.ergesanbaishou.com.conf</h3>
+  <div class="warn"><b>⚠️ 血泪教训:</b>此文件名必须以 <code>.conf</code> 结尾 —— nginx 只 include <code>conf.d/*.conf</code>,无后缀文件<b>静默不加载,nginx -t 也不报错</b>,页面表现为"默认欢迎页"。改完必须 <code>nginx -t && nginx -s reload</code>。(文件头部注释是旧站点遗留,可顺手更新)</div>
+  <pre><code># =========================================================
+# hello1.qingfeng.dev → K8s Ingress → nginx-hello(qingfeng空间)
+# 外层nginx:80 → ingress-nginx NodePort:31080 → svc:8080 → pod:80
+# (↑ 旧站点遗留注释;实际生效: k8s.ergesanbaishou.com → 31588)
+# =========================================================
+upstream k8s_ergesanbaishou {
+    server 10.18.170.34:31588;     # ★ ingress-nginx 的 NodePort(HTTP 入口)
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name k8s.ergesanbaishou.com;
+
+    access_log /var/log/nginx/hello1.access.log;
+    error_log  /var/log/nginx/hello1.error.log;
+
+    location / {
+        proxy_pass http://k8s_ergesanbaishou;
+
+        # ★★★ 灵魂行:透传 Host,Ingress 全靠它分流,丢了必 404 ★★★
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket 支持(可选,有需要就留着)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}</code></pre>
+  <h3>📄 配置② 业务负载:k8s-web.yaml(Deployment + Service)</h3>
+  <div class="tip"><b>💡 两条验证路径:</b>NodePort <code>32001</code> 可绕过整条 ingress 链路直连 Pod(排障时先测它:<code>curl http://10.18.170.34:32001/</code>);hostPath 指向 <b>Pod 所在节点</b> 的 <code>/data/git/web</code>,改页面即时生效。</div>
+  <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  labels:
+    app: k8s-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-web
+  template:
+    metadata:
+      labels:
+        app: k8s-web
+    spec:
+      # (可选)固定到单一节点,只需维护一份文件:
+      # kubectl label node &lt;节点名&gt; k8s-web=true
+      # nodeSelector:
+      #   k8s-web: "true"
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        # 用 tcpSocket 而非 httpGet:目录为空时 httpGet / 返回 403 会卡住 NotReady
+        readinessProbe:
+          tcpSocket: {port: 80}
+          initialDelaySeconds: 3
+        livenessProbe:
+          tcpSocket: {port: 80}
+          initialDelaySeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits:   {cpu: 200m, memory: 128Mi}
+        volumeMounts:
+        - name: web
+          mountPath: /usr/share/nginx/html    # 容器内 nginx 站点根目录 → 节点 /data/git/web
+      volumes:
+      - name: web
+        hostPath:
+          path: /data/git/web                 # ★ 节点上的真实目录
+          type: DirectoryOrCreate             # 目录不存在时 kubelet 自动创建(空目录访问 / 会 403)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  labels:
+    app: k8s-web
+spec:
+  type: NodePort
+  selector:
+    app: k8s-web
+  ports:
+  - name: http
+    port: 8080                  # ★ 线上 Service 统一开放 8080(集群内/Ingress 访问用它)
+    targetPort: 80              # 容器内 nginx 仍监听 80,这个不用动
+    nodePort: 32001    # 全集群唯一;直连测试用(curl 节点:32001)
+# 域名/Ingress 访问方式见 ingress.yaml(入口端口 31588)</code></pre>
+
+  <h3>📄 配置③ 路由规则 + 集群入口:ingress.yaml(Ingress + controller Service)</h3>
+  <div class="tip"><b>💡 核心概念:</b>Ingress 规则本身<b>没有入口端口参数</b>!31588 是 ingress-nginx-controller 的 NodePort,由本文件第二段的 Service 固定;Ingress 只声明"host + path → svc:port"。</div>
+  <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"   # 暂无证书,先不强制跳 https
+spec:
+  ingressClassName: nginx          # 对应 ingress-nginx;其他 controller 名要改
+  rules:
+  - host: k8s.ergesanbaishou.com   # ★ 指定域名,只有 Host 为它的请求才命中本规则
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: k8s-web         # k8s-web.yaml 里部署的 Service
+            port:
+              number: 8080        # ← 对应 svc k8s-web 的 port(8080),不是 targetPort(80)
+
+  # ---- 第二个站点(备用,当前注释未生效)----
+  # 上线步骤:部署对应 Deployment+Service → 取消注释 → apply → 外层 nginx 加 server 块
+  # - host: test2.ergesanbaishou.com
+  #   http:
+  #     paths:
+  #     - path: /
+  #       pathType: Prefix
+  #       backend:
+  #         service:
+  #           name: test2-svc
+  #           port:
+  #             number: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+    nodePort: 31588               # ★★★ 集群 HTTP 入口,外层 nginx proxy_pass 指向它
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+    # https 的 nodePort 不指定 → 保留/自动分配(30255);上证书要固定时照抄 http 段</code></pre>
+  <h3>📄 配置④ ingress-nginx 安装清单:ingress-nginx-deploy.yaml(v1.13.9,点击展开全文)</h3>
+  <div class="tip"><b>💡 说明:</b>官方 baremetal manifests 的实际部署版。含 Namespace、RBAC、ConfigMap、两个 Service(controller NodePort + admission ClusterIP)、Deployment、两个证书 Job、IngressClass、ValidatingWebhook。nodePort 31588 由配置③第二段补丁式固定。</div>
+  <details class="cfg"><summary>▶ 点击展开 ingress-nginx-deploy.yaml 全文(约 630 行)</summary>
+  <pre><code>apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  name: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - ingress-nginx-leader
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - nodes
+  - pods
+  - secrets
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+rules:
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: v1
+data: null
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - appProtocol: http
+    name: http
+    port: 80
+    protocol: TCP
+    targetPort: http
+  - appProtocol: https
+    name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-controller-admission
+  namespace: ingress-nginx
+spec:
+  ports:
+  - appProtocol: https
+    name: https-webhook
+    port: 443
+    targetPort: webhook
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: ingress-nginx
+      app.kubernetes.io/name: ingress-nginx
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.9
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - /nginx-ingress-controller
+        - --election-id=ingress-nginx-leader
+        - --controller-class=k8s.io/ingress-nginx
+        - --ingress-class=nginx
+        - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LD_PRELOAD
+          value: /usr/local/lib/libmimalloc.so
+        image: registry.k8s.io/ingress-nginx/controller:v1.13.9@sha256:d803625b20d471400fdae9dce0fdd076c0361f8f7e1ecee0dcd2f84fa0d196f8
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /wait-shutdown
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: controller
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 443
+          name: https
+          protocol: TCP
+        - containerPort: 8443
+          name: webhook
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 90Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          runAsGroup: 82
+          runAsNonRoot: true
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /usr/local/certificates/
+          name: webhook-cert
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: ingress-nginx
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: ingress-nginx-admission
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission-create
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.9
+      name: ingress-nginx-admission-create
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - create
+        - --host=ingress-nginx-controller-admission,ingress-nginx-controller-admission.$(POD_NAMESPACE).svc
+        - --namespace=$(POD_NAMESPACE)
+        - --secret-name=ingress-nginx-admission
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9@sha256:01038e7de14b78d702d2849c3aad72fd25903c4765af63cf16aa3398f5d5f2dd
+        imagePullPolicy: IfNotPresent
+        name: create
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission-patch
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.9
+      name: ingress-nginx-admission-patch
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - patch
+        - --webhook-name=ingress-nginx-admission
+        - --namespace=$(POD_NAMESPACE)
+        - --patch-mutating=false
+        - --secret-name=ingress-nginx-admission
+        - --patch-failure-policy=Fail
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9@sha256:01038e7de14b78d702d2849c3aad72fd25903c4765af63cf16aa3398f5d5f2dd
+        imagePullPolicy: IfNotPresent
+        name: patch
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/version: 1.13.9
+  name: ingress-nginx-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ingress-nginx-controller-admission
+      namespace: ingress-nginx
+      path: /networking/v1/ingresses
+      port: 443
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  name: validate.nginx.ingress.kubernetes.io
+  rules:
+  - apiGroups:
+    - networking.k8s.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - ingresses
+  sideEffects: None</code></pre>
+  </details>
+  <h3>🔥 踩坑实录(本环境搭建过程真实案例)</h3>
+  <table>
+    <tr><th>症状</th><th>根因</th><th>解法</th></tr>
+    <tr><td>页面显示 nginx <b>默认欢迎页</b></td><td>conf 文件名没有 <code>.conf</code> 后缀 → <code>include conf.d/*.conf</code> 静默不加载,<code>nginx -t</code> 也不报错</td><td>改名加后缀 + <code>nginx -t && nginx -s reload</code></td></tr>
+    <tr><td>默认欢迎页(另一种)</td><td>hosts 把域名解析到了<b>错误机器</b>(如 K8S 节点,上面另有一个 nginx)</td><td>hosts 必须指向<b>外层 NGINX 机器</b>的 IP</td></tr>
+    <tr><td>直连 31588 返回 <b>404</b></td><td>裸 <code>curl IP:31588</code> 没带 Host 头 → Ingress 按 host 路由匹配不上(正常行为,非故障)</td><td><code>curl -H "Host: k8s.ergesanbaishou.com" http://10.18.170.34:31588/</code></td></tr>
+    <tr><td>外层转发放大后 404</td><td>外层 nginx 没写 <code>proxy_set_header Host $host</code> → 域名没透传给 controller</td><td>补上灵魂行并 reload(见配置①)</td></tr>
+    <tr><td>apply 报 <code>namespaces "ingress-nginx" not found</code></td><td>先 apply 了 Ingress,但 controller 还没安装</td><td>先装配置④,再 apply 配置③</td></tr>
+    <tr><td>apply 报 nodePort 32001 冲突</td><td>旧 <code>test1</code> 的 Service 还占着 32001</td><td><code>kubectl delete svc test1-ergesanbaishou -n ergesanbaishou</code></td></tr>
+  </table>
+
+  <h3>🩺 分层排障命令(由外向内,逐层验证)</h3>
+  <pre><code># ① Pod 层(最内):容器活着吗
+kubectl get pods -n ergesanbaishou -o wide
+
+# ② Service 层:绕过 ingress 直测(NodePort 32001)
+curl -v http://10.18.170.34:32001/
+kubectl get ep -n ergesanbaishou k8s-web          # endpoints 必须非空
+
+# ③ Controller 层:带 Host 头直测集群入口(NodePort 31588)
+curl -v -H "Host: k8s.ergesanbaishou.com" http://10.18.170.34:31588/
+kubectl get ingress -n ergesanbaishou             # ADDRESS 列应有 IP
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=30
+
+# ④ 外层 NGINX 层:在 nginx 机器上自测
+curl -H "Host: k8s.ergesanbaishou.com" http://127.0.0.1/
+nginx -T 2>/dev/null | grep -n "k8s.ergesanbaishou"   # 确认配置已加载
+tail -f /var/log/nginx/hello1.error.log
+
+# ⑤ 本机层:hosts 解析到哪
+ping k8s.ergesanbaishou.com</code></pre>
+</section>
+
+<!-- ================= 1. 线上架构(待上线) ================= -->
+<section id="c-online">
+  <h2><span class="no">03</span>🚧 线上架构 · 待上线</h2>
+  <div class="warn"><b>⏳ 状态:</b>线上环境尚未部署。上线后在此补充<b>线上架构图与配置全文</b>(与测试链路同构:外层 NGINX 主从 → ingress-nginx → Service → Pod),并附域名、证书、节点规划等差异说明。</div>
+</section>
+
+<!-- ================= 4. 流量链路 ================= -->
+<section id="c2">
+  <h2><span class="no">04</span>流量链路</h2>
+  <div class="flow">客户端 ──→ LB / NodePort ──→ Ingress Controller(Pod, nginx)
+                              │  读取 Ingress 规则
+                              ▼
+                    ┌─ host: api.example.com + /foo ──→ foo-svc ──→ Pods
+                    ├─ host: api.example.com + /bar ──→ bar-svc ──→ Pods
+                    └─ 其他                          ──→ defaultBackend(404)</div>
+  <p>Controller 本身也是一个 Pod,需要先通过 <code>NodePort</code> / <code>LoadBalancer</code> / <code>hostNetwork</code> 之一把自身暴露到集群外。</p>
+</section>
+
+<!-- ================= 3. 安装 Ingress Controller ================= -->
+<section id="c3">
+  <h2><span class="no">05</span>安装 Ingress Controller(ingress-nginx)</h2>
+
+  <h3>方式一:官方 manifests(通用,自建集群常用)</h3>
+  <pre><code>kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/baremetal/deploy.yaml
+
+# 验证:Pod Running,且自动创建 ingress-nginx-controller Service(NodePort)
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx</code></pre>
+
+  <h3>方式二:Helm</h3>
+  <pre><code>helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace</code></pre>
+
+  <h3>方式三:云厂商</h3>
+  <table>
+    <tr><th>平台</th><th>推荐方案</th></tr>
+    <tr><td>AWS</td><td>AWS Load Balancer Controller(ALB Ingress)</td></tr>
+    <tr><td>GCP</td><td>GCE Ingress(默认支持)</td></tr>
+    <tr><td>阿里云</td><td>ALB Ingress / ACK nginx-ingress</td></tr>
+  </table>
+  <div class="tip"><b>💡 提示:</b>注意区分两个项目 —— <code>kubernetes/ingress-nginx</code>(社区官方,本文注解以此为准)与 <code>nginxinc/kubernetes-ingress</code>(NGINX Inc 维护),注解与能力不完全兼容。</div>
+</section>
+
+<!-- ================= 4. 第一个 Ingress ================= -->
+<section id="c4">
+  <h2><span class="no">06</span>第一个 Ingress:域名 + 路径路由</h2>
+  <p>保存为 <code>ingress-demo.yaml</code> 后 <code>kubectl apply -f ingress-demo.yaml</code>:</p>
+  <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-ingress
+  annotations:
+    # 把 /foo/xxx 转发到后端时重写为 /xxx
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx            # 由哪个 Controller 处理
+  rules:
+    - host: api.example.com          # 省略 host 则匹配所有域名
+      http:
+        paths:
+          - path: /foo(/|$)(.*)      # 正则捕获组配合 $2 使用
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: foo-svc
+                port:
+                  number: 80
+          - path: /bar
+            pathType: Prefix
+            backend:
+              service:
+                name: bar-svc
+                port:
+                  number: 8080
+  defaultBackend:                    # 兜底后端(都不匹配时返回)
+    service:
+      name: default-svc
+      port:
+        number: 80</code></pre>
+  <p>本地没有域名解析时,用 <code>curl -H "Host: api.example.com" http://&lt;INGRESS_IP&gt;/foo/xx</code> 模拟测试。</p>
+</section>
+<!-- APPEND -->
+</div>
+</body>
+</html>

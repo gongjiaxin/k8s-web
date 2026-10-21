@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K8S Web · Kubernetes 学习中心</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.7}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+  header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0e1729,#0b1220);padding:56px 0 40px;text-align:center}
+  .logo{width:84px;height:84px;margin:0 auto 18px;border-radius:18px;background:var(--blue);
+    display:flex;align-items:center;justify-content:center;font-size:40px;box-shadow:0 8px 30px rgba(50,108,229,.45)}
+  h1{font-size:34px;letter-spacing:1px}
+  h1 span{color:var(--blue)}
+  .sub{color:var(--muted);margin-top:10px;font-size:15px}
+  .badges{margin-top:18px}
+  .badge{display:inline-block;margin:4px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;
+    font-size:12px;color:var(--cyan);background:rgba(79,209,197,.06)}
+  main{padding:44px 0 20px}
+  .sec-title{font-size:20px;margin-bottom:20px;padding-left:12px;border-left:4px solid var(--blue)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+    transition:transform .18s,border-color .18s,box-shadow .18s;display:block;text-decoration:none;color:var(--txt)}
+  .card:hover{transform:translateY(-4px);border-color:var(--blue);box-shadow:0 10px 28px rgba(0,0,0,.35)}
+  .card .icon{font-size:30px}
+  .card h3{margin:10px 0 6px;font-size:17px}
+  .card p{color:var(--muted);font-size:13.5px}
+  .card .tag{display:inline-block;margin-top:12px;font-size:12px;color:var(--green)}
+  .card .tag.soon{color:var(--muted)}
+  .card.hot{border-color:rgba(50,108,229,.55);background:linear-gradient(180deg,rgba(50,108,229,.12),var(--card))}
+  .card.hot .tag{color:var(--cyan)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="logo">☸️</div>
+    <h1>K8S <span>Web</span> 学习中心</h1>
+    <p class="sub">Kubernetes 核心知识 · 实战配置 · 排障手册 —— 纯静态站点,可任意部署</p>
+    <div class="badges">
+      <span class="badge">Ingress</span><span class="badge">Service</span>
+      <span class="badge">Deployment</span><span class="badge">ConfigMap</span>
+      <span class="badge">Gateway API</span><span class="badge">kubectl</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="sec-title">📚 知识文档</div>
+  <div class="grid">
+
+    <a class="card hot" href="ingress.html">
+      <div class="icon">🚪</div>
+      <h3>Ingress 使用文档</h3>
+      <p>测试架构总览(入口→NGINX主从→Ingress→Service→Pod 实景图 + 四份配置全文)、流量链路、TLS、注解速查、金丝雀灰度、排障手册。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card" href="harbor.html">
+      <div class="icon">🐳</div>
+      <h3>Harbor 安装与使用</h3>
+      <p>私有镜像仓库:K8S+Helm 部署(2 副本共用一个 PVC)、日常运维命令、实战存一个 nginx 镜像(登录/打标/推送)、Robot 账号对接 CI、标签保留策略与排坑实录。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <div class="card">
+      <div class="icon">🔌</div>
+      <h3>Service 网络</h3>
+      <p>ClusterIP / NodePort / LoadBalancer 区别,kube-proxy 转发模式,Headless Service。</p>
+      <span class="tag soon">○ 即将上线</span>
+    </div>
+
+    <div class="card">
+      <div class="icon">💾</div>
+      <h3>存储与 ConfigMap</h3>
+      <p>PV / PVC / StorageClass,配置与密钥挂载,subPath 使用陷阱。</p>
+      <span class="tag soon">○ 即将上线</span>
+    </div>
+
+    <div class="card">
+      <div class="icon">🛡️</div>
+      <h3>RBAC 与安全</h3>
+      <p>Role / ClusterRole / ServiceAccount,NetworkPolicy 网络隔离实践。</p>
+      <span class="tag soon">○ 即将上线</span>
+    </div>
+
+    <div class="card">
+      <div class="icon">🌐</div>
+      <h3>Gateway API</h3>
+      <p>Ingress 的继任者:HTTPRoute、流量切分、跨命名空间路由。</p>
+      <span class="tag soon">○ 即将上线</span>
+    </div>
+
+  </div>
+</main>
+
+<footer class="wrap">
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</body>
+</html>

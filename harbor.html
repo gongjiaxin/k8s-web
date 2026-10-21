@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harbor 安装与使用 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  .flow{font-family:Consolas,monospace;font-size:13.5px;color:var(--cyan);background:var(--code);
+    border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;white-space:pre;margin:12px 0}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / Harbor 安装与使用</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>🐳 Harbor 安装与使用
+    <small>私有镜像仓库:K8S+Helm 部署(双副本共用一个 PVC)→ 日常运维 → 登录/打标/推送实战 → Robot 对接 CI → 标签保留策略</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#h1">Harbor 是什么</a></li>
+    <li><a href="#h2">安装准备</a></li>
+    <li><a href="#h3">安装步骤</a></li>
+    <li><a href="#h4">日常启停与运维</a></li>
+    <li><a href="#h5">实战:存一个 nginx 镜像</a></li>
+    <li><a href="#h6">CI 对接:Robot 账号</a></li>
+    <li><a href="#h7">标签保留策略</a></li>
+    <li><a href="#h8">常见问题</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. Harbor 是什么 ================= -->
+<section id="h1">
+  <h2><span class="no">01</span>Harbor 是什么</h2>
+  <p>Harbor 是 VMware 开源的企业级 <b>容器镜像仓库</b>,本环境地址:<code>https://harbor.ergesanbaishou.com</code>。核心能力:</p>
+  <ul>
+    <li><b>镜像托管</b>:push / pull 私有镜像,按 <b>项目(Project)</b> 隔离,如 <code>base/aurora_ci</code></li>
+    <li><b>权限与审计</b>:用户/角色/Robot 账号,谁推的谁删的全程留痕(审计日志)</li>
+    <li><b>标签保留策略(Retention)</b>:自动清理旧 tag,防磁盘爆炸(用错也会误删,见第 7 节)</li>
+    <li><b>漏洞扫描 / 复制 / 签名</b>:Trivy 扫描、跨仓库同步、内容信任(按需启用)</li>
+  </ul>
+  <div class="flow">docker build → docker tag → docker push → Harbor(项目/仓库/tag)
+                                              ↓ Jenkins/K8S 拉取 ← docker pull / imagePullPolicy</div>
+</section>
+<!-- ================= 2. 安装准备(K8S) ================= -->
+<section id="h2">
+  <h2><span class="no">02</span>安装准备(K8S 环境)</h2>
+  <table>
+    <tr><th>依赖</th><th>要求</th><th>检查命令</th></tr>
+    <tr><td>K8S 集群</td><td>1.20+,预留约 2C / 3G(Harbor 全家桶资源)</td><td><code>kubectl get nodes</code></td></tr>
+    <tr><td>Helm</td><td>v3.x(Harbor 官方 chart 的唯一安装方式)</td><td><code>helm version</code></td></tr>
+    <tr><td>Ingress Controller</td><td>已装 ingress-nginx(本环境 NodePort 31588)</td><td><code>kubectl -n ingress-nginx get svc</code></td></tr>
+    <tr><td>共享存储 ★</td><td>NFS 等 RWX 后端,预建 PVC <code>harbor-data-rwx</code>(建议 100Gi+)</td><td><code>kubectl get pvc -n harbor</code></td></tr>
+  </table>
+  <div class="warn"><b>⚠️ 为什么必须 RWX:</b>registry 要跑 <b>2 副本共用同一个 PVC</b>,存储必须支持 <b>ReadWriteMany</b>(多节点同时读写)。默认 StorageClass 的 RWO 只允许单节点挂载,第二个副本会永远卡在 <code>ContainerCreating</code>。没有现成 NFS 可先单副本跑通,后续再迁。</div>
+  <div class="tip"><b>💡 单节点测试可跳过 NFS:</b>只有一个 node、双副本也都在同一节点时,不需要 NFS/RWX —— 用节点本地目录建一个 <b>RWO 的 hostPath PV</b> 即可(RWO 允许<b>同节点</b>多 Pod 挂载)。后面的"NFS 服务端准备"和 RWX 的 PV/PVC 全部跳过:</div>
+  <pre><code>mkdir -p /data/harbor-local                      # 节点上建目录(数据实际落这里)
+
+kubectl apply -f - &lt;&lt;EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: harbor-local-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes: ["ReadWriteOnce"]               # 单节点够用
+  hostPath:
+    path: /data/harbor-local
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-data-rwx                        # 名字沿用,values 无需改动
+  namespace: harbor
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Gi
+EOF</code></pre>
+  <p><b>第一步:NFS 服务端(10.18.170.34)准备</b> —— 不做这步,registry 会永远卡在 <code>ContainerCreating</code>:</p>
+  <pre><code>mkdir -p /data/nfs/harbor
+echo "/data/nfs/harbor *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+systemctl enable --now nfs-server     # CentOS;Ubuntu 对应 nfs-kernel-server
+exportfs -rv                          # 导出立即生效
+
+# ★ 其余每个 K8S 节点也要装客户端(不装则挂载报 "wrong fs type"):
+yum install -y nfs-utils
+
+# 自检(任一 K8S 节点执行,两步都通 NFS 才算 OK;不通先查 firewalld 和 /etc/exports):
+showmount -e 10.18.170.34                    # 应列出 /data/nfs/harbor
+mount -t nfs 10.18.170.34:/data/nfs/harbor /mnt && ls /mnt && umount /mnt</code></pre>
+  <p><b>第二步:预建共享存储</b>(NFS 示例,<code>accessModes</code> 是关键):</p>
+  <pre><code>kubectl create namespace harbor
+
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: harbor-nfs-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes: ["ReadWriteMany"]          # ★ 多副本共用的前提
+  nfs:
+    server: 10.18.170.34                   # NFS 服务端地址
+    path: /data/nfs/harbor
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-data-rwx
+  namespace: harbor
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 100Gi
+EOF</code></pre>
+</section>
+
+<!-- ================= 3. 安装步骤(K8S + Helm) ================= -->
+<section id="h3">
+  <h2><span class="no">03</span>安装步骤(K8S + Helm,双副本共用一个 PVC)</h2>
+  <pre><code># ① 装 Helm(任一管理节点)
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# ② 添加 Harbor 官方 chart 仓库并建命名空间
+helm repo add harbor https://helm.goharbor.io
+helm repo update
+kubectl create namespace harbor          # 上一节建 PVC 时已建则跳过</code></pre>
+
+  <p>③ 编写 <code>values-harbor.yaml</code>(★ 为关键项):</p>
+  <pre><code>expose:
+  type: ingress
+  tls:
+    enabled: false                          # 先 HTTP 跑通,有证书后再启用
+  ingress:
+    className: nginx                        # ★ 对应已装的 ingress-nginx controller
+    host: harbor.ergesanbaishou.com         # ★ 仓库域名 = docker login 的地址
+
+externalURL: http://harbor.ergesanbaishou.com   # ★ UI/镜像地址,必须与访问入口一致
+
+harborAdminPassword: "改成强密码"
+
+persistence:
+  enabled: true
+  imageChartStorage:
+    type: filesystem
+  persistentVolumeClaim:                    # ★ 五个组件全部指向同一个 PVC!
+    registry:
+      existingClaim: harbor-data-rwx        # 镜像数据(双副本共用,必须 RWX)
+    jobservice:
+      existingClaim: harbor-data-rwx        # 任务日志
+    database:
+      existingClaim: harbor-data-rwx        # 元数据(单实例)
+    redis:
+      existingClaim: harbor-data-rwx        # 缓存
+    trivy:
+      existingClaim: harbor-data-rwx        # 漏洞库(启用扫描时)
+# ⚠️ 漏配任何一个,集群又没有默认 StorageClass 时,该组件 PVC 永远 Pending → Pod Pending。
+#    补配后要先 kubectl delete pvc <卡住的PVC> 再 helm upgrade(旧 Pending PVC 不会自动绑定)。
+#    删除 PVC 卡在 Terminating = 还有 Pod 引用它(pvc-protection 保护);StatefulSet 的 PVC
+#    删掉后还会被 STS 立刻重建(现象:PVC 的 AGE 突然变小)。顺序必须是:先删 STS 及 Pod → 再删 PVC——
+#    kubectl -n harbor delete statefulset harbor-database harbor-redis harbor-trivy   (连带删 Pod)
+#    kubectl -n harbor scale deploy/harbor-jobservice --replicas=0                    (缩掉再删)
+#    若首次安装时 database/redis/trivy 走了动态 PVC(volumeClaimTemplates),切换前还要先孤立化:
+#    kubectl -n harbor delete statefulset harbor-database harbor-redis harbor-trivy --cascade=orphan
+#    (StatefulSet 的 volumeClaimTemplates 字段不可变;孤立化保留 Pod,由 upgrade 重建后接管)
+
+portal:
+  replicas: 2                               # ★ UI 入口双副本
+core:
+  replicas: 2                               # ★ API 核心双副本
+registry:
+  replicas: 2                               # ★ 镜像存取双副本(必须 RWX 存储)
+jobservice:
+  replicas: 1                               # 任务执行器保持单副本,避免同一任务被重复跑
+# 注:database、redis 是单实例 StatefulSet,不支持直接 replicas:2(见下方说明)</code></pre>
+
+  <div class="warn"><b>⚠️ "2 个 Pod"的正确姿势:</b>Harbor 不是一个单体应用,而是 <b>7~8 个组件 Pod</b>(core / portal / registry / jobservice / database / redis / trivy)。<b>能双副本的是入口与核心服务(portal、core、registry)</b> —— 它们无本地状态或状态在共享 PVC 上;<b>database(postgreSQL)和 redis 是单主有状态服务,不能简单 ×2</b>(要高可用得外置数据库/Redis 集群,内网环境没必要)。registry 双副本的前提正是<b>共用一个 RWX PVC</b>:两个 Pod 挂同一块存储,看到同一份镜像数据。</div>
+
+  <pre><code># ④ 安装
+helm install harbor harbor/harbor -n harbor -f values-harbor.yaml
+
+# ⑤ 观察就绪(约 1~3 分钟,全部 Running)
+kubectl -n harbor get pods
+# NAME                                    READY   预期
+# harbor-core-5cd8..-a / -b               1/1     Running   ← core ×2
+# harbor-registry-7d9..-a / -b            2/2     Running   ← registry ×2,共用 PVC
+# harbor-portal-66f..-a / -b              1/1     Running   ← portal ×2
+# harbor-jobservice-7f6..-x               1/1     Running   ×1
+# harbor-database-0                       1/1     Running   ×1(StatefulSet)
+# harbor-redis-0                          1/1     Running   ×1(StatefulSet)
+# harbor-trivy-0                          1/1     Running   (启用扫描时)
+
+# ⑥ 验证 Ingress 已生成,集群内先通
+kubectl -n harbor get ingress
+curl -H "Host: harbor.ergesanbaishou.com" http://10.18.170.34:31588/api/v2.0/health
+# 返回 {"status":"healthy"} 即成功(31588 = 本环境 ingress-nginx 的 NodePort)</code></pre>
+  <div class="tip"><b>💡 外网访问:</b>与 k8s-web 同一条链路 —— 外层 NGINX 加一个 <code>server_name harbor.ergesanbaishou.com</code> 反代到 NodePort 31588,办公网即可用域名打开 UI、docker login 推拉镜像(别忘了客户端 <code>insecure-registries</code>,见第 8 节①)。</div>
+</section>
+<!-- ================= 4. 日常运维(K8S) ================= -->
+<section id="h4">
+  <h2><span class="no">04</span>日常运维命令(K8S / Helm)</h2>
+  <pre><code># 状态总览
+kubectl -n harbor get pods,svc,ingress,pvc     # 全家健康 + 入口 + 存储一览
+kubectl -n harbor top pods                     # 各组件资源占用
+
+# 日志排障
+kubectl -n harbor logs deploy/harbor-core --tail=100 -f          # 页面/API
+kubectl -n harbor logs deploy/harbor-jobservice --tail=100 -f    # ★ retention/GC/复制任务
+kubectl -n harbor logs harbor-database-0 --tail=100              # 数据库
+
+# 平滑重启某个组件(替代 docker-compose restart)
+kubectl -n harbor rollout restart deploy/harbor-core
+
+# ★ 改配置的正确姿势:改 values-harbor.yaml 后 helm upgrade
+#    (别 kubectl edit 手改资源 —— 下次 upgrade 会被覆盖回去)
+helm -n harbor upgrade harbor harbor/harbor -f values-harbor.yaml
+
+# 扩缩容:改 values 里 replicas 后 upgrade,或临时直接 scale
+kubectl -n harbor scale deploy/harbor-core --replicas=2
+
+# 磁盘回收:进 registry 容器执行 GC(UI 删除是软删除,低峰操作)
+kubectl -n harbor exec deploy/harbor-registry -c registry -- \
+  registry garbage-collect /etc/registry/config.yml
+
+# 卸载(chart 名 harbor;PVC 默认保留,数据不丢)
+helm -n harbor uninstall harbor</code></pre>
+  <div class="warn"><b>⚠️ 数据安全:</b>镜像数据在共享 PVC <code>harbor-data-rwx</code>,元数据在 database/redis 的 PVC —— <code>helm uninstall</code> <b>不会删 PVC</b>,误卸载后用相同 <code>existingClaim</code> 重装即可恢复;真要清空才手动 <code>kubectl -n harbor delete pvc</code>。</div>
+</section>
+
+<!-- ================= 5. 实战:存一个 nginx 镜像 ================= -->
+<section id="h5">
+  <h2><span class="no">05</span>实战:模拟存一个简单的 nginx 镜像</h2>
+  <p>完整走一遍 <b>登录 → 拉取 → 打标 → 推送 → 验证</b>,用最简单的 <code>nginx:alpine</code> 练手:</p>
+  <pre><code># ① 登录(在任一 docker 客户端机器)
+docker login harbor.ergesanbaishou.com -u admin -p '你的密码'
+# Login Succeeded
+
+# ② 先在 UI 建好项目:base(公开/私有按需;已有则跳过)
+
+# ③ 从公网拉一个现成镜像
+docker pull nginx:alpine
+
+# ④ 打标:格式必须是  <仓库地址>/<项目名>/<镜像名>:<tag>
+docker tag nginx:alpine harbor.ergesanbaishou.com/base/nginx:v1-test
+
+# ⑤ 推送
+docker push harbor.ergesanbaishou.com/base/nginx:v1-test
+
+# ⑥ 验证:删本地再从 Harbor 拉
+docker rmi harbor.ergesanbaishou.com/base/nginx:v1-test
+docker pull harbor.ergesanbaishou.com/base/nginx:v1-test
+# UI 打开 项目 base → 仓库 nginx → 应能看到 tag v1-test</code></pre>
+  <div class="flow">docker login → docker pull nginx:alpine
+        → docker tag → harbor.ergesanbaishou.com/base/nginx:v1-test
+        → docker push → UI 可见 → docker rmi + pull 回来验证 ✅</div>
+  <div class="tip"><b>💡 tag 命名建议(CI 场景):</b><code>应用名-分支-构建号</code>,如 <code>aurora_ci:Algorithm-aurora_fcb_test-1875-GR3</code> —— 出问题能一眼定位是哪次构建推的。</div>
+</section>
+<!-- ================= 6. CI 对接:Robot 账号 ================= -->
+<section id="h6">
+  <h2><span class="no">06</span>CI 对接:用 Robot 账号,别用个人密码</h2>
+  <div class="warn"><b>⚠️ 铁律:</b>Jenkins/GitLabCI 等机器凭据<b>绝不用个人账号明文密码</b> —— 密码一改全线崩、泄露即全局失守、审计日志也分不清是人删的还是 CI 删的。一律用 <b>Robot 账号</b>。</div>
+  <pre><code># ① UI 创建:项目 base → Robot 账户 → 添加机器人账号
+#    名字如 jenkins-push  →  权限只勾"推 artifact/拉取"(最小化)
+#    生成后立即复制 token(只显示一次!)
+
+# ② 账号格式:<机器人名>+<后缀>(UI 会给全名),密码就是生成的 token
+docker login harbor.ergesanbaishou.com -u 'base+jenkins-push' -p '生成的token'
+
+# ③ Jenkins:Manage Jenkins → Credentials → 添加 Username with password
+#    Username: base+jenkins-push    Password: token
+#    Jenkinsfile 里:
+#    docker.withRegistry('https://harbor.ergesanbaishou.com', 'harbor-robot-cred') {
+#        sh 'docker push harbor.ergesanbaishou.com/base/aurora_ci:xxx'
+#    }</code></pre>
+  <div class="tip"><b>💡 好处:</b>token 可随时吊销重发、权限限定单项目、审计日志显示为该 Robot,人员离职不牵连 CI。</div>
+</section>
+
+<!-- ================= 7. 标签保留策略 ================= -->
+<section id="h7">
+  <h2><span class="no">07</span>标签保留策略(Retention)—— 清旧镜像的双刃剑</h2>
+  <p>位置:UI → 项目 → 标签策略 → <b>标签保留</b>。由 jobservice 定时(默认每日)按规则删旧 tag。<b>多条规则是 OR 并集,命中任一即保留</b>。</p>
+
+  <h3>规则三要素</h3>
+  <pre><code>应用到仓库: 匹配 aurora_ci        # ★ 只写项目内相对名,不带 base/ 前缀!
+条件:      保留最近 # 个/天 被推送过的 artifacts
+Tags:      匹配 Algorithm-aurora*   # ★ tag 匹配用单星;** 是给仓库路径用的
+无Tag:      可勾选(把 untagged 也纳入保留)</code></pre>
+
+  <h3>数量型 vs 天数型(CI 场景选数量型)</h3>
+  <table>
+    <tr><th>模板</th><th>含义</th><th>评价</th></tr>
+    <tr><td>保留最近 <b># 天</b>内推送的</td><td>时间窗口,按 push 时间算</td><td>依赖时间字段,有隐性坑(见下)</td></tr>
+    <tr><td>保留最近 <b># 个</b>推送的</td><td>按新旧排序留前 N 个</td><td>⭐ CI 推荐:不依赖时间字段,行为可预期</td></tr>
+  </table>
+
+  <h3>三个真实踩坑(镜像"神秘消失"排查实录)</h3>
+  <table>
+    <tr><th>坑</th><th>现象</th><th>正解</th></tr>
+    <tr><td>glob <b>大小写敏感</b></td><td>tag 是 <code>Algorithm-*</code>,pattern 写 <code>algorithm-*</code> → 不匹配 → 被删</td><td>逐字符核对大小写</td></tr>
+    <tr><td>tag 匹配误用 <code>**</code></td><td>非独立段的 <code>xx**</code> 行为不可靠</td><td>tag 用<b>单星</b> <code>xx*</code>;<code>**</code> 只用于仓库名跨 <code>/</code></td></tr>
+    <tr><td>同 digest 重推不刷新 push_time</td><td>内容没变的构建重推,artifact 的推送时间停在首次 → "7天内"判过期被删</td><td>改用<b>数量型</b>规则兜底(如留 500 个)</td></tr>
+  </table>
+
+  <h3>改完规则必做:Dry Run 模拟运行</h3>
+  <pre><code># 规则页顶部 → 模拟运行(Dry Run)→ 看删除清单:
+#   要保的 tag 出现在清单里 = 规则没罩住,继续改;不在 = 安全。
+# 真实案例复盘:镜像 1875 于 18:42 推送成功,次日 08:00 被 harbor-jobservice 删除
+#   (审计日志可查:操作者 harbor-jobservice、资源 base/aurora_ci@sha256:xxx、operation=delete)
+#   → 时间型规则失效(上述坑之一)→ 加"保留最近 500 个"数量型规则兜底 → Dry Run 验证通过。</code></pre>
+</section>
+
+<!-- ================= 8. 常见问题 ================= -->
+<section id="h8">
+  <h2><span class="no">08</span>常见问题(FAQ)</h2>
+
+  <h3>① push 报 http: server gave HTTP response to HTTPS client</h3>
+  <pre><code># HTTP 仓库必须在 docker 客户端声明"不安全仓库"
+vi /etc/docker/daemon.json
+{
+  "insecure-registries": ["harbor.ergesanbaishou.com"]
+}
+systemctl restart docker     # 改完必须重启 docker(注意影响本机容器)</code></pre>
+
+  <h3>② 忘记 admin 密码(K8S 版)</h3>
+  <pre><code># 改 values-harbor.yaml 里的 harborAdminPassword 后升级,密码即被重置
+vi values-harbor.yaml          # harborAdminPassword: "新密码"
+helm -n harbor upgrade harbor harbor/harbor -f values-harbor.yaml
+# 升级完用 admin + 新密码登录验证</code></pre>
+
+  <h3>③ 镜像删了磁盘没释放</h3>
+  <p>UI 删除是软删除,需 GC(见第 4 节末尾),并确认 retention/GC 低峰执行。</p>
+
+  <h3>④ 查"谁删了我的镜像"</h3>
+  <p>UI → 日志 → 审计日志:过滤 <code>资源 = 镜像 digest 或仓库名</code>、<code>操作 = 删除</code>。看到 <code>harbor-jobservice</code> = 系统任务(retention/GC/复制),看到具体人名/Robot = 手动删。</p>
+
+  <h3>⑤ K8S 节点拉取私有镜像</h3>
+  <pre><code>kubectl create secret docker-registry harbor-cred \
+  --docker-server=harbor.ergesanbaishou.com \
+  --docker-username='base+jenkins-push' --docker-password='token' \
+  -n ergesanbaishou
+# Pod spec: imagePullSecrets: [{name: harbor-cred}]</code></pre>
+
+  <h3>⑥ 彻底卸载重装(装乱了就清盘重来)</h3>
+  <pre><code>helm -n harbor uninstall harbor           # ① 卸载 release
+kubectl delete namespace harbor           # ② 删命名空间(连带 Pod/STS/PVC/Ingress,等 1~2 分钟)
+kubectl delete pv harbor-nfs-pv           # ③ PV 不属于命名空间,必须单独删
+rm -rf /data/nfs/harbor/*                 # ④ NFS 服务端清空旧数据(防旧 database 残留捣乱)
+kubectl get ns harbor; kubectl get pv | grep harbor   # ⑤ 都查无 = 清干净,重走第 2、3 节</code></pre>
+  <div class="tip"><b>💡 重装要点:</b>NFS 自检两连(<code>showmount</code> + 手动 mount)必须先通过;PVC 必须 <code>Bound</code> 才 <code>helm install</code>;values 五组件 <code>existingClaim</code> 一次配齐,避免再走 Pending 弯路。</div>
+</section>
+<footer>
+  <p>K8S Web · Harbor 安装与使用 · <a href="index.html">返回首页</a> · <a href="ingress.html">Ingress 文档</a></p>
+</footer>
+</div>
+</body>
+</html>

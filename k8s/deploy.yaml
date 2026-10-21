@@ -1,0 +1,93 @@
+# ============================================
+# K8S Web 静态站点部署清单
+# 用法见同目录 README.md:
+#   1) 先用本地 html 生成 ConfigMap(命令见 README)
+#   2) kubectl apply -f deploy.yaml
+# ============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-web
+---
+# 静态页面通过 ConfigMap k8s-web-html 提供(由 README 中的命令生成)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-web
+  namespace: k8s-web
+  labels:
+    app: k8s-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-web
+  template:
+    metadata:
+      labels:
+        app: k8s-web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits:   {cpu: 200m, memory: 128Mi}
+          readinessProbe:
+            httpGet: {path: /, port: 80}
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: {path: /, port: 80}
+            initialDelaySeconds: 10
+          volumeMounts:
+            # subPath 挂载单文件;注意 subPath 挂载不支持热更新,
+            # 改页面后需 kubectl rollout restart deploy/k8s-web -n k8s-web
+            - name: html
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+            - name: html
+              mountPath: /usr/share/nginx/html/ingress.html
+              subPath: ingress.html
+      volumes:
+        - name: html
+          configMap:
+            name: k8s-web-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-web
+  namespace: k8s-web
+  labels:
+    app: k8s-web
+spec:
+  selector:
+    app: k8s-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-web
+  namespace: k8s-web
+  annotations:
+    # 测试环境可关闭强制跳转;生产建议开启 TLS 后删除此注解
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx          # 集群中 Controller 的 IngressClass 名,按实际修改
+  rules:
+    - host: k8s-web.example.com    # ★ 改成你的域名;删掉 host 则匹配任意域名
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-web
+                port:
+                  number: 80

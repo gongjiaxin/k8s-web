@@ -1,0 +1,103 @@
+# =========================================================
+# k8s-web 的 Ingress —— 命名空间: ergesanbaishou
+# 域名: k8s.ergesanbaishou.com
+# 访问入口: http://k8s.ergesanbaishou.com:31588/   (需 DNS/hosts 解析到节点 IP)
+#
+# ★ 概念:Ingress 规则本身没有入口端口参数!
+#   31588 是 ingress-nginx-controller 的 NodePort(HTTP 入口),
+#   流量路径: 节点:31588 → controller 按 host 匹配本 Ingress → svc k8s-web:8080 → Pod:80
+#
+# 用法:
+#   1) 若未装 ingress-nginx,先用文件底部 helm 命令安装
+#   2) kubectl apply -f ingress.yaml
+#      本文件含 2 个资源:
+#        ① Ingress 路由规则(本段): k8s.ergesanbaishou.com → svc k8s-web:8080
+#        ② ingress-nginx-controller 的 Service → 把 HTTP 入口固定为 nodePort 31588(文件底部)
+#   3) 验证(暂无 DNS 解析时,用 Host 头模拟域名):
+#      curl -H "Host: k8s.ergesanbaishou.com" http://<节点IP>:31588/
+# =========================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-web
+  namespace: ergesanbaishou
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"   # 暂无证书,先不强制跳 https
+spec:
+  ingressClassName: nginx          # 对应 ingress-nginx;其他 controller 名要改
+  rules:
+  - host: k8s.ergesanbaishou.com   # ★ 指定域名,只有 Host 为它的请求才命中本规则
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: k8s-web         # k8s-web.yaml 里部署的 Service
+            port:
+              number: 8080        # ← 对应 svc k8s-web 的 port(8080),不是 targetPort(80)
+                                   #   入口端口(31588)不在 Ingress 里,见文件底部 Service
+
+  # =========================================================
+  # ---- 第二个站点(备用,当前注释未生效)----
+  #   上线步骤:
+  #     1) 先部署对应的 Deployment + Service(名字要和下面 name 对上,端口统一 8080)
+  #     2) 取消本段注释
+  #     3) kubectl apply -f ingress.yaml
+  #     4) 验证: curl -H "Host: test2.ergesanbaishou.com" http://<节点IP>:31588/
+  # =========================================================
+  # - host: test2.ergesanbaishou.com      # 第二个域名,与上面的 k8s.* 互不影响
+  #   http:
+  #     paths:
+  #     - path: /
+  #       pathType: Prefix
+  #       backend:
+  #         service:
+  #           name: test2-svc            # ★ 指向另一个 Service(不是 k8s-web)
+  #           port:
+  #             number: 8080              # 线上统一口径 8080
+# =========================================================
+# ★ 入口端口 31588 的生效方式:
+#   方式1(推荐):下方 Service 资源已写在本文件里,随本文件一起 apply
+#   方式2(手动补刀):kubectl -n ingress-nginx patch svc ingress-nginx-controller \
+#       -p '{"spec":{"ports":[{"name":"http","port":80,"nodePort":31588}]}}'
+#
+#   未装 controller 时先安装(helm):
+#     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#     helm install ingress-nginx ingress-nginx/ingress-nginx \
+#       -n ingress-nginx --create-namespace \
+#       --set controller.service.type=NodePort
+# =========================================================
+---
+# =========================================================
+# ★★★ 31588 就在这里!ingress-nginx-controller 的 Service(NodePort 版)
+#   前提:集群已安装 ingress-nginx(helm/官方 manifests 默认装在 ingress-nginx ns)
+#   作用:apply 本段 = 把 controller 的 HTTP 入口固定为 nodePort 31588
+#   注意:
+#     - controller 装在其他 ns 的话,改下面的 namespace
+#     - 未在本文件声明的字段(如 externalTrafficPolicy)apply 时保留原值,不会丢
+# =========================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+    nodePort: 31588               # ★★★ 入口端口 31588,浏览器/curl 访问的就是它
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+    # https 的 nodePort 不指定 → 保留/自动分配;以后上证书要固定时照抄 http 段即可
