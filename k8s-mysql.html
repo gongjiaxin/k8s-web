@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S MySQL 部署(Helm · 1主1备) · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / MySQL 部署(Helm · 1主1备)</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>🗄️ K8S MySQL 部署(Helm · 1主1备)
+    <small>M1 动手前摸底:查集群里现有 MySQL 的版本 &nbsp;|&nbsp; M2 1主1备方案选型(Bitnami 复制架构) &nbsp;|&nbsp; M3 Helm 一键安装(values 逐行讲) &nbsp;|&nbsp; M4 主从复制验证 &nbsp;|&nbsp; M5 主写从读连接 &nbsp;|&nbsp; M6 升级/扩容/备份/卸载 &nbsp;|&nbsp; M7 报错速查</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录 · MySQL on K8S(Helm 1主1备)</b>
+  <ol>
+    <li><a href="#m1">⭐摸底:查看集群里 MySQL 的版本</a></li>
+    <li><a href="#m2">1主1备方案怎么选</a></li>
+    <li><a href="#m3">安装:Helm 一键部署 1主1备</a></li>
+    <li><a href="#m4">验证:主从复制是否正常</a></li>
+    <li><a href="#m5">连接使用:主写从读</a></li>
+    <li><a href="#m6">日常运维:升级/扩容/备份/卸载</a></li>
+    <li><a href="#m7">高频报错速查</a></li>
+  </ol>
+</nav>
+<!-- ================= M1. 查看集群里 MySQL 版本 ================= -->
+<section id="m1">
+  <h2><span class="no">M1</span>⭐ 摸底:查看集群里 MySQL 的版本 —— 动手前先跑这组命令</h2>
+  <p>装新库/对齐版本前,先看看线上现在跑的是什么。按下面顺序敲,前两条<b>不需要密码</b>,最快:</p>
+  <pre><code># 0. 先确认 kubectl 连的是目标集群(别在 docker-desktop 上白查)
+kubectl config current-context
+kubectl config get-contexts
+
+# 1. 全命名空间找 MySQL 的 Pod
+kubectl get pods -A | grep -i mysql
+
+# 2. ★ 最快:直接看容器镜像 tag(不用密码、不用进容器)
+kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,IMAGE:.spec.containers[*].image' | grep -i mysql
+# NS       POD                                IMAGE
+# fke-db   fke-mysql-hmsserver-prod-0         docker.fftaicorp.com/kube-publicmysql/community-operator:8.4.7-2.1.9,docker.fftaicorp.com/kube-public/mysql/community-server:8.4.7
+# fke-db   fke-mysql-hmsserver-prod-1         ...(同上,每套库 3 个实例 -0/-1/-2)
+# fke-db   fke-mysql-hmsserver-prod-router-…  docker.fftaicorp.com/kube-public/mysql/community-router:8.4.7
+# fke-db   mysql-operator-5b99fcbbc7-qxzjb    docker.fftaicorp.com/kube-publicmysql/community-operator:8.4.7-2.1.9
+#                                            ↑↑↑↑ ★ 本环境线上 MySQL 版本 = 8.4.7(8.4 LTS);tag 里的 -2.1.9 是 operator 版本号
+# mysql    mysql-primary-0                    docker.io/bitnami/mysql:8.4.7-debian-12-rX   ← 本文目标(=线上 8.4.7,装法见 M3)
+
+# 3. 看控制器(Deployment/StatefulSet)镜像 —— 比 Pod 更代表"当初装的版本"
+kubectl get deploy,sts -A | grep -i mysql
+kubectl get sts mysql-primary -n mysql -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# 4. 问 MySQL 本体(要 root 密码;Bitnami chart 的密码存在 Secret 里)
+PW=$(kubectl get secret mysql -n mysql -o jsonpath='{.data.mysql-root-password}' | base64 -d)
+kubectl exec -n mysql mysql-primary-0 -- env MYSQL_PWD=$PW mysql -uroot -e "SELECT VERSION();"
+kubectl exec -n mysql mysql-primary-0 -- mysql --version
+
+# 5. Helm 装的,连 chart 版本一起看(APP VERSION = MySQL 版本)
+helm list -A | grep -i mysql
+helm get metadata mysql -n mysql    # 看 chart_version / app_version</code></pre>
+  <ul>
+    <li><b>镜像 tag 法(第 2 条)最通用:</b>不管 Helm/Yaml 怎么装的,只要 MySQL 跑在 K8s 里就能看出来。</li>
+    <li><b>不是 Helm 装的</b>就跳过第 5 条;<code>helm: command not found</code> 说明那台机器没装 Helm(装法见 <a href="#m3">M3 第 0 步</a>)。</li>
+    <li><b>Pod 名不一定叫 primary/secondary:</b>用第 1 条找到实际名字,后面命令替换即可。</li>
+  </ul>
+  <div class="tip"><b>💡 查到的版本怎么用:</b>本环境线上已实测为 <b>MySQL 8.4.7(8.4 LTS)</b>;新装时把 <code>image.tag</code> 固定成 <code>8.4.7-debian-12-rX</code>(见 <a href="#m3">M3 values</a>),与线上对齐,避免版本差异带来的 SQL 行为/排序规则变化。</div>
+</section>
+<!-- ================= M2. 方案选型 ================= -->
+<section id="m2">
+  <h2><span class="no">M2</span>1主1备方案怎么选 —— 本文用 Bitnami chart 复制架构</h2>
+  <p>"1主1备"在 K8s 里有三种落地姿势,先对号入座:</p>
+  <table>
+    <tr><th>方案</th><th>架构</th><th>自动故障切换</th><th>适用</th></tr>
+    <tr><td>Bitnami chart · <code>standalone</code></td><td>单实例</td><td>—</td><td>测试/无关紧要的数据</td></tr>
+    <tr><td>★ Bitnami chart · <code>replication</code>(本文)</td><td>1 主 + N 备,异步复制</td><td><b>无</b>(备可读,主挂需人工介入)</td><td>读写分离 + 数据热备,大多数内网场景</td></tr>
+    <tr><td>★ mysql-operator(InnoDB Cluster)—— <b>本环境线上采用</b></td><td>3 实例组复制 + Router 读写分离</td><td>有(自动选主)</td><td>要求 RPO≈0、DBA 运维能力</td></tr>
+  </table>
+  <pre><code>本文部署出来的样子(replication 架构,secondary.replicaCount=1):
+
+应用(写) ──▶ mysql-primary:3306 ──── binlog 异步复制 ────▶ mysql-secondary:3306 ◀── 应用(读,可选)
+              StatefulSet ×1(读写)                          StatefulSet ×1(只读热备)
+              PVC: data-mysql-primary-0                      PVC: data-mysql-secondary-0
+              Svc: mysql-primary / mysql-primary-h(头less)    Svc: mysql-secondary / mysql-secondary-h
+
+# "备"的两层含义都占了:① 数据实时同步(热备,主盘炸了数据还在备上);
+#                      ② 备库可对外提供只读服务(读写分离),不是躺着睡觉的冷备</code></pre>
+  <div class="tip"><b>💡 本环境线上实况(2026-10 实测):</b><code>fke-db</code> / <code>fke-db-dev</code> 里的 MySQL 全部是 <b>mysql-operator(InnoDB Cluster)</b> 方案 —— 每套库 = 3 个 <code>community-server:8.4.7</code> 实例(-0/-1/-2) + 2~4 个 <code>community-router:8.4.7</code> + 全局一个 <code>mysql-operator</code>(8.4.7-2.1.9),镜像走私仓 <code>docker.fftaicorp.com</code>。本文仍用 Bitnami chart 装自己的 1主1备,<b>版本对齐线上 8.4.7</b>;要与线上完全同构(自动切换)请走 mysql-operator 路线 —— 注意 InnoDB Cluster <b>最少 3 实例</b>起步,没有"1主1备"形态。</div>
+  <div class="warn"><b>⚠️ 两个必须知道的真相:</b>① 该 chart <b>不做自动故障切换</b> —— primary Pod 挂了 K8s 会把它原样拉起(数据在 PVC 里不丢),但 secondary 不会自动升主;要"主挂备自动顶上"请上 mysql-operator,复杂度高一个量级。② <b>异步复制有秒级延迟</b>:刚在主上写完立刻查备库可能读不到,强一致读写都走 primary。</div>
+</section>
+<!-- ================= M3. 安装 ================= -->
+<section id="m3">
+  <h2><span class="no">M3</span>安装:Helm 一键部署 1主1备 —— values 逐行讲</h2>
+
+  <h3>第 0 步:准备 Helm 客户端(能连集群的机器上装即可)</h3>
+  <pre><code># Linux(master 或跳板机)
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# Windows(开发机)
+choco install kubernetes-helm        # 或官网下 zip 解压进 PATH
+# 通用前提:kubectl 能连通目标集群(helm 全靠 ~/.kube/config)
+helm version                          # version.BuildInfo{Version:"v3.x.x"...} 即 OK</code></pre>
+
+  <h3>第 1 步:加仓库,看清楚版本 —— ★ 最新 chart ≠ 线上版本,必须锁</h3>
+  <pre><code>helm repo add bitnami https://charts.bitnami.com/bitnami && helm repo update
+helm search repo bitnami/mysql
+# NAME          CHART VERSION   APP VERSION   DESCRIPTION
+# bitnami/mysql 14.0.3          9.4.0         ...   ← 默认只显示最新:跟踪 MySQL 9.x 创新版,不是我们要的!
+
+# ★ 要 8.4.x(LTS):加 --versions 列历史版本,找 APP VERSION = 8.4.x 的行(实测输出)
+helm search repo bitnami/mysql --versions | grep -E 'CHART|8\.4\.' | head -5
+# NAME          CHART VERSION   APP VERSION
+# bitnami/mysql 12.3.5          8.4.5        ← ★ 8.4 系最高 chart 到此为止(APP 8.4.5),没有 8.4.7 的 chart
+# bitnami/mysql 12.3.4          8.4.5
+# bitnami/mysql 12.3.3          8.4.4
+# bitnami/mysql 12.3.2          8.4.4
+
+# ★ 结论:chart 锁 12.3.5;精确到 8.4.7 靠 image.tag(同 8.4 系小版本,安全)
+#   先确认 Docker Hub 有没有 8.4.7 的 tag(有输出即存在,照抄最精确那个):
+curl -s 'https://hub.docker.com/v2/repositories/bitnami/mysql/tags/?name=8.4.7&page_size=10' \
+  | grep -o '"name":"[^"]*"' | head -3
+# ★ 2026-10 实测结论:docker.io/bitnami/mysql 已被清空(上面 curl 无任何输出)!
+#   Bitnami 2025-08 起免费镜像迁移,旧 tag 全部归档到 bitnamilegacy:
+curl -s 'https://hub.docker.com/v2/repositories/bitnamilegacy/mysql/tags/?name=8.4&page_size=10' \
+  | grep -o '"name":"[^"]*"' | head -5
+# 有 8.4.5-debian-12-r0 等 → ★ 第 2 步 values 里加 image.repository: bitnamilegacy/mysql
+
+# (可选)看该 chart 默认镜像 tag 的格式
+helm show values bitnami/mysql --version 12.3.5 | grep -A3 '^image:'</code></pre>
+  <div class="warn"><b>⚠️ 为什么不"最新 chart + 强改 image.tag":</b>chart 的启动脚本/模板与 APP VERSION 配套,用 14.x(9.4) 的 chart 回退 8.4 镜像属于跨大版本混搭,容易起不来;<b>chart 和镜像一起锁在 8.4 系</b>才是稳的。MySQL 8.4 是 LTS,9.x 是创新版 —— 对齐线上选 8.4。</div>
+
+  <h3>第 2 步:创建 values-mysql.yaml(★ 2026-10 服务器实测终版,整段可直接粘贴)</h3>
+  <pre><code>mkdir -p /data/git/mysql &amp;&amp; cd /data/git/mysql     # 集中放 mysql 部署文件,以后好找
+
+cat &gt; values-mysql.yaml &lt;&lt;'EOF'
+global:
+  security:
+    allowInsecureImages: true      # ★ 用 bitnamilegacy 归档镜像必须放行(Bitnami 校验,2025-08 新增,否则 upgrade 拒装)
+architecture: replication          # ★ 复制模式(默认 standalone 单机,别漏!)
+auth:
+  rootPassword: "Root@123456"      # ★ root 密码,改成你的
+  database: "appdb"                # 自动创建的业务库
+  username: "app"                  # 业务账号(仅对 appdb 授权)
+  password: "App@123456"           # ★ 改成你的
+  replicationUser: replicator      # 主从复制专用账号(chart 自动建并授复制权限)
+  replicationPassword: "Repl@123456"
+image:
+  repository: bitnamilegacy/mysql   # ★ 2026-10 实测:docker.io/bitnami 已清空,8.4 系全在 bitnamilegacy 归档
+# 注:不写 tag = 用 chart 12.3.5 默认的 8.4.5-debian-12-r0(与线上 8.4.7 同系 8.4 LTS,tag 名不变)
+primary:
+  persistence:
+    size: 8Gi                      # 主库数据卷;线上建议按数据量给足(可在线扩容,见 k8s-issues)
+    # storageClass: "xxx"          # Pod 卡 Pending(绑不上默认 SC)时取消注释,填 kubectl get sc 查到的名字
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits:   {cpu: "1",  memory: 1Gi}
+secondary:
+  replicaCount: 1                  # ★★★ 1 主 1 备的灵魂行:备库数量 = 1
+  persistence:
+    size: 8Gi                      # 建议与主库同尺寸
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits:   {cpu: "1",  memory: 1Gi}
+metrics:
+  enabled: false                   # 先关(少拉一个镜像,提高首次安装成功率);要 Prometheus 指标再改 true
+EOF</code></pre>
+
+  <h3>第 3 步:一键安装 + 盯 Pod</h3>
+  <pre><code>helm install mysql bitnami/mysql -n mysql --create-namespace \
+  --version 12.3.5 -f /data/git/mysql/values-mysql.yaml
+#        ★ --version 锁 8.4 系 chart,别省!(13/14.x 已是 9.x 系)
+#        ★ -f 用绝对路径最稳:换了目录再跑相对路径会报
+#          Error: INSTALLATION FAILED: open values-mysql.yaml: no such file or directory
+# NAME: mysql  LAST DEPLOYED: ...  STATUS: deployed  REVISION: 1
+
+kubectl get pods -n mysql -w       # 首次要拉镜像,耐心等两个都 Running(Ctrl+C 退出)
+# NAME                  READY   STATUS    RESTARTS   AGE
+# mysql-secondary-0     1/1     Running   0          3m
+# mysql-primary-0       1/1     Running   0          3m
+
+# 装出来的全家桶一览
+kubectl get all,pvc,secret,cm -n mysql | head -30</code></pre>
+  <ul>
+    <li><b>release 名叫 <code>mysql</code></b>,所以 Pod/Svc/Secret 前缀都是 <code>mysql-</code>;改名则相应变化。</li>
+    <li><b>root 密码同时也存在 Secret 里</b>(装完忘了密码从这里捞):<code>kubectl get secret mysql -n mysql -o jsonpath='{.data.mysql-root-password}' | base64 -d</code></li>
+    <li><b>Pod 起不来先看两处:</b><code>kubectl describe pod -n mysql mysql-primary-0</code>(Events 排查)与镜像拉取问题(见 <a href="#m7">M7</a>)。</li>
+    <li><b>卡 <code>Init:ImagePullBackOff</code>(2026-10 实测全记录):</b>报 <code>unexpected media type text/html</code> = tag/仓库在源上不存在(<b>不是网络!</b>)—— 根因是 <b>docker.io/bitnami 已清空</b>,解法见第 2 步 <code>image.repository: bitnamilegacy/mysql</code>,改后 <code>helm upgrade</code> 滚动重建;若是纯超时(i/o timeout)才走 containerd 国内加速(<a href="k8s-issues.html#c5">问题总汇 · 05</a>)。</li>
+  </ul>
+  <div class="warn"><b>⚠️ 重装陷阱:</b>卸载后 PVC <b>默认保留</b>!旧数据卷里存着旧 root 密码,新密码不生效、Pod 起不来 —— 重装前要么删 PVC(<code>kubectl delete pvc -n mysql data-mysql-primary-0 data-mysql-secondary-0</code>),要么沿用旧密码。磁盘/PVC 扩容实战见 <a href="k8s-issues.html">问题总汇</a>。</div>
+</section>
+<!-- ================= M4. 验证复制 ================= -->
+<section id="m4">
+  <h2><span class="no">M4</span>验证:主从复制是否正常 —— 写一条数据全程跑一遍</h2>
+  <pre><code># 取 root 密码(后面反复用)
+PW=$(kubectl get secret mysql -n mysql -o jsonpath='{.data.mysql-root-password}' | base64 -d)
+
+# 1. 主库写入测试数据
+kubectl exec -n mysql mysql-primary-0 -- env MYSQL_PWD=$PW mysql -uroot -e \
+ "CREATE DATABASE IF NOT EXISTS repl_test; USE repl_test; \
+  CREATE TABLE t1(id INT, name VARCHAR(32)); INSERT INTO t1 VALUES (1,'qingfeng');"
+
+# 2. 备库读到了 = 复制链路通
+kubectl exec -n mysql mysql-secondary-0 -- env MYSQL_PWD=$PW mysql -uroot -e "SELECT * FROM repl_test.t1;"
+# +------+-----------+
+# | id   | name      |
+# | 1    | qingfeng  |        ← 备库能查到,主→备复制正常
+
+# 3. 复制线程体检(两个 Running 都要 Yes)
+kubectl exec -n mysql mysql-secondary-0 -- env MYSQL_PWD=$PW mysql -uroot -e "SHOW REPLICA STATUS\G" \
+ | grep -E 'Replica_IO_Running|Replica_SQL_Running|Seconds_Behind'
+#                   Replica_IO_Running: Yes      ← 从主库拉 binlog 的线程
+#                  Replica_SQL_Running: Yes      ← 回放 binlog 的线程
+#              Seconds_Behind_Source: 0          ← 延迟秒数(旧版字段名 Seconds_Behind_Master)</code></pre>
+  <div class="tip"><b>💡 健康标准:</b>IO/SQL 双 Yes + Seconds_Behind 稳定在个位数。任一为 No 去 <a href="#m7">M7</a> 查对应报错。<code>env MYSQL_PWD=$PW</code> 是为了避免密码出现在 ps/历史记录里,比 <code>-p密码</code> 规范。</div>
+</section>
+
+<!-- ================= M5. 连接使用 ================= -->
+<section id="m5">
+  <h2><span class="no">M5</span>连接使用:主写从读 —— 谁该连哪个地址</h2>
+  <table>
+    <tr><th>场景</th><th>连谁</th><th>地址</th></tr>
+    <tr><td>写入 / 事务 / 强一致读</td><td>主库(必)</td><td><code>mysql-primary.mysql.svc.cluster.local:3306</code></td></tr>
+    <tr><td>报表/大查询等可容忍延迟的读</td><td>备库(可选)</td><td><code>mysql-secondary.mysql.svc.cluster.local:3306</code></td></tr>
+    <tr><td>同 namespace 内的 Pod</td><td>均可</td><td>短名 <code>mysql-primary</code> / <code>mysql-secondary</code></td></tr>
+    <tr><td>集群外临时调试</td><td>port-forward</td><td><code>kubectl port-forward svc/mysql-primary -n mysql 3306:3306</code> 后连 <code>127.0.0.1:3306</code></td></tr>
+  </table>
+  <pre><code># 应用连接串示例(JDBC;app 账号即 values 里 auth.username/password)
+# 写库: jdbc:mysql://mysql-primary.mysql.svc.cluster.local:3306/appdb
+# 读库: jdbc:mysql://mysql-secondary.mysql.svc.cluster.local:3306/appdb
+
+# 集群外长期访问:Service 改 NodePort(本环境惯用套路,和 ingress 同思路)
+# (默认 ClusterIP:只在集群内可达,所以 get svc 看不到 nodePort、EXTERNAL-IP 是 <none> —— 正常设计,不是漏配)
+# ★ 正规做法:写进 values(★ 手 kubectl patch 会被下次 helm upgrade 打回原形!)
+#   即在已有 primary:/secondary: 段下各加 service 块(type + nodePorts 端口取 30000-32767):
+sed -i '/^primary:/a\  service:\n    type: NodePort\n    nodePorts:\n      mysql: 30306' values-mysql.yaml
+sed -i '/^secondary:/a\  service:\n    type: NodePort\n    nodePorts:\n      mysql: 30307' values-mysql.yaml
+helm upgrade mysql bitnami/mysql -n mysql --version 12.3.5 -f values-mysql.yaml
+kubectl get svc -n mysql
+# service/mysql-primary     NodePort   10.x.x.x   <none>   3306:30306/TCP   ← 节点IP:30306 = 主库(读写)
+# service/mysql-secondary   NodePort   10.x.x.x   <none>   3306:30307/TCP   ← 节点IP:30307 = 备库(只读)
+# 之后任意节点 IP:30306 即主库;生产内网可用,公网别裸开 3306
+
+# 只读语义自测:往备库写会被拒
+kubectl exec -n mysql mysql-secondary-0 -- env MYSQL_PWD=$PW mysql -uroot -e \
+ "USE repl_test; INSERT INTO t1 VALUES (2,'x');"
+# ERROR 1290 (HY000): The MySQL server is running with the --read-only option
+#                              ↑ 这不是故障,是备库的正确姿态!写必须走 primary</code></pre>
+  <ul>
+    <li><b>应用侧最省事:</b>没做读写分离中间件就<b>全部连 primary</b>,备库纯当热备,不必强读写分离。</li>
+    <li><b>-h 后缀的 headless Service</b>(<code>mysql-primary-h</code>)是给 StatefulSet 稳定 DNS 用的,应用别连它。</li>
+    <li><b>两个 3306 为何不冲突:</b>Pod 各有独立 IP(独立网络空间);<code>3306:30306</code> 冒号前的 3306 只是"转发到 Pod 的目标端口",节点上真正监听的是 nodePort(30306/30307,<code>ss -lnt</code> 可查),kube-proxy 从不在节点上直接监听 3306。</li>
+    <li><b>Navicat/DBeaver 连不上?</b>先用 port-forward 法验证账号密码,再查 NodePort/防火墙 —— 分层排查。</li>
+  </ul>
+</section>
+<!-- ================= M6. 日常运维 ================= -->
+<section id="m6">
+  <h2><span class="no">M6</span>日常运维:升级 / 扩容 / 备份 / 卸载</h2>
+  <h3>① 升级 MySQL 版本(如 8.4.6 → 8.4.7,只改 image.tag)</h3>
+  <pre><code>helm upgrade mysql bitnami/mysql -n mysql -f values-mysql.yaml \
+  --version 12.3.5 --set image.tag=8.4.7-debian-12-rX   # chart 版本同样要带,与安装时保持一致
+kubectl rollout status sts/mysql-primary -n mysql     # 等滚动完成
+kubectl rollout status sts/mysql-secondary -n mysql
+# 复查:回到 M1 第 4 条 SELECT VERSION();复制状态回 M4 体检</code></pre>
+  <h3>② 读扩容:备库 1 → 2(1主2备;缩容同理改回 1)</h3>
+  <pre><code>helm upgrade mysql bitnami/mysql -n mysql -f values-mysql.yaml --set secondary.replicaCount=2
+kubectl get pods -n mysql     # 新增 mysql-secondary-1,自动从主库同步全量数据</code></pre>
+  <h3>③ 备份(逻辑备份,在主库跑;二进制大库可对备库跑减少主库压力)</h3>
+  <pre><code>PW=$(kubectl get secret mysql -n mysql -o jsonpath='{.data.mysql-root-password}' | base64 -d)
+kubectl exec -n mysql mysql-primary-0 -- env MYSQL_PWD=$PW sh -c \
+ 'mysqldump -uroot --all-databases --single-transaction --routines --triggers --events' \
+ &gt; mysql-all-$(date +%F).sql
+ls -lh mysql-all-*.sql        # 恢复:mysql -uroot -p &lt; mysql-all-2026-10-22.sql
+# 参考:线上 fke-db 的 hms-mysql-backup / apifox-mysql-backup(CronJob 定时备份)用的就是 mysqlsh dump/restore</code></pre>
+  <h3>④ 卸载(PVC 默认保留;连数据一起删才执行第二步)</h3>
+  <pre><code>helm uninstall mysql -n mysql
+kubectl delete pvc -n mysql data-mysql-primary-0 data-mysql-secondary-0   # ★ 数据将清空,确认再敲
+kubectl delete ns mysql</code></pre>
+  <div class="tip"><b>💡 变更三板斧:</b>改 values → <code>helm upgrade</code>(Helm 只 apply 差异)→ <code>kubectl rollout status</code> 盯滚动。永远别 <code>kubectl edit</code> Helm 管理的资源 —— 下次 upgrade 会被打回原形。Helm 常用命令速查另见 <a href="k8s-cmd.html">命令速查</a>。</div>
+</section>
+
+<!-- ================= M7. 报错速查 ================= -->
+<section id="m7">
+  <h2><span class="no">M7</span>高频报错速查表</h2>
+  <table>
+    <tr><th>现象/报错</th><th>根因</th><th>解决</th></tr>
+    <tr><td>Pod 一直 <code>Pending</code></td><td>没有默认 StorageClass / PVC 绑不上</td><td><code>kubectl get sc</code>;values 里显式 <code>storageClass</code>;排障详见 <a href="k8s-issues.html">问题总汇 · 挂载失败</a></td></tr>
+    <tr><td><code>ImagePullBackOff</code> / <code>unexpected media type text/html</code></td><td>★ 2026-10 实测:docker.io/bitnami 已清空,8.4 镜像在 <code>bitnamilegacy</code> 归档(纯 i/o timeout 才是网络问题)</td><td>values 改 <code>image.repository: bitnamilegacy/mysql</code> 后 <code>helm upgrade</code>(见 <a href="#m3">M3 第 2 步</a>);其他排查见 <a href="k8s-issues.html">问题总汇 · 拉不下镜像</a></td></tr>
+    <tr><td>root 登录 <code>Access denied</code></td><td>重装时旧 PVC 带着旧密码,新密码没写进去</td><td>用旧密码;或删 PVC 重装(见 <a href="#m3">M3 重装陷阱</a>)</td></tr>
+    <tr><td>备库查不到最新数据</td><td>复制延迟 / 复制线程断了</td><td><code>SHOW REPLICA STATUS\G</code> 看 <code>Seconds_Behind</code> 与 <code>Last_Error</code>;双 No → 检查 replicationUser 密码与 primary 可达</td></tr>
+    <tr><td><code>ERROR 1290 ... --read-only option</code></td><td>往备库写</td><td>设计如此,写走 <code>mysql-primary</code>(见 <a href="#m5">M5</a>)</td></tr>
+    <tr><td>Pod <code>CrashLoopBackOff</code> 反复重启</td><td>Secret 密码与 PVC 旧数据不一致 / 内存 limit 太小</td><td><code>kubectl logs</code> 看启动报错;对齐密码或删 PVC;调大 resources</td></tr>
+    <tr><td>secondary 起不来,日志报连不上 primary</td><td>primary 未就绪时 secondary 先起</td><td>等 primary Running 后 <code>kubectl delete pod mysql-secondary-0 -n mysql</code> 让它重连</td></tr>
+    <tr><td><code>helm upgrade</code> 后配置没变</td><td>资源被手动 kubectl edit 过,upgrade 跳过漂移项</td><td>所有变更走 <code>helm upgrade</code>,别手改(见 <a href="#m6">M6 三板斧</a>)</td></tr>
+    <tr><td><code>helm install</code> 报 <code>open values-mysql.yaml: no such file or directory</code></td><td>当前目录没有该文件(创建后换了目录跑)</td><td><code>-f</code> 用绝对路径,如 <code>-f /data/git/mysql/values-mysql.yaml</code>(见 <a href="#m3">M3 第 3 步</a>)</td></tr>
+    <tr><td><code>upgrade</code> 报 <code>Original containers have been substituted for unrecognized ones</code></td><td>Bitnami chart 校验到非官方仓库镜像(如 <code>bitnamilegacy</code>)</td><td>values 加 <code>global.security.allowInsecureImages: true</code>(见 <a href="#m3">M3 第 2 步</a>)</td></tr>
+  </table>
+  <div class="tip"><b>💡 互链:</b>排障三板斧(describe/logs/events)见 <a href="k8s-issues.html#c7">问题总汇 · 第 07 节</a>;磁盘满止血与 PVC 在线扩容(数据库盘最常用)见 <a href="k8s-issues.html">问题总汇</a>;Harbor 私仓对接见 <a href="harbor.html">Harbor 文档</a>。</div>
+</section>
+
+<footer>
+  <p>🗄️ K8S MySQL 部署(Helm · 1主1备) · Bitnami chart 复制架构:摸底查版本 → 选型 → 安装 → 复制验证 → 主写从读 → 运维 → 排障 (2026-10-22)</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

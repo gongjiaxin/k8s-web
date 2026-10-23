@@ -282,6 +282,9 @@ crictl pull nginx:1.27</code></pre>
 server = "https://docker.io"
 [host."https://docker.m.daocloud.io"]
   capabilities = ["pull", "resolve"]
+#   ★ 加速器对某些仓库(如 bitnamilegacy)可能挂起/不回源 → pull 卡住不动:
+#     先 rm hosts.toml 恢复直连(机器 curl 通 docker.io 就直连可拉);
+#     直连也不行再换源:docker.1ms.run / dockerproxy.net 等,改 [host."..."] 后重启 containerd
 
 # 3. 重启生效(改了配置不重启 = 白改)
 systemctl restart containerd

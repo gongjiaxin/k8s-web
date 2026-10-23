@@ -451,6 +451,10 @@ curl -kv https://harbor.qingfeng.local 2&gt;&amp;1 | grep subject
 <!-- ================= B1. 证书体系全景 ================= -->
 <section id="c1">
   <h2><span class="no">B1</span>集群内部证书体系全景 —— 谁签给谁、放在哪</h2>
+  <div class="tip"><b>💡 灵魂三问(读 B 部分前先看):</b>
+  ① <b>需要手动部署吗?</b> —— <b>不用</b>。<code>kubeadm init</code> 预检后第一步就自动签发全套证书(<a href="#c2">B2</a>),零操作;
+  ② <b>我的机器上默认有吗?</b> —— <b>凡是能跑起来的 K8s 就一定有</b>:kubeadm / Docker Desktop / Minikube / Rancher 装的集群都自带。验证:<code>kubectl config view --minify</code> 看 server 是不是 <code>https://xxx:6443</code> —— 是,说明内部证书正在默默工作(你每次 kubectl 都在用它);
+  ③ <b>线上可以不用吗?</b> —— <b>不存在"不用"</b>。它<b>不是可选项,是集群强制自带的</b>:apiserver 只提供 HTTPS(明文端口 8080 早在 v1.20 就移除了),没这套证书集群根本起不来。线上要做的不是"部署"而是"运维":<b>备份 ca.key</b>(<a href="#c2">B2</a>)+ <b>盯到期续期</b>(<a href="#c5">B5</a>,组件证书默认 1 年,过期 = kubectl 连不上 = 集群瘫痪)。可选项只有两个:<a href="#c3">B3 加 SAN</a>(kubectl 需用外网 IP/域名/LB VIP 连 6443 时才做)、<a href="#c4">B4 手动 openssl</a>(离线/对接企业 CA 才做)。</div>
   <p>kubeadm 部署的集群,证书全部集中在 <code>/etc/kubernetes/pki/</code>,由根 CA 统一签发;先把目录结构和用途看懂,后面所有操作都不慌:</p>
   <pre><code>/etc/kubernetes/pki/                          # 集群所有证书的家(root 权限)
 ├── ca.crt  ca.key                            # ★ 根 CA,其余证书全由它签(丢了=灾难,必备份)
