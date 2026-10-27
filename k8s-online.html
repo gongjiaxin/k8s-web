@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · 线上 K8S 集群架构 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  /* ---- 01 架构图(卡片式,居中) & NS 网格 ---- */
+  .arch{display:flex;flex-direction:column;align-items:center;margin:20px 0}
+  .arch-node{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 24px;
+    min-width:320px;max-width:760px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  .arch-node>b{color:var(--cyan);font-size:15px}
+  .arch-node .small{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .arch-node .ha{display:flex;gap:14px;justify-content:center;margin:10px 0 2px}
+  .arch-node .ha span{border:1px dashed var(--line);border-radius:8px;padding:3px 14px;font-size:12.5px;color:var(--txt)}
+  .arch-node .vip{display:inline-block;margin-top:8px;padding:2px 14px;border-radius:999px;
+    border:1px solid rgba(246,173,85,.55);color:var(--orange);font-size:12.5px}
+  .arch-arrow{text-align:center;padding:4px 0;font-size:12.5px;color:var(--muted)}
+  .arch-arrow .down{color:var(--cyan);font-size:16px;line-height:1}
+  .arch-bound{display:flex;align-items:center;gap:12px;width:100%;margin:10px 0;
+    color:var(--orange);font-size:12.5px;letter-spacing:1px}
+  .arch-bound::before,.arch-bound::after{content:"";flex:1;border-top:1px dashed rgba(246,173,85,.45)}
+  .nsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin:14px 0}
+  .nscard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+    text-align:center;transition:border-color .18s,transform .18s}
+  .nscard:hover{border-color:var(--blue);transform:translateY(-2px)}
+  .nscard b{color:var(--cyan);font-size:14px;display:block;margin-bottom:5px}
+  .nscard span{font-size:12px;color:var(--muted);line-height:1.75;display:block;word-break:break-all}
+  details.cfg{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:var(--code)}
+  details.cfg summary{cursor:pointer;padding:10px 16px;color:var(--cyan);font-weight:600;font-size:14px;user-select:none}
+  details.cfg[open] summary{border-bottom:1px solid var(--line)}
+  details.cfg pre{margin:0;border:none;border-radius:0}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / 线上 K8S 集群架构</span>
+  </div>
+</div>
+<div class="wrap">
+<header class="doc">
+  <h1>🏭 线上 K8S 集群架构(fke)
+    <small>DNS → 外层 NGINX 主备 VIP → K8S 集群 → 40+ namespace 分区全景 —— 一张图看懂公司线上环境</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#o1">总架构图(一图流)</a></li>
+    <li><a href="#o2">第①层:公司 DNS —— 域名怎么进来</a></li>
+    <li><a href="#o3">第②层:外层 NGINX 主备 + VIP —— 集群外的高可用入口</a></li>
+    <li><a href="#o4">第③层:fke 集群与入口网关</a></li>
+    <li><a href="#o5">第④层:NS 分区地图(40+ namespace 全分类)</a></li>
+    <li><a href="#o6">逐层验证命令(fke 实操)</a></li>
+    <li><a href="#o7">测试环境 vs 线上 对照 &amp; 待确认清单</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. 总架构图 ================= -->
+<section id="o1">
+  <h2><span class="no">01</span>总架构图(一图流)</h2>
+  <div class="arch">
+    <div class="arch-node"><b>👤 员工/用户浏览器</b><div class="small">https://xxx.ergesanbaishou.com</div></div>
+    <div class="arch-arrow"><span class="down">▼</span><br>发起请求,查域名</div>
+    <div class="arch-node"><b>① 公司 DNS · 域名解析层</b><div class="small">*.ergesanbaishou.com 统一后缀 → 全部指向同一个 VIP</div></div>
+    <div class="arch-arrow"><span class="down">▼</span><br>解析结果 = VIP</div>
+    <div class="arch-node">
+      <b>② 外层 NGINX 主备 + VIP 漂移(keepalived)</b>
+      <div class="small">集群外的高可用入口 —— 主挂备顶,VIP 秒级漂移,客户端不断流</div>
+      <div class="ha"><span>NGINX-Master(主)</span><span>NGINX-Backup(备)</span></div>
+      <span class="vip">VIP 虚拟 IP · 对外的稳定地址</span>
+    </div>
+    <div class="arch-arrow"><span class="down">▼</span><br>proxy_pass → K8S 节点 IP:入口端口(★透传 Host 头)</div>
+    <div class="arch-bound">═══ K8S 集群边界 ═══</div>
+    <div class="arch-node"><b>③ fke K8S 集群(Rancher 管理)</b><div class="small">多节点(fke-m1 …) · 两扇"大门"并联(详见 04 节):<br>门A nginx-ingress(kube-infra · 30080/30443)<br>门B istio-ingressgateway(istio-system · 30538/30539)</div></div>
+    <div class="arch-arrow"><span class="down">▼</span><br>按 host + path 路由 → Service(ClusterIP)→ Pod</div>
+    <div class="arch-node"><b>④ NS 大分区(40+ namespace · 12 类)</b><div class="small">服务各回各家 ↓ 分区地图见下</div></div>
+  </div>
+  <h3>🗺️ NS 分区地图(40+ namespace · 12 类分区)</h3>
+  <div class="nsgrid">
+    <div class="nscard"><b>🏢 业务</b><span>app · app-dev · app-uat<br>auth · on-premises · fke-profile</span></div>
+    <div class="nscard"><b>🗄️ 数据</b><span>fke-db(MySQL InnoDB Cluster 8.4.7)<br>fke-db-dev</span></div>
+    <div class="nscard"><b>🔌 中间件</b><span>fke-middleware</span></div>
+    <div class="nscard"><b>🛠 CI/CD</b><span>gitlab · jenkins-ci · argo<br>smart-ops-pipelines<br>code-server · pingcode</span></div>
+    <div class="nscard"><b>📦 镜像</b><span>harbor<br>docker.ergesanbaishou.com 私仓</span></div>
+    <div class="nscard"><b>📊 可观测</b><span>fke-monitor(监控)<br>fke-log(日志)</span></div>
+    <div class="nscard"><b>💾 存储</b><span>longhorn-system<br>分布式块存储 · PVC 底座</span></div>
+    <div class="nscard"><b>🕸 网格/入口</b><span>istio-system<br>knative-serving · oauth2-proxy</span></div>
+    <div class="nscard"><b>🤖 AI/ML</b><span>kubeflow · kubeflow-components<br>datacollect-kubeflow<br>jobset-system</span></div>
+    <div class="nscard"><b>🎥 音视频</b><span>livekit(实时音视频)<br>stunner · stunner-system</span></div>
+    <div class="nscard"><b>⚙️ K8S 系统</b><span>kube-system · kube-public<br>kube-node-lease · default<br>kube-infra · fke-infra-dev</span></div>
+    <div class="nscard"><b>🐄 Rancher</b><span>cattle-system<br>cattle-impersonation-system · local</span></div>
+  </div>
+
+  <details class="cfg">
+    <summary>📄 展开查看:纯文本版总图(适合复制/粘贴到笔记)</summary>
+    <pre><code>👤 浏览器 → ① DNS(*.ergesanbaishou.com → VIP)
+  → ② 外层 NGINX 主备(keepalived VIP 漂移;proxy_pass → 节点:端口,★透传 Host)
+  ═══ K8S 集群边界 ═══
+  → ③ fke 集群(Rancher;双网关并存: kube-infra/nginx-ingress 30080·30443 + istio-gateway 30538·30539;host+path → svc → pod)
+  → ④ NS 分区:
+     业务: app app-dev app-uat auth on-premises fke-profile
+     数据: fke-db fke-db-dev | 中间件: fke-middleware | 镜像: harbor
+     CI/CD: gitlab jenkins-ci argo smart-ops-pipelines code-server pingcode
+     可观测: fke-monitor fke-log | 存储: longhorn-system
+     网格: istio-system knative-serving oauth2-proxy
+     AI/ML: kubeflow kubeflow-components datacollect-kubeflow jobset-system
+     音视频: livekit stunner stunner-system
+     系统: kube-system kube-public kube-node-lease default kube-infra fke-infra-dev
+     Rancher: cattle-system cattle-impersonation-system local</code></pre>
+  </details>
+
+  <div class="tip"><b>💡 读图顺序:</b>一次 https 请求自上而下过 4 层,每层只干一件事:<b>DNS 管找人(域名→IP)</b> → <b>NGINX 主备管入口高可用(单点不挂)</b> → <b>K8S 网关管路由(域名/路径→服务)</b> → <b>NS 管分区(服务各回各家)</b>。任何一层出问题,排查就从自己那层下手,别越层猜。</div>
+</section>
+
+<!-- ================= 2. DNS ================= -->
+<section id="o2">
+  <h2><span class="no">02</span>第①层:公司 DNS —— 域名怎么进来</h2>
+  <p>公司统一域名后缀 <code>*.ergesanbaishou.com</code>(如私仓 <code>docker.ergesanbaishou.com</code>)。域名并不直接指向 K8S 节点,而是指向<b>外层 NGINX 的 VIP</b> —— 这样 K8S 集群怎么扩缩、节点 IP 怎么变,域名永远不用改。</p>
+  <pre><code># 在办公网任一机器上验证解析
+nslookup xxx.ergesanbaishou.com        # 返回的 IP 应是 NGINX 的 VIP,而不是节点 IP
+# 入口类 *.ergesanbaishou.com 域名通常都指向同一个 VIP —— 这就是"统一入口"的特征</code></pre>
+</section>
+
+<!-- ================= 3. NGINX 主备 VIP ================= -->
+<section id="o3">
+  <h2><span class="no">03</span>第②层:外层 NGINX 主备 + VIP —— 集群外的高可用入口</h2>
+  <p>两台 NGINX(一主一备)通过 <b>keepalived</b> 共享一个 <b>VIP(虚拟 IP)</b>:平时 VIP 在 Master 上,Master 挂了 VIP 自动漂到 Backup,客户端<b>无感知不断流</b>。所有进入 K8S 的 HTTP(S) 流量先到这里,再 <code>proxy_pass</code> 转发到 K8S 节点的入口端口。</p>
+  <table>
+    <tr><th>组件</th><th>职责</th><th>关键点</th></tr>
+    <tr><td>NGINX-Master</td><td>承接 VIP,反代到 K8S</td><td rowspan="2">keepalived 心跳互探;VIP 漂移秒级完成</td></tr>
+    <tr><td>NGINX-Backup</td><td>热备,Master 挂则接管 VIP</td></tr>
+    <tr><td>VIP</td><td>对外的"稳定 IP"</td><td>域名解析到它,后端随便换</td></tr>
+  </table>
+  <div class="tip"><b>💡 2026-10 实测补充:</b>这台 NGINX 是<b>全公司统一入口</b>,不只代理 K8S —— <code>nginx -T</code> 里还有大量<b>直连物理机后端</b>(192.168.3.x、10.18.x 各端口)的 proxy_pass,K8S 只是其后端之一;进 K8S 的流量统一走"节点 IP + NodePort"(30080/30538 两扇门),绝不会写 ClusterIP。完整实测见 04 节。</div>
+  <div class="tip"><b>💡 与测试环境同构:</b>测试集群的外层 NGINX 主从 + VIP 链路(k8s.ergesanbaishou.com → VIP → NodePort 31588)就是线上这套的缩小版,完整配置见 <a href="k8s-cert.html">K8S 证书管理</a> 与 <a href="ingress.html">Ingress 文档 02 节</a>。★ 灵魂行永远是 <code>proxy_set_header Host $host;</code> —— 不透传域名,后端路由必 404。</div>
+</section>
+
+<!-- ================= 4. fke 集群 ================= -->
+<section id="o4">
+  <h2><span class="no">04</span>第③层:fke 集群与入口网关(双网关并存 · 2026-10 实测)</h2>
+
+  <h3>🚪 先搞懂:为什么说"双网关"?—— 大楼有两扇门</h3>
+  <p><b>入口网关 = 集群的大门保安。</b>外部流量不能随便打进某个 Pod(IP 会变、数量多、不安全),必须先过一扇"大门",由保安按<b>域名 + 路径</b>决定转给哪个 Service —— 这就是网关干的全部事。</p>
+  <p>线上这栋"楼"装了<b>两套独立的门禁系统</b>,是<b>并联</b>关系(不是串联 —— 门A 不会把流量再转发给门B):</p>
+  <pre><code>                     外层 NGINX 主备(VIP)
+                    ┌─────┴─────┐
+          普通业务域名的流量      网格类平台的流量(如 kubeflow/knative)
+                    │            │
+                    ▼            ▼
+        ┌──────────────────┐  ┌──────────────────────────┐
+        │ 🚪 门A: nginx-ingress │  │ 🚪 门B: istio-ingressgateway   │
+        │ ns: kube-infra        │  │ ns: istio-system              │
+        │ NodePort 30080/30443  │  │ NodePort 30538/30539          │
+        │ 按 Ingress 规则路由    │  │ 按 Gateway/VirtualService 路由 │
+        └──────────┬───────────┘  └──────────┬─────────────────────┘
+                   ▼                         ▼
+              Service → Pod             Service → Pod
+        (两扇门都通向楼内,只是"门禁系统"不同)</code></pre>
+  <ul>
+    <li><b>门A(nginx-ingress):</b>传统主流方案,与测试集群<b>同款同原理</b>;业务 Web 服务的流量大多走这。</li>
+    <li><b>门B(Istio 网关):</b>服务网格体系自带的大门;kubeflow、knative 这类平台组件按 Istio 方式暴露,流量走这。</li>
+    <li><b>谁决定走哪扇门?</b>外层 NGINX 的转发规则(upstream 指到 30080 还是 30538)—— 具体配置待确认(见 07 节)。</li>
+  </ul>
+  <pre><code># 想知道哪些服务走哪扇门?(在 fke 上跑)
+sudo kubectl get ingress -A     # 门A 的"访客名单":每条规则 = 一个域名/路径 → 后端服务
+sudo kubectl get gateway -A     # 门B 的名单(Istio Gateway 资源)</code></pre>
+
+  <h3>🏨 网关按 ns 分吗?—— 不分!一扇大门服务所有 ns</h3>
+  <p>实测全集群只有<b>一个</b> istio-ingressgateway(Service 10.100.189.102,装在 istio-system)—— 它是<b>集群级</b>大门,所有 ns 共用。<b>网关不按 ns 分,"路由规则"才按 ns 分</b>:各业务 ns 提交自己的"门牌登记"(Istio 里叫 Gateway/VirtualService),网关汇总所有 ns 的登记形成一张总路由表 —— 大门一个,门牌无数。</p>
+  <pre><code>              istio-ingressgateway(istio-system,全集群 1 个)
+                            ▲
+        ┌───────────┬───────┴──────┬───────────┐
+        │ 登记       │ 登记         │ 登记       │   ← 各 ns 提交路由规则
+   kubeflow ns    app ns       knative ns  ...
+  (VirtualService)          (Gateway/VS)
+        │           │              │
+        ▼           ▼              ▼
+     本 ns 的 Service → Pod</code></pre>
+  <p>门A 是<b>同一个模式</b>:一个 controller(kube-infra)监听<b>全集群所有 ns</b> 的 Ingress 规则 —— 测试集群也一样(Ingress 写在 web ns,controller 装在 ingress-nginx ns)。例外:超大集群可能部署多个 ingressgateway(内/外网流量分开),但本集群 <code>get svc -A</code> 只有一个 → 共用模式。</p>
+  <pre><code># 验证:谁在门B 登记过?
+sudo kubectl get gateway,virtualservice -A      # 各 ns 提交的"门牌"清单
+sudo kubectl get svc -A | grep ingressgateway   # 全集群只有一个网关 Service → 共用</code></pre>
+
+  <h3>🔌 域名到底怎么找到 Pod?—— 域名选规则,规则选 Service,Service 选 Pod</h3>
+  <p>两扇门殊途同归:<b>域名匹配的是"路由规则",规则选中的是 Service;Pod 不是被域名直接选中的,而是 Service 用 label selector 挑出来的</b>(Endpoints 的本质 = "这个 Service 名下有哪些 Pod"的名单)。</p>
+  <pre><code>门A(nginx-ingress):
+  请求(host+path) → Ingress 规则 → backend.service.name = 某 Service ──┐
+                                                                     │
+门B(Istio):                                                          ├─→ Service(label selector)
+  请求(host) → Gateway(定义监听) + VirtualService(host+path 匹配)     │      → Endpoints → Pod
+              → destination.host = 某 Service ───────────────────────┘
+                              (两种门到这一步完全一样)</code></pre>
+  <pre><code># 查门A 每条规则指向哪个 svc(SVC 列就是答案):
+sudo kubectl get ingress -A -o custom-columns='NS:.metadata.namespace,HOST:.spec.rules[*].host,SVC:.spec.rules[*].http.paths[*].backend.service.name'
+
+# 查门B 每条规则指向哪个 svc(DEST 列就是答案):
+sudo kubectl get virtualservice -A -o custom-columns='NS:.metadata.namespace,HOSTS:.spec.hosts,DEST:.spec.http[*].route[*].destination.host'
+
+# 再往下一层:Service 选中了哪些 Pod
+sudo kubectl get ep &lt;svc名&gt; -n &lt;ns&gt;     # Endpoints 里的 IP 列表 = 后端 Pod 真实 IP</code></pre>
+  <div class="tip"><b>💡 澄清易混点:</b>istio-ingressgateway <b>自己就是一个 Service</b>(NodePort 30538,门本身);它"找哪个 svc"不是它自己决定的,而是看各 ns 提交的 VirtualService 规则里的 <code>destination.host</code>。Istio 特例:VS 也能直连 Pod 或 ServiceEntry(外部服务),但主流用法仍是走 Service。</div>
+
+  <h3>实测数据(2026-10)</h3>
+  <ul>
+    <li><b>节点:</b>多节点(如 <code>fke-m1</code> …),登录跳板即 <code>ssh fourier@fke-m1</code> 后 <code>sudo kubectl ...</code>。</li>
+    <li><b>管理面:</b>Rancher(<code>cattle-system</code>)—— 集群的"4S 店",网页化管理多集群。</li>
+    <li><b>入口网关 ×2(实测并存):</b><br>
+      ① <code>kube-infra</code> 里的 <b>nginx-ingress-nginx-controller</b>(ingress-nginx,NodePort <b>30080/30443</b>)—— 传统 Ingress 路由,与测试集群<b>同款</b>;<br>
+      ② <code>istio-system</code> 里的 <b>istio-ingressgateway</b>(NodePort <b>30538/30539</b>,健康检查 15021:30542)—— 服务网格入口(Gateway/VirtualService),另有 knative(serverless)、oauth2-proxy(统一认证)辅助。</li>
+    <li><b>路由逻辑:</b>ingress-nginx 路线与测试环境同构 —— 按 <b>Host 头 + 路径</b>匹配 → Service(ClusterIP)→ Endpoints → Pod;Istio 路线按 Gateway/VirtualService 路由。</li>
+  </ul>
+  <table>
+    <tr><th>网关</th><th>namespace</th><th>Service</th><th>NodePort(实测)</th><th>适用流量</th></tr>
+    <tr><td>ingress-nginx</td><td><code>kube-infra</code></td><td><code>nginx-ingress-nginx-controller</code></td><td>80:<b>30080</b> · 443:<b>30443</b></td><td>常规 Web / Ingress 规则</td></tr>
+    <tr><td>Istio 网关</td><td><code>istio-system</code></td><td><code>istio-ingressgateway</code></td><td>80:<b>30538</b> · 443:<b>30539</b> · 15021:30542</td><td>网格内 / Knative 流量</td></tr>
+  </table>
+  <pre><code># 实测命令(get svc -A | grep ingress 立大功):
+sudo kubectl get svc -A | grep ingress
+# istio-system  istio-ingressgateway            NodePort  10.100.189.102  15021:30542/TCP,80:30538/TCP,443:30539/TCP
+# kube-infra    nginx-ingress-nginx-controller  NodePort  10.101.184.130  80:30080/TCP,443:30443/TCP
+# kube-infra    nginx-ingress-nginx-controller-admission/metrics/defaultbackend(ClusterIP 配套件)</code></pre>
+  <div class="warn"><b>⚠️ 实测翻案记:</b>第一次用 <code>kubectl get pods,svc -n ingress-nginx</code> 查到空,误判"线上没有 ingress-nginx"—— 其实它装在 <code>kube-infra</code>,不在默认的 ingress-nginx ns。<b>教训:按 ns 查空 ≠ 资源不存在,跨 ns 搜 <code>get svc -A | grep ingress</code> 才是终审</b>。外层 NGINX 转发目标也以此为据:30080/30443(ingress-nginx)或 30538/30539(Istio),具体走哪个待查外层配置。</div>
+  <pre><code># 在 fke 上看集群骨架
+sudo kubectl get nodes -o wide                     # 节点清单/IP/角色
+sudo kubectl get svc -A | grep ingress             # 双网关与端口(★比 -n 精准)
+sudo kubectl get ingress -A                        # ingress-nginx 的路由规则
+sudo kubectl get pods -n kube-infra -o wide        # ingress-nginx controller 本体</code></pre>
+
+  <h3>🔍 怎么确认外层 NGINX 走哪扇门?(在 nginx-master 上查)</h3>
+  <div class="warn"><b>⚠️ 实测踩坑:在外层 NGINX 配置里 grep 网关的 ClusterIP(10.100.189.102)永远搜不到 —— 不是没走它,而是 ClusterIP 只有集群内可达!</b>外层 NGINX 在集群外,upstream 只能写<b>节点 IP + NodePort</b>(与 MySQL 文档 M5"宿主机 ping 不通 Pod IP"同一知识点)。</div>
+  <table>
+    <tr><th>IP 类型</th><th>示例</th><th>谁能访问</th></tr>
+    <tr><td>ClusterIP</td><td><code>10.100.189.102</code></td><td><b>仅集群内</b>(Pod/节点上) —— 外层 nginx 写了也连不通</td></tr>
+    <tr><td>NodePort</td><td><code>节点IP:30080</code></td><td>任何能连节点 IP 的机器 ← 外层 NGINX 只能用这个</td></tr>
+  </table>
+  <pre><code># ① 终极命令:dump 全部生效配置再筛(比 grep conf.d 全,include 的其他路径一网打尽)
+sudo nginx -T 2>/dev/null | grep -E "proxy_pass|server " | grep -v "#"
+
+# ② 按端口号搜(不是搜 IP!)
+grep -rn "30080\|30443" /etc/nginx/     # 命中 → 有流量走门A(nginx-ingress)
+grep -rn "30538\|30539" /etc/nginx/     # 命中 → 有流量走门B(istio 网关)
+
+# ③ 都搜不到的三个可能:a.配置不在 conf.d(用 nginx -T 确认 include 范围)
+#   b.nginx-backup 那台也有配置(两台都看)  c.istio 流量不经这台 nginx(内网直连 NodePort 或另有入口)
+
+# ④ 集群侧反查交叉验证:看门B 登记了哪些域名,再拿域名回 nginx 配置里 grep
+sudo kubectl get virtualservice -A -o custom-columns='NS:.metadata.namespace,HOSTS:.spec.hosts'</code></pre>
+
+  <h3>✅ 实测结果(2026-10 · nginx-master 上 nginx -T)</h3>
+  <table>
+    <tr><th>大门</th><th>upstream 位置</th><th>节点池(实测)</th><th>承载流量</th></tr>
+    <tr><td>门A nginx-ingress</td><td>conf.d 主配置 upstream <code>nginx-ingress</code></td><td><b>6 节点 × 30080</b><br>(10.18.51.7/.8/.16/.17/.25/.26)</td><td>通用业务域名(多处 <code>proxy_pass http://nginx-ingress</code>)</td></tr>
+    <tr><td>门B istio-ingress</td><td><code>istio-ingress-upstream.conf</code></td><td><b>2 节点 × 30538</b><br>(10.18.51.8/.16)</td><td>目前仅 kubeflow 域名(kubeflow-new.*)</td></tr>
+  </table>
+  <ul>
+    <li><b>证实:</b>upstream 全是<b>节点 IP + NodePort</b>,全配置无一处 ClusterIP —— 与上表结论完全一致。</li>
+    <li><b>30443/30539(443) 未出现:</b>TLS 在外层 NGINX 终止,后端全走 HTTP NodePort(与测试环境 k8s.ergesanbaishou.com 链路同款思路)。</li>
+    <li><b>健康检查:</b><code>max_fails=3 fail_timeout=30s</code> 被动摘除故障节点;门A 6 节点池比门B 2 节点池更抗节点故障。</li>
+    <li><b>意外发现:</b>外层 NGINX 不只代理 K8S —— 还有大量<b>直连物理机后端</b>(192.168.3.x、10.18.x 各端口)的 proxy_pass,它是<b>全公司统一入口</b>,K8S 只是后端之一(见 03 节补充)。</li>
+  </ul>
+
+  <h3>📋 门B 登记表(VirtualService 实测 · 2026-10)</h3>
+  <pre><code>sudo kubectl get virtualservice -A -o custom-columns='NS:.metadata.namespace,HOSTS:.spec.hosts,DEST:.spec.http[*].route[*].destination.host'
+NS            HOSTS   DEST
+auth          [*]     dex.auth.svc.cluster.local
+kubeflow      [*]     centraldashboard.kubeflow.svc.cluster.local
+kubeflow      [*]     jupyter-web-app-service.kubeflow.svc.cluster.local
+kubeflow      [*]     katib-ui.kubeflow.svc.cluster.local
+kubeflow      [*]     kserve-models-web-app.kubeflow.svc.cluster.local
+kubeflow      [*]     metadata-envoy-service.kubeflow.svc.cluster.local
+kubeflow      [*]     ml-pipeline-ui.kubeflow.svc.cluster.local
+kubeflow      [*]     profiles-kfam.kubeflow.svc.cluster.local
+kubeflow      [*]     tensorboards-web-app-service.kubeflow.svc.cluster.local
+kubeflow      [*]     volumes-web-app-service.kubeflow.svc.cluster.local
+oauth2-proxy  [*]     oauth2-proxy.oauth2-proxy.svc.cluster.local</code></pre>
+  <p><b>疑问① 为什么有 9 行都是 kubeflow?</b> 表里每行 = <b>一条独立的 VirtualService</b>(一个组件一条),不是分组统计 —— kubeflow 平台有 9 个 Web 组件,各提交各的规则,NS 列自然出现 9 次(像班级名单 30 人都写同一个班名,不是写重了,是这个班 30 人)。</p>
+  <p><b>疑问② [*] 是什么?</b> 方括号是 custom-columns 显示"数组字段"的格式,<code>[*]</code> = 数组里只有一个元素 <code>*</code>,Istio 通配符 = <b>匹配任意域名</b>。<b>那 9 条都是 * 怎么不打架?</b>因为分流是分层的:<b>域名分流在外层 NGINX 已完成</b>(kubeflow-new.* → 30538 进门),进门后的流量<b>不再看域名,改看路径</b> —— 请求 <code>/jupyter</code> 命中 jupyter 的 VS、<code>/katib</code> 命中 katib 的 VS。上面的命令没显示路径列,补一列就一目了然:</p>
+  <pre><code># 加上 MATCH 列:看每条 VS 靠什么路径分流(2026-10 实测输出如下)
+sudo kubectl get vs -n kubeflow -o custom-columns='NAME:.metadata.name,MATCH:.spec.http[*].match[*].uri.prefix,DEST:.spec.http[*].route[*].destination.host'
+NAME                                        MATCH                DEST
+centraldashboard                            /                    centraldashboard.kubeflow.svc.cluster.local
+jupyter-web-app-jupyter-web-app             /jupyter/            jupyter-web-app-service.kubeflow.svc.cluster.local
+katib-ui                                    /katib/              katib-ui.kubeflow.svc.cluster.local
+kserve-models-web-app                       /kserve-endpoints/   kserve-models-web-app.kubeflow.svc.cluster.local
+metadata-grpc                               /ml_metadata         metadata-envoy-service.kubeflow.svc.cluster.local
+ml-pipeline-ui                              /pipeline            ml-pipeline-ui.kubeflow.svc.cluster.local
+profiles-kfam                               /kfam/               profiles-kfam.kubeflow.svc.cluster.local
+tensorboards-web-app-tensorboards-web-app   /tensorboards/       tensorboards-web-app-service.kubeflow.svc.cluster.local
+volumes-web-app-volumes-web-app             /volumes/            volumes-web-app-service.kubeflow.svc.cluster.local</code></pre>
+  <p><b>实证落地:</b>9 条 VS 9 个路径,各管一段 —— <code>/jupyter/</code> 进笔记本、<code>/katib/</code> 进调参、<code>/pipeline</code> 进流水线…其中 <code>centraldashboard</code> 匹配 <code>/</code>(根路径)= <b>兜底门户</b>:没命中具体组件前缀的请求落到门户首页(Istio 按最长前缀优先匹配,<code>/</code> 最宽所以天然垫底)。</p>
+
+  <p><b>⚠️ 易混点:不是"不同域名→不同路径",而是"同一个域名的不同路径→不同组件"。</b>域名和路径是同一个 URL 的两半,分流是<b>接力棒式</b>的:</p>
+  <pre><code>浏览器地址栏:  https://kubeflow-new.ergesanbaishou.com/jupyter/notebook1
+               └──────────── 域名(host) ───────────┘└─ 路径(path)─┘
+
+三棒接力(每棒只看自己那半):
+① 公司 DNS     看"域名" → 解析到外层 NGINX 的 VIP
+② 外层 NGINX   看"域名" → kubeflow-new.* → 30538 进门B(域名使命到此结束)
+③ 门B 的 VS    看"路径" → /jupyter/ 命中 jupyter 那条 → jupyter-web-app-service
+
+门B 里所有流量的域名都一样,变的只是路径:
+  kubeflow-new.…/           → / (兜底)   → 门户首页
+  kubeflow-new.…/jupyter/   → /jupyter/  → 笔记本
+  kubeflow-new.…/katib/     → /katib/    → 调参
+  kubeflow-new.…/pipeline   → /pipeline  → 流水线</code></pre>
+  <p><b>"有相同的"解惑:</b>HOSTS 列全 <code>[*]</code> 是<b>真的全相同</b> —— 第③棒不看域名,通配一切;MATCH 列 9 个路径<b>互不相同</b>(都以 <code>/</code> 开头只是路径的标准写法),单独的 <code>/</code> 是最宽的兜底。比喻:域名决定去哪栋楼,路径决定进楼后去几号窗口。</p>
+  <div class="tip"><b>💡 顺手的坑:</b>缩写 <code>vs</code> 会触发 Warning —— 它还能匹配 <code>volumesnapshots</code>(存储快照)资源;kubectl 已自动选了高优先级的 virtualservices,确认意图即可,怕歧义可写全称 <code>virtualservices</code>。</div>
+  <ul>
+    <li><b>读表两点:</b>① 门B 服务 <b>3 个 ns</b>(kubeflow ×9 + auth ×1 + oauth2-proxy ×1)—— 实锤"一扇大门服务所有 ns";② DEST 全是 <code>&lt;Service名&gt;.&lt;ns&gt;.svc.cluster.local</code> 标准长格式(与 MySQL 文档 M5 的 DNS 公式同一套)。</li>
+    <li><b>认证链浮出水面:</b><code>oauth2-proxy</code>(统一认证代理)+ <code>dex</code>(OIDC 身份源)也在门B —— 外部请求先过认证链再到 kubeflow 各组件,这就是 oauth2-proxy / auth 两个 ns 的真实角色。</li>
+    <li><b>kubeflow 全家桶 UI 全在门B:</b>centraldashboard(门户)/jupyter-web-app(笔记本)/katib(调参)/kserve(模型服务)/ml-pipeline(流水线)/profiles(多用户)/tensorboards/volumes —— 9 条 VS 正好对应 kubeflow 平台的 9 个 Web 组件。</li>
+  </ul>
+</section>
+
+<!-- ================= 5. NS 地图 ================= -->
+<section id="o5">
+  <h2><span class="no">05</span>第④层:NS 分区地图(40+ namespace 全分类)</h2>
+  <p>namespace 是 K8S 的"分区":<b>资源隔离 + 权限边界 + 名字空间</b>(同集群不同 ns 里可以有同名 Service)。线上 40+ 个 ns 按职能分成 12 类:</p>
+  <table>
+    <tr><th>分区</th><th>namespace</th><th>干什么用</th></tr>
+    <tr><td>🏢 业务</td><td><code>app</code> / <code>app-dev</code> / <code>app-uat</code> / <code>auth</code> / <code>on-premises</code> / <code>fke-profile</code></td><td>业务应用三环境(dev/uat/prod)+ 认证 + 本地化服务</td></tr>
+    <tr><td>🗄️ 数据</td><td><code>fke-db</code> / <code>fke-db-dev</code></td><td>MySQL 集群(mysql-operator InnoDB Cluster,community-server 8.4.7,每套库 3 实例起步)—— 详见 <a href="k8s-mysql.html">MySQL 文档 M1</a></td></tr>
+    <tr><td>🔌 中间件</td><td><code>fke-middleware</code></td><td>MQ/缓存等通用中间件</td></tr>
+    <tr><td>🛠 CI/CD</td><td><code>gitlab</code> / <code>jenkins-ci</code> / <code>argo</code> / <code>smart-ops-pipelines</code> / <code>code-server</code> / <code>pingcode</code></td><td>代码托管、流水线、运维自动化</td></tr>
+    <tr><td>📦 镜像</td><td><code>harbor</code></td><td>私有镜像仓库 docker.ergesanbaishou.com(线上镜像都从这拉)—— 见 <a href="harbor.html">Harbor 文档</a></td></tr>
+    <tr><td>📊 可观测</td><td><code>fke-monitor</code> / <code>fke-log</code></td><td>监控(Prometheus 系)与日志采集</td></tr>
+    <tr><td>💾 存储</td><td><code>longhorn-system</code></td><td>Longhorn 分布式块存储,业务 PVC 的底座(扩容实战见 <a href="k8s-issues.html">问题总汇</a>)</td></tr>
+    <tr><td>🕸 网格/入口</td><td><code>istio-system</code> / <code>knative-serving</code> / <code>oauth2-proxy</code></td><td>服务网格网关、serverless、统一认证</td></tr>
+    <tr><td>🤖 AI/ML</td><td><code>kubeflow</code> / <code>kubeflow-components</code> / <code>datacollect-kubeflow</code> / <code>jobset-system</code> / <code>kubeflow-infra-ergesanbaishou-com</code></td><td>机器学习平台、任务编排</td></tr>
+    <tr><td>🎥 音视频</td><td><code>livekit</code> / <code>stunner</code> / <code>stunner-system</code></td><td>实时音视频、WebRTC 打洞</td></tr>
+    <tr><td>⚙️ K8S 系统</td><td><code>kube-system</code> / <code>kube-public</code> / <code>kube-node-lease</code> / <code>default</code> / <code>kube-infra</code> / <code>fke-infra-dev</code></td><td>控制面与系统组件(别乱动)</td></tr>
+    <tr><td>🐄 Rancher</td><td><code>cattle-system</code> / <code>cattle-impersonation-system</code> / <code>local</code></td><td>Rancher 管理面本体</td></tr>
+  </table>
+  <div class="tip"><b>💡 找东西的套路:</b>不知道某服务在哪个 ns?—— <code>sudo kubectl get svc -A | grep 关键字</code> 一把梭;<code>-A</code>(all namespaces)是跨分区搜索的钥匙。</div>
+</section>
+
+<!-- ================= 6. 逐层验证 ================= -->
+<section id="o6">
+  <h2><span class="no">06</span>逐层验证命令(fke 实操)</h2>
+  <pre><code># ① DNS 层:域名解析到 VIP 了吗?
+nslookup xxx.ergesanbaishou.com
+
+# ② 入口层:NGINX 主备与 VIP(在 NGINX 机器上)
+ip addr | grep &lt;VIP&gt;                    # VIP 当前漂在哪台(VIP 在谁身上谁就是 Master)
+systemctl status nginx keepalived
+
+# ③ 集群层:节点 / 双网关 / 路由
+sudo kubectl get nodes -o wide
+sudo kubectl get svc -A | grep ingress          # 双网关与 NodePort(ingress-nginx 在 kube-infra!)
+sudo kubectl get ingress -A; sudo kubectl get gateway -A 2>/dev/null
+
+# ④ NS 层:全景 / 定位服务 / 看某个分区
+sudo kubectl get ns
+sudo kubectl get svc -A | grep -i mysql        # 例:找所有数据库服务
+sudo kubectl get pods,svc,deploy -n app        # 进业务区细看
+
+# ⑤ 落到 Pod:与测试集群完全同款
+sudo kubectl describe pod &lt;pod名&gt; -n &lt;ns&gt;
+sudo kubectl logs &lt;pod名&gt; -n &lt;ns&gt; --tail=50</code></pre>
+  <div class="warn"><b>⚠ 权限与安全:</b>线上命令都要 <code>sudo</code>,且<b>只读优先</b>。命令安全分级速查:</div>
+  <table>
+    <tr><th>级别</th><th>命令</th><th>说明</th></tr>
+    <tr><td>🟢 随便跑(纯只读)</td><td><code>get</code> / <code>describe</code> / <code>logs</code> / <code>top</code> / <code>get -o yaml</code> / <code>-A</code> / <code>custom-columns</code></td><td>只查不改,连资源状态都不碰;<code>custom-columns</code> 只是控制"显示哪几列",零风险</td></tr>
+    <tr><td>🟡 谨慎(会触发行为)</td><td><code>exec</code> / <code>port-forward</code> / <code>logs -f</code> / 直连 curl 后端</td><td>本质只读,但会连进 Pod/占端口;<code>exec</code> 里别敲重启类命令</td></tr>
+    <tr><td>🔴 必须先确认(写操作)</td><td><code>apply</code> / <code>create</code> / <code>delete</code> / <code>edit</code> / <code>scale</code> / <code>patch</code> / <code>rollout</code> / <code>set</code></td><td>直接改集群状态 —— 线上不是练手场,练手请回测试集群(qingfeng 单节点)</td></tr>
+  </table>
+</section>
+
+<!-- ================= 7. 对照与待确认 ================= -->
+<section id="o7">
+  <h2><span class="no">07</span>测试环境 vs 线上 对照 &amp; 待确认清单</h2>
+  <table>
+    <tr><th>维度</th><th>测试(qingfeng 单节点)</th><th>线上(fke)</th></tr>
+    <tr><td>集群形态</td><td>1 节点,kubeadm 自建</td><td>多节点,Rancher 管理</td></tr>
+    <tr><td>统一入口</td><td>外层 NGINX 主从 + VIP</td><td>外层 NGINX 主备 + VIP(同构)</td></tr>
+    <tr><td>七层网关</td><td>ingress-nginx(NodePort 31588)</td><td>双网关:ingress-nginx(kube-infra · 30080/30443)+ istio-gateway(30538/30539)</td></tr>
+    <tr><td>MySQL</td><td>Bitnami chart 1主1备(8.4.5)</td><td>mysql-operator InnoDB Cluster(8.4.7,3 实例起步)</td></tr>
+    <tr><td>镜像源</td><td>docker.io(bitnamilegacy 归档)</td><td>私仓 docker.ergesanbaishou.com</td></tr>
+    <tr><td>存储</td><td>本地默认 SC</td><td>Longhorn 分布式存储</td></tr>
+    <tr><td>ns 数量</td><td>个位数</td><td>40+(12 类分区)</td></tr>
+  </table>
+  <div class="warn"><b>📋 待确认清单(确认后更新本文档):</b>① VIP 值与 keepalived 配置(在 nginx-master 上 <code>ip addr</code> 可自查);② fke 完整节点清单与角色(已知节点 IP 段 10.18.51.x,至少 .2/.7/.8/.11/.16/.17/.20/.25/.26);③ DNS 服务器在哪管理。<br><b>✅ 已销项:</b>入口网关走向(2026-10 实测)—— 门A 30080×6 节点(通用业务)+ 门B 30538×2 节点(仅 kubeflow),TLS 在外层终止,详见 04 节;原"入口是否 Istio"也已解决:双网关并存。</div>
+</section>
+
+<footer>
+  <p>清风 · K8S Web 学习中心 —— 线上架构篇 · 2026-10 · <a href="index.html">返回首页</a></p>
+</footer>
+</div>
+</body>
+</html>

@@ -96,10 +96,10 @@ kubectl get pods -A | grep -i mysql
 # 2. ★ 最快:直接看容器镜像 tag(不用密码、不用进容器)
 kubectl get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,IMAGE:.spec.containers[*].image' | grep -i mysql
 # NS       POD                                IMAGE
-# fke-db   fke-mysql-hmsserver-prod-0         docker.fftaicorp.com/kube-publicmysql/community-operator:8.4.7-2.1.9,docker.fftaicorp.com/kube-public/mysql/community-server:8.4.7
+# fke-db   fke-mysql-hmsserver-prod-0         docker.ergesanbaishou.com/kube-publicmysql/community-operator:8.4.7-2.1.9,docker.ergesanbaishou.com/kube-public/mysql/community-server:8.4.7
 # fke-db   fke-mysql-hmsserver-prod-1         ...(同上,每套库 3 个实例 -0/-1/-2)
-# fke-db   fke-mysql-hmsserver-prod-router-…  docker.fftaicorp.com/kube-public/mysql/community-router:8.4.7
-# fke-db   mysql-operator-5b99fcbbc7-qxzjb    docker.fftaicorp.com/kube-publicmysql/community-operator:8.4.7-2.1.9
+# fke-db   fke-mysql-hmsserver-prod-router-…  docker.ergesanbaishou.com/kube-public/mysql/community-router:8.4.7
+# fke-db   mysql-operator-5b99fcbbc7-qxzjb    docker.ergesanbaishou.com/kube-publicmysql/community-operator:8.4.7-2.1.9
 #                                            ↑↑↑↑ ★ 本环境线上 MySQL 版本 = 8.4.7(8.4 LTS);tag 里的 -2.1.9 是 operator 版本号
 # mysql    mysql-primary-0                    docker.io/bitnami/mysql:8.4.7-debian-12-rX   ← 本文目标(=线上 8.4.7,装法见 M3)
 
@@ -141,7 +141,7 @@ helm get metadata mysql -n mysql    # 看 chart_version / app_version</code></pr
 
 # "备"的两层含义都占了:① 数据实时同步(热备,主盘炸了数据还在备上);
 #                      ② 备库可对外提供只读服务(读写分离),不是躺着睡觉的冷备</code></pre>
-  <div class="tip"><b>💡 本环境线上实况(2026-10 实测):</b><code>fke-db</code> / <code>fke-db-dev</code> 里的 MySQL 全部是 <b>mysql-operator(InnoDB Cluster)</b> 方案 —— 每套库 = 3 个 <code>community-server:8.4.7</code> 实例(-0/-1/-2) + 2~4 个 <code>community-router:8.4.7</code> + 全局一个 <code>mysql-operator</code>(8.4.7-2.1.9),镜像走私仓 <code>docker.fftaicorp.com</code>。本文仍用 Bitnami chart 装自己的 1主1备,<b>版本对齐线上 8.4.7</b>;要与线上完全同构(自动切换)请走 mysql-operator 路线 —— 注意 InnoDB Cluster <b>最少 3 实例</b>起步,没有"1主1备"形态。</div>
+  <div class="tip"><b>💡 本环境线上实况(2026-10 实测):</b><code>fke-db</code> / <code>fke-db-dev</code> 里的 MySQL 全部是 <b>mysql-operator(InnoDB Cluster)</b> 方案 —— 每套库 = 3 个 <code>community-server:8.4.7</code> 实例(-0/-1/-2) + 2~4 个 <code>community-router:8.4.7</code> + 全局一个 <code>mysql-operator</code>(8.4.7-2.1.9),镜像走私仓 <code>docker.ergesanbaishou.com</code>。本文仍用 Bitnami chart 装自己的 1主1备,<b>版本对齐线上 8.4.7</b>;要与线上完全同构(自动切换)请走 mysql-operator 路线 —— 注意 InnoDB Cluster <b>最少 3 实例</b>起步,没有"1主1备"形态。</div>
   <div class="warn"><b>⚠️ 两个必须知道的真相:</b>① 该 chart <b>不做自动故障切换</b> —— primary Pod 挂了 K8s 会把它原样拉起(数据在 PVC 里不丢),但 secondary 不会自动升主;要"主挂备自动顶上"请上 mysql-operator,复杂度高一个量级。② <b>异步复制有秒级延迟</b>:刚在主上写完立刻查备库可能读不到,强一致读写都走 primary。</div>
 </section>
 <!-- ================= M3. 安装 ================= -->
@@ -272,6 +272,12 @@ kubectl exec -n mysql mysql-secondary-0 -- env MYSQL_PWD=$PW mysql -uroot -e "SH
 <!-- ================= M5. 连接使用 ================= -->
 <section id="m5">
   <h2><span class="no">M5</span>连接使用:主写从读 —— 谁该连哪个地址</h2>
+  <pre><code>                     ┌─ NodePort 30306 ──→ mysql-primary-0   (10.244.0.94)  读写
+集群外(Navicat等) ───┤
+                     └─ NodePort 30307 ──→ mysql-secondary-0 (10.244.0.93)  只读热备
+
+集群内应用 ──→ mysql-primary.mysql.svc.cluster.local:3306    (写)
+           ──→ mysql-secondary.mysql.svc.cluster.local:3306  (读)</code></pre>
   <table>
     <tr><th>场景</th><th>连谁</th><th>地址</th></tr>
     <tr><td>写入 / 事务 / 强一致读</td><td>主库(必)</td><td><code>mysql-primary.mysql.svc.cluster.local:3306</code></td></tr>
@@ -304,6 +310,8 @@ kubectl exec -n mysql mysql-secondary-0 -- env MYSQL_PWD=$PW mysql -uroot -e \
     <li><b>应用侧最省事:</b>没做读写分离中间件就<b>全部连 primary</b>,备库纯当热备,不必强读写分离。</li>
     <li><b>-h 后缀的 headless Service</b>(<code>mysql-primary-h</code>)是给 StatefulSet 稳定 DNS 用的,应用别连它。</li>
     <li><b>两个 3306 为何不冲突:</b>Pod 各有独立 IP(独立网络空间);<code>3306:30306</code> 冒号前的 3306 只是"转发到 Pod 的目标端口",节点上真正监听的是 nodePort(30306/30307,<code>ss -lnt</code> 可查),kube-proxy 从不在节点上直接监听 3306。</li>
+    <li><b>DNS 为什么这么拼:</b><code>mysql-primary.mysql.svc.cluster.local</code> = <code>&lt;Service名&gt;.&lt;namespace&gt;.svc.cluster.local</code> —— svc 是 k8s 内置的"服务"类标记,cluster.local 是集群默认域名(CoreDNS 定的);同 namespace 连短名 <code>mysql-primary</code> 即可(Pod 里 resolv.conf 的 search 域自动补全),跨 namespace 才用全名。★ 注意两个 mysql 含义不同:前缀里的 mysql 是 release 名,中间的 mysql 是 namespace 名,纯属撞名。</li>
+    <li><b>宿主机 ping 不通集群域名是正常的:</b>CoreDNS(10.96.0.10)只服务 Pod —— Pod 的 resolv.conf 才指向它,宿主机用自己的 DNS 不认识 <code>mysql-primary</code>。宿主机想查:<code>nslookup mysql-primary.mysql.svc.cluster.local 10.96.0.10</code>;测端口:<code>timeout 3 bash -c '&lt;/dev/tcp/10.107.128.199/3306' &amp;&amp; echo OPEN</code>(ClusterIP 节点可达,kube-proxy 规则在节点上也生效)。</li>
     <li><b>Navicat/DBeaver 连不上?</b>先用 port-forward 法验证账号密码,再查 NodePort/防火墙 —— 分层排查。</li>
   </ul>
 </section>
@@ -330,6 +338,20 @@ ls -lh mysql-all-*.sql        # 恢复:mysql -uroot -p &lt; mysql-all-2026-10-22
   <pre><code>helm uninstall mysql -n mysql
 kubectl delete pvc -n mysql data-mysql-primary-0 data-mysql-secondary-0   # ★ 数据将清空,确认再敲
 kubectl delete ns mysql</code></pre>
+  <h3>⑤ values 文件丢了 / 要部署到另一套集群:导出与迁移</h3>
+  <pre><code># 从已有 release 导回 values(接手别人装的环境同样适用!)
+helm get values mysql -n mysql          # 只看你 -f 传的自定义项 = values-mysql.yaml 的等效物
+helm get values mysql -n mysql --all    # 自定义 + chart 默认全量(排错看全貌用)
+helm get manifest mysql -n mysql        # 渲染后的最终 YAML(所有资源对象实际长这样)
+helm history mysql -n mysql             # 升级历史,每次 REVISION 都可回滚
+
+# 把这套部署搬去另一套集群(如公司线上 fke)的 checklist:
+# 1) 传文件:scp values-mysql.yaml 用户@线上操作机:/data/git/mysql/
+# 2) 切集群:kubectl config get-contexts 看有哪些 → kubectl config use-context &lt;目标&gt;
+# 3) values 按目标集群改:密码(换正式的!)/storageClass(kubectl get sc 查目标集群的)/size/NodePort 端口(避开占用)
+# 4) 镜像源:公司线上走私仓 docker.ergesanbaishou.com —— image.repository 改私仓路径(bitnami 镜像需私仓已有或可代理;
+#    若线上直连 docker.io 受限,bitnamilegacy 同样要提前验证可拉)
+# 5) 安装命令原样照搬:helm install ... --version 12.3.5 -f /data/git/mysql/values-mysql.yaml</code></pre>
   <div class="tip"><b>💡 变更三板斧:</b>改 values → <code>helm upgrade</code>(Helm 只 apply 差异)→ <code>kubectl rollout status</code> 盯滚动。永远别 <code>kubectl edit</code> Helm 管理的资源 —— 下次 upgrade 会被打回原形。Helm 常用命令速查另见 <a href="k8s-cmd.html">命令速查</a>。</div>
 </section>
 

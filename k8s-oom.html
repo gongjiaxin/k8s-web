@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S 问题之内存 OOM · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  /* 架构图 */
+  .arch{margin:16px 0}
+  .arch .box{border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:0 auto;max-width:760px;background:var(--card)}
+  .arch .box h4{color:var(--cyan);font-size:15px;margin-bottom:6px}
+  .arch .box ul{margin:4px 0 2px 18px;font-size:13.5px;color:var(--muted)}
+  .arch .box li b{color:var(--txt)}
+  .arch .arrow{text-align:center;font-size:13.5px;color:var(--blue);margin:6px 0;line-height:1.4}
+  .arch .arrow .tri{display:block;font-size:20px}
+  .arch .danger{border-color:rgba(252,129,129,.5);background:rgba(252,129,129,.06)}
+  .arch .danger h4{color:var(--red)}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / K8S 问题之内存 OOM</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>💥 K8S 问题之内存 OOM
+    <small>线上实录:生产 InfluxDB 3 CrashLoopBackOff 156 天 / 4256 次重启 / 域名 503 —— 现象 → 排查 → 根因 → 修复 → 已验证,全程真实命令可复制</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#c1">事故速览(一表看懂)</a></li>
+    <li><a href="#c2">现象:三层表象与因果链</a></li>
+    <li><a href="#c3">排查:顺藤摸瓜六步</a></li>
+    <li><a href="#c4">根因:OOM 死循环机理</a></li>
+    <li><a href="#c5">解决:一条 patch 三把钥匙</a></li>
+    <li><a href="#c6">已验证:恢复证据(2026-10-26)</a></li>
+    <li><a href="#c7">避坑备忘(退出码/探针/回滚)</a></li>
+    <li><a href="#c8">加固清单 + 验收命令速查</a></li>
+    <li><a href="#c9">附:InfluxDB 3 存算分离架构</a></li>
+  </ol>
+</nav>
+<!-- ================= 1. 事故速览 ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>事故速览 —— 一表看懂</h2>
+  <table>
+    <tr><th>项目</th><th>内容</th></tr>
+    <tr><td>故障对象</td><td><code>kube-infra/fke-influxdb</code>(InfluxDB 3.3.0 Bitnami 镜像,后端存储 Ceph S3,生产库 <code>hms-history-31d-v1-3</code>)</td></tr>
+    <tr><td>故障表现</td><td>域名 <code>fke-influxdb.fftaicorp.com</code> 整站 503;外部 nginx <code>SSL_read() unexpected eof</code> crit 风暴;Pod <code>CrashLoopBackOff</code></td></tr>
+    <tr><td>持续时长</td><td><b>156 天</b>,累计重启 <b>4256+ 次</b>(事件计数 BackOff x95395)</td></tr>
+    <tr><td>根因</td><td><b>OOMKilled(exitCode 137)</b>:内存 limit 仅 <code>4Gi</code>,而启动时要回放 <b>687 万个</b> WAL 碎片文件,回放期间内存峰值 10 秒内冲破上限被杀,无限死循环</td></tr>
+    <tr><td>修复</td><td>一条 <code>kubectl patch</code>:内存提到 <code>48Gi</code> + 摘除 liveness/readiness 探针 + 钉到大内存节点 → 一次启动成功</td></tr>
+    <tr><td>结果</td><td>Pod 稳定 Running 0 重启,实际内存仅 <code>319Mi</code>;带 token <code>/health</code> 返回 <b>200</b>;生产写入恢复(已验证)</td></tr>
+  </table>
+  <div class="tip"><b>💡 一句话:</b>503 和 SSL 报错都只是"果",病根是 <b>OOM 死循环</b>;而 OOM 的深层原因,是 <b>WAL 碎片化(每秒 1 个文件 × 156 天)</b> 让每次启动的回放内存远超配额。</div>
+</section>
+<!-- ================= 2. 现象 ================= -->
+<section id="c2">
+  <h2><span class="no">02</span>现象 —— 三层表象与因果链</h2>
+
+  <h3>表象一:外部 nginx 的 SSL crit 风暴(最初误判点)</h3>
+  <pre><code>2026/10/26 ... [crit] ... *123456 SSL_read() failed (SSL: ... unexpected eof while reading client request headers)
+2026/10/26 ... [crit] ... *123457 SSL_read() failed (SSL: ... unexpected eof while reading client request body)</code></pre>
+  <p>客户端<b>粗暴掐断 TLS 连接</b>导致。当时以为是 InfluxDB 写入客户端超时断连 —— 后经 access.log 核实,这批 crit 主要来自 <b>apt 软件源客户端中断下载</b>(UA 为 <code>Debian APT-HTTP/1.3</code>),与本案是两件事(见第 06 节附注)。教训:crit 日志先看请求来源再定性。</p>
+
+  <h3>表象二:域名整站 503</h3>
+  <pre><code>$ curl -sk -o /dev/null -w '%{http_code}\n' https://fke-influxdb.fftaicorp.com/health
+503</code></pre>
+
+  <h3>表象三:Pod 崩了 156 天没人发现</h3>
+  <pre><code>$ kubectl get pods -n kube-infra | grep influx
+fke-influxdb-6468d5d8d-hjkhr   0/1   CrashLoopBackOff   4256 (3m13s ago)   156d</code></pre>
+
+  <h3>完整因果链(破案路线)</h3>
+  <pre><code>写入端高频小批量写入(每秒 1 op)
+   └→ WAL 碎片化:687 万个小文件堆在 Ceph S3 上,持久化滞后 17 天
+        └→ 每次启动需全量回放 WAL → 未持久化数据全部加载进内存写缓冲
+             └→ 内存峰值 10 秒内冲破 4Gi limit → OOMKilled (137)
+                  └→ 重启 → 又回放 → 又 OOM → 无限 CrashLoop(4256 次)
+                       └→ Pod 永远不 Ready → Service endpoints 永远为空
+                            └→ Ingress 无可用后端 → 域名 503
+                                 └→ 客户端写入全部失败 → 各种连锁报错</code></pre>
+</section>
+<!-- ================= 3. 排查 ================= -->
+<section id="c3">
+  <h2><span class="no">03</span>排查 —— 顺藤摸瓜六步</h2>
+
+  <h3>第 1 步:从域名往下钻,确认流量归属</h3>
+  <pre><code>sudo kubectl describe ingress fke-influxdb -n kube-infra
+# → 后端指向 Service kube-infra/fke-influxdb:8181
+
+sudo kubectl get endpoints fke-influxdb -n kube-infra
+# → endpoints 为空!Service 后面没有健康 Pod → 503 的直接原因</code></pre>
+
+  <h3>第 2 步:看 Pod 本体,拿到崩溃画像</h3>
+  <pre><code>sudo kubectl describe pod fke-influxdb-6468d5d8d-hjkhr -n kube-infra | tail -40
+# Events:
+#   Warning  BackOff  2m21s (x95395 over 14d)  kubelet  Back-off restarting failed container
+# Conditions: Ready=False, ContainersReady=False
+# 关键环境变量: INFLUXDB_OBJECT_STORE=s3, AWS_ENDPOINT=https://fke-ceph.fftaicorp.com
+# 挂载: 只有 secret + /tmp emptyDir(无 PVC,WAL 在对象存储上)</code></pre>
+
+  <h3>第 3 步:拿"死因"—— 退出码(本案定音锤)</h3>
+  <pre><code>sudo kubectl get pod fke-influxdb-6468d5d8d-hjkhr -n kube-infra \
+  -o jsonpath='{.status.containerStatuses[0].lastState}'; echo
+
+{"terminated":{... "exitCode":137,"finishedAt":"...T03:39:12Z",
+  "reason":"OOMKilled","startedAt":"...T03:39:02Z"}}
+
+# exitCode 137 + reason OOMKilled,且 startedAt→finishedAt 只隔 10 秒:
+# 容器启动 10 秒即被 OOM 杀掉!</code></pre>
+
+  <h3>第 4 步:看配额,确认天花板</h3>
+  <pre><code>sudo kubectl get deploy fke-influxdb -n kube-infra -o yaml | grep -A4 'resources:'
+#   limits:  {cpu: "2", memory: 4Gi}
+#   requests:{cpu: "1", memory: 2Gi}</code></pre>
+
+  <h3>第 5 步:看上一个容器的日志,找到"内存黑洞"</h3>
+  <pre><code>sudo kubectl logs fke-influxdb-6468d5d8d-hjkhr -n kube-infra --previous 2>&1 | grep -viE 'Persisting' | tail -40
+
+# 大量: INFO influxdb3_wal::object_store: replaying WAL file ...
+#        n_ops=1 ... wal_file_number=6879325 → 6879341(还在递增)
+# 另一波: INFO influxdb3_write::write_buffer: Persisting 6000+ rows ...
+#        → 落盘的 parquet 文件日期是 17 天前的!(持久化严重滞后)</code></pre>
+
+  <h3>第 6 步:闭环结论</h3>
+  <p>WAL 文件编号已到 <b>687 万</b>且每个只有 <code>n_ops=1</code>;按日志回放速度(约 570 个/秒)估算,<b>完整回放需要 3 小时以上</b>,而容器 10 秒就 OOM——<b>回放永远跑不完,每次重启从头再来</b>,这就是 4256 次重启的死循环本质。</p>
+</section>
+<!-- ================= 4. 根因 ================= -->
+<section id="c4">
+  <h2><span class="no">04</span>根因 —— OOM 死循环机理</h2>
+
+  <h3>四个因素叠加,缺一不可</h3>
+  <table>
+    <tr><th>#</th><th>因素</th><th>细节</th></tr>
+    <tr><td>1</td><td>内存配额太小</td><td><code>limits.memory=4Gi</code>,是按"正常运行"估的,没考虑<b>启动回放峰值</b></td></tr>
+    <tr><td>2</td><td>WAL 碎片化</td><td>写入端每秒 1 个小操作 → 每个操作生成 1 个 WAL 文件 → 156 天攒了 <b>687 万个</b>文件在 Ceph S3 上</td></tr>
+    <tr><td>3</td><td>启动必须全量回放</td><td>InfluxDB 3 把 WAL 放对象存储,启动时要把<b>所有未持久化数据加载进内存写缓冲</b>再逐批落盘成 parquet</td></tr>
+    <tr><td>4</td><td>持久化滞后 17 天</td><td>落盘速度追不上写入速度,缓冲越积越大 → 回放内存峰值一年比一年高,终于在某个时刻突破 4Gi</td></tr>
+  </table>
+
+  <h3>死循环全景</h3>
+  <pre><code>启动 → 回放 WAL(内存持续上涨)→ 10 秒冲破 4Gi → OOMKilled
+  ↑                                                    ↓
+  └────── kubelet 按 BackOff 间隔重启(最长 5 分钟)←──┘
+
+副作用:每次重启前顺手落一小批盘(所以日志里能看到 Persisting),
+但 4256 次 × 每次 10 秒,永远磨不完 17 天的积压。</code></pre>
+
+  <div class="warn"><b>⚠️ 为什么说是"慢性病"而不是"猝死":</b>服务不是某天突然崩的——WAL 积压天天涨,回放内存峰值天天涨,<b>涨过 4Gi 那天</b>就进入死循环。之后任何重启都救不了它,因为"重启"本身就是死循环的一环。唯一出路是<b>给足内存让它一次跑完回放 + 落盘,把积压清零</b>。</div>
+
+  <h3>为什么 503 与 SSL 报错持续出现</h3>
+  <p>Pod 永远不 Ready → <code>endpoints</code> 永远为空 → Ingress 对该域名一律 503;写入客户端等不到有效响应/超时,粗暴掐断 TLS 连接,外部 nginx 便记录 SSL crit。表象在 nginx,病根在 OOM。</p>
+</section>
+<!-- ================= 5. 解决 ================= -->
+<section id="c5">
+  <h2><span class="no">05</span>解决 —— 一条 patch 三把钥匙</h2>
+
+  <h3>先看节点有没有余量</h3>
+  <pre><code>sudo kubectl top nodes
+# fke-01-runner  207624Mi  27%   ← 768GB 大内存机器
+# fke-02-runner  323970Mi  43%   ← 同上,选它(老 Pod 本来就在这,必能调度)</code></pre>
+
+  <h3>修复命令(三件事一次做完)</h3>
+  <pre><code>sudo kubectl patch deploy fke-influxdb -n kube-infra --type json -p='[
+  {"op":"remove","path":"/spec/template/spec/containers/0/livenessProbe"},
+  {"op":"remove","path":"/spec/template/spec/containers/0/readinessProbe"},
+  {"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"48Gi"},
+  {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"16Gi"},
+  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"kubernetes.io/hostname":"fke-02-runner.fftaicorp.com"}}
+]'</code></pre>
+
+  <h3>为什么要做这三件事</h3>
+  <table>
+    <tr><th>钥匙</th><th>作用</th><th>不做会怎样</th></tr>
+    <tr><td><b>内存 48Gi</b></td><td>给回放留足峰值空间</td><td>继续 10 秒 OOM,死循环</td></tr>
+    <tr><td><b>摘掉 liveness/readiness</b></td><td>回放期间(约 3 小时)HTTP 端口未监听,tcpSocket 探针 40 秒就会误杀</td><td>OOM 修好了也会被探针杀,换一种死法</td></tr>
+    <tr><td><b>钉到大内存节点</b></td><td>普通节点剩余内存有限,768GB 的 runner 节点随便给</td><td>可能调度到紧节点,或 limit 形同虚设</td></tr>
+  </table>
+
+  <h3>踩坑实录:nodeSelector 值必须"一字不差"</h3>
+  <pre><code># 第一次钉 fke-01-runner 时 Pod Pending,事件显示:
+#   30 node(s) didn't match Pod's node affinity/selector
+# 原因:节点的 kubernetes.io/hostname 标签值可能与节点名不一致(短名 vs FQDN)
+
+# 正确姿势:先读节点真实标签值,再用它打补丁
+H=$(sudo kubectl get node fke-02-runner.fftaicorp.com \
+  -o jsonpath='{.metadata.labels.kubernetes\.io/hostname}')
+echo "实际标签值: [$H]"
+sudo kubectl patch deploy fke-influxdb -n kube-infra --type json -p \
+  "[{\"op\":\"replace\",\"path\":\"/spec/template/spec/nodeSelector\",\"value\":{\"kubernetes.io/hostname\":\"$H\"}}]"</code></pre>
+
+  <h3>修复后的监控三件套</h3>
+  <pre><code># ① Pod 状态 + 内存(内存贴 47-48Gi 就再升 96Gi)
+watch -n 30 'kubectl get pods -n kube-infra -o wide | grep influx; kubectl top pod -n kube-infra | grep influx'
+
+# ② 落盘进度:parquet 文件日期从 17 天前一路追到"今天"就是好转
+kubectl logs -f &lt;新pod名&gt; -n kube-infra 2&gt;&amp;1 | grep --line-buffered 'Persisting' | tail -3
+
+# ③ 验收:带 token 打 /health
+TOKEN=$(sudo kubectl get secret fke-influxdb -n kube-infra \
+  -o jsonpath='{.data.admin-token}' | base64 -d)
+curl -s -o /dev/null -w 'health: %{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+  -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health</code></pre>
+</section>
+<!-- ================= 6. 已验证 ================= -->
+<section id="c6">
+  <h2><span class="no">06</span>已验证 —— 恢复证据(2026-10-26)</h2>
+
+  <h3>证据 1:Pod 稳定存活,重启计数归零</h3>
+  <pre><code>$ kubectl get pods -n kube-infra -o wide | grep influx
+fke-influxdb-c698999cd-dqzzx   1/1   Running   0   115s   10.244.193.20   fke-02-runner
+
+# 156 天来第一次摆脱"10 秒暴毙",老 Pod hjkhr 被滚动更新替换</code></pre>
+
+  <h3>证据 2:实际内存仅 319Mi(远低于天花板)</h3>
+  <pre><code>$ kubectl top pod -n kube-infra | grep influx
+fke-influxdb-c698999cd-dqzzx   15m   319Mi</code></pre>
+  <p>说明 4Gi 撑不住的是<b>启动回放的瞬时峰值</b>,不是常态负载——这也是 OOM 类问题最迷惑人的地方:<code>kubectl top</code> 平时根本看不到峰值。</p>
+
+  <h3>证据 3:域名 503 → 401(服务复活)</h3>
+  <pre><code>$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: fke-influxdb.fftaicorp.com' \
+    http://10.18.51.8:30080/health
+401          # 带鉴权的 API 服务,没带 token 返回 401 = 正常(503 才是故障)
+
+$ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+    -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health
+200          # ✅ 数据面正式恢复</code></pre>
+
+  <h3>证据 4:生产写入已恢复(最硬指标)</h3>
+  <pre><code>$ kubectl logs fke-influxdb-c698999cd-dqzzx -n kube-infra --since=5m | grep 'flushing WAL' | tail -3
+INFO ... flushing WAL buffer ... max_timestamp_ns=1793015553000000000 ...
+# max_timestamp_ns 折算后 = 当前时刻 → 有数据正带着"现在"的时间戳进来</code></pre>
+
+  <h3>附注:SSL crit 风暴的最终归因</h3>
+  <p>核对 access.log 发现,制造 crit 的 10.18.51.4 全部流量是 <code>Debian APT-HTTP/1.3</code> 的<b>软件源下载</b>——apt 客户端中断下载时掐断 TLS 是常态,属于良性噪音;而 InfluxDB 的写入方走的是<b>集群内部直连</b>(Pod → Service),根本不经过外部 nginx。<b>两件事撞在一起,差点把排查方向带偏。</b></p>
+</section>
+<!-- ================= 7. 避坑备忘 ================= -->
+<section id="c7">
+  <h2><span class="no">07</span>避坑备忘 —— 退出码判读 / 探针 / 回滚</h2>
+
+  <h3>OOM 排查三板筋(通用套路,3 分钟定性)</h3>
+  <pre><code># 1. 看重启次数与状态
+kubectl get pod &lt;pod&gt; -n &lt;ns&gt;                      # RESTARTS 很大 + CrashLoopBackOff
+
+# 2. 看退出码(关键!)
+kubectl get pod &lt;pod&gt; -n &lt;ns&gt; \
+  -o jsonpath='{.status.containerStatuses[0].lastState}'
+
+# 3. 看内存用量与配额
+kubectl top pod &lt;pod&gt; -n &lt;ns&gt;
+kubectl get deploy &lt;deploy&gt; -n &lt;ns&gt; -o yaml | grep -A4 'resources:'</code></pre>
+
+  <h3>退出码速查表</h3>
+  <table>
+    <tr><th>exitCode / reason</th><th>含义</th><th>典型动作</th></tr>
+    <tr><td><code>137</code> + <code>OOMKilled</code></td><td>内存超 limit 被杀</td><td>调大 limit;区分"常态吃满"还是"启动峰值"</td></tr>
+    <tr><td><code>137</code>(无 OOMKilled)</td><td>SIGKILL(手动 kill / 强制驱逐)</td><td>查 who kill 了它(events / audit)</td></tr>
+    <tr><td><code>143</code></td><td>SIGTERM(liveness 探针杀 / 滚动更新)</td><td>查探针是否误杀,考虑 startupProbe</td></tr>
+    <tr><td><code>1</code></td><td>应用错误退出</td><td>看 <code>logs --previous</code> 找异常栈</td></tr>
+    <tr><td><code>101</code></td><td>Rust 程序 panic(InfluxDB 3 属此类)</td><td>看 panic 栈,考虑升级镜像</td></tr>
+  </table>
+
+  <h3>探针避坑:启动慢的服务必须用 startupProbe</h3>
+  <pre><code># 事故服务需要数小时回放,普通 liveness(tcpSocket, 10s 起)40 秒就杀
+# 恢复后加回探针的正确姿势:startupProbe 宽容 + 常规 liveness 严格
+startupProbe:
+  tcpSocket: {port: http}
+  periodSeconds: 10
+  failureThreshold: 720      # 10s × 720 = 容忍 2 小时启动
+livenessProbe:
+  tcpSocket: {port: http}
+  periodSeconds: 10
+  failureThreshold: 3</code></pre>
+
+  <h3>回滚避坑:Helm/Argo 管的资源,kubectl patch 只是"临时针脚"</h3>
+  <div class="warn"><b>⚠️ 本案遗留事项:</b><code>fke-influxdb</code> 由 Helm(chart influxdb-7.1.18)+ Argo CD 管理。本次 <code>kubectl patch</code> 的 48Gi/去探针/钉节点<b>不在 Git 与 Helm values 里</b>——任何人执行 <code>helm upgrade</code> 或 Argo 自动同步,4Gi + 探针就会回来,事故原样复发。<b>热修之后必须尽快把变更持久化到 values/Git。</b></div>
+</section>
+<!-- ================= 8. 加固清单 ================= -->
+<section id="c8">
+  <h2><span class="no">08</span>加固清单 + 验收命令速查</h2>
+
+  <h3>治标之后必须治本(按优先级)</h3>
+  <ol>
+    <li><b>持久化热修</b>:把 48Gi limit / 探针策略 / 节点选择写回 Helm values 或 Argo Git,防止同步回滚导致复发(最高优先)</li>
+    <li><b>探针加回</b>:startupProbe 宽容版(见第 07 节)+ 常规 liveness/readiness;观察几天后内存 limit 回调到合理值(如 16Gi)</li>
+    <li><b>写入端批量化</b>:写入方改为批量/合并写(本案每秒 1 op → 687 万 WAL 碎片是事故的根源)</li>
+    <li><b>调高持久化频率</b>(autopersist),别让缓冲再积 17 天</li>
+    <li><b>升级镜像</b>到 3.3.x 最新补丁版(WAL 合并处理有改进)</li>
+    <li><b>加告警</b>:Pod 非 Ready 超 10 分钟 / 重启 3 次即告警——本案崩了 156 天无人知晓,缺的就是这一条</li>
+  </ol>
+
+  <h3>验收命令速查(可直接复制)</h3>
+  <pre><code># Pod 健康与内存
+kubectl get pods -n kube-infra -o wide | grep influx
+kubectl top pod -n kube-infra | grep influx
+
+# HTTP 数据面(先取 token)
+TOKEN=$(sudo kubectl get secret fke-influxdb -n kube-infra \
+  -o jsonpath='{.data.admin-token}' | base64 -d)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+  -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health   # 期望 200
+
+# 写入是否恢复:WAL 时间戳应贴着当前时间推进
+kubectl logs -n kube-infra deploy/fke-influxdb --since=5m 2&gt;&amp;1 \
+  | grep 'flushing WAL' | tail -3
+
+# 落盘积压是否清零:Persisting 的文件日期应追上"今天"
+kubectl logs -n kube-infra deploy/fke-influxdb 2&gt;&amp;1 \
+  | grep 'Persisting' | tail -3</code></pre>
+
+  <div class="tip"><b>✅ 结案状态(2026-10-26):</b>Pod 稳定 Running、内存 319Mi、/health 200、生产写入实时恢复、503 消失(401 为正常鉴权响应)。待办:变更持久化到 values/Git、探针恢复、写入端批量化。</div>
+</section>
+
+<section id="c9">
+  <h2><span class="no">09</span>附:InfluxDB 3 存算分离架构 —— 为什么它的病长这样</h2>
+  <p>复盘到这里必须掰正一个常见误解:<b>InfluxDB 不是"API 服务挂别人的数据库",它自己就是数据库</b>,API 只是门面。但 3.x 版本架构很特别 —— 它身后挂的不是数据库,而是<b>对象存储</b>(存算分离)。这次事故的每一个症状,都能从下面这张图上找到位置:</p>
+
+  <div class="arch">
+    <div class="box" style="max-width:500px">
+      <h4>✍️ 写入端(集群内 Pod 直连 Service:8181)</h4>
+      <ul><li><b>POST /api/v3/write_lp</b> 高频小批量写入机器人遥测数据</li></ul>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>集群内部 Service 直连 —— 不走外层 NGINX,所以域名 503 期间生产写入从未中断</div>
+    <div class="box danger">
+      <h4>🧠 InfluxDB 3 进程 = 计算引擎(Pod 内,无本地盘)</h4>
+      <ul>
+        <li><b>内存写缓冲 write buffer</b> —— 所有数据必经之路 <span style="color:var(--red)">⬅ 本次 OOM 死的位置</span></li>
+        <li><b>WAL 暂存区</b> —— 未落盘数据暂存 <span style="color:var(--red)">⬅ 每 op 一个文件,156 天攒出 687 万碎片</span></li>
+        <li><b>查询引擎</b> —— DataFusion + Arrow,SQL 直查 parquet</li>
+      </ul>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>S3 协议读写(由 AWS_ENDPOINT 配置)</div>
+    <div class="box">
+      <h4>💾 对象存储 = Ceph RGW(机房独立 Ceph 集群,经 nginx-s3 接入)</h4>
+      <ul>
+        <li><b>接入链</b>:fke-ceph.fftaicorp.com → CNAME → nginx-s3(10.18.53.6,TLS 终止)→ RGW</li>
+        <li>桶 <b>influxdb-production-data</b> —— 真正的持久层,一切数据都在这里</li>
+        <li><b>WAL 文件</b>(687 万个 n_ops=1 碎片)<span style="color:var(--red)">⬅ 启动时全量回放 = 内存黑洞</span></li>
+        <li><b>parquet 列存文件</b> —— 最终数据:<code>0/dbs/hms-history-31d-v1-3/robot_data_record_v3-0/2026-10-09/xx.parquet</code></li>
+      </ul>
+    </div>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:12.5px">图:InfluxDB 3 存算分离架构 —— 红色标记 = 本次事故的三个关联点(缓冲 OOM / WAL 碎片 / 回放入口)</p>
+
+  <h3>它支持挂哪些持久层</h3>
+  <p>InfluxDB 3 的 object store 只认对象存储,没有传统数据库选项:</p>
+  <table>
+    <tr><th>后端</th><th>说明</th></tr>
+    <tr><td>AWS S3</td><td>官方云上方案</td></tr>
+    <tr><td>Google Cloud Storage / Azure Blob</td><td>另外两家公有云</td></tr>
+    <tr><td><b>任意 S3 兼容端点</b></td><td><b>⭐ 我们用的:Ceph RGW</b>(同类还有 MinIO、阿里 OSS 等),配置即 <code>AWS_ENDPOINT=https://fke-ceph.fftaicorp.com</code></td></tr>
+    <tr><td>memory</td><td>仅测试用,数据放内存、重启即丢</td></tr>
+  </table>
+
+  <h3>这套架构的优劣(本次事故全踩了)</h3>
+  <table>
+    <tr><th>优点</th><th>代价(对应症状)</th></tr>
+    <tr><td>✅ 存算分离:计算节点随便重启、数据不丢 —— 崩 156 天,17 天的数据还躺在 WAL 里等着回放</td><td>⚠️ <b>每次启动都要从对象存储全量回放 WAL</b> → WAL 一碎(687 万文件)启动即灾难</td></tr>
+    <tr><td>✅ parquet 列存:分析型 SQL 查询极快</td><td>⚠️ <b>内存缓冲是数据必经之路</b> → 回放/积压全压在内存,limit 给小就 OOM 死循环</td></tr>
+    <tr><td>✅ 容量随对象存储无限扩展,本地零 PVC</td><td>⚠️ <b>对象存储性能就是它的天花板</b> → Ceph 慢,落盘滞后积压 17 天</td></tr>
+  </table>
+
+  <h3>版本演进对照(为什么 3.x 和 1.x/2.x 是两种动物)</h3>
+  <table>
+    <tr><th>版本</th><th>存储方式</th><th>特点</th></tr>
+    <tr><td>InfluxDB 1.x / 2.x</td><td><b>本地磁盘</b> TSM 引擎,需要 PVC</td><td>传统时序库:重启不回放、内存可控,但要自己管本地盘容量</td></tr>
+    <tr><td><b>InfluxDB 3.x(我们)</b></td><td><b>对象存储</b> parquet + WAL,本地零持久化</td><td>存算分离、SQL 查询、容量无限;<b>代价 = 启动回放 + 内存缓冲</b>,正是本次事故踩中的两个坑</td></tr>
+  </table>
+
+  <h3>实证:这条链路是怎么一步步验证的(眼见为实)</h3>
+  <table>
+    <tr><th>命令</th><th>输出 → 结论</th></tr>
+    <tr><td><code>nslookup fke-ceph.fftaicorp.com</code></td><td>CNAME → <code>nginx-s3.fftaicorp.com</code> → <b>10.18.53.6</b> —— 内网 IP,数据不出机房 ✅</td></tr>
+    <tr><td><code>kubectl get pods -A | grep ceph</code></td><td>只有 <b>ceph-csi</b>(消费外部 Ceph 的"翻译官"DaemonSet),集群内无 RGW → Ceph 是机房独立集群</td></tr>
+    <tr><td><code>kubectl get storageclass</code></td><td>双存储体系:<b>Longhorn(默认 SC,节点本地盘)</b> + <b>csi-cephfs-sc(外部 CephFS)</b>;InfluxDB 两条路都没走,直用 S3</td></tr>
+    <tr><td><code>curl -skI https://fke-ceph.fftaicorp.com/</code></td><td><code>Server: nginx/1.18.0</code> → S3 流量前面挡着 nginx-s3 反代(TLS 终止)</td></tr>
+    <tr><td><code>curl -sk https://fke-ceph.fftaicorp.com/ | head</code></td><td><code>&lt;ListAllMyBucketsResult&gt;...&lt;Owner&gt;&lt;ID&gt;anonymous&lt;/ID&gt;...&lt;Buckets&gt;&lt;/Buckets&gt;</code> —— <b>RGW 独有指纹</b>(匿名返回 200 空桶列表;MinIO 会回 AccessDenied)→ 后端实锤 Ceph RGW</td></tr>
+  </table>
+  <p>最终确认的完整链路 —— 注意 <b>S3 流量与业务域名走的是两组不同的 nginx</b>:</p>
+  <pre><code>① InfluxDB 存储链(本次架构)
+fke-influxdb Pod(fke 集群节点 10.18.51.x)
+   │ https://fke-ceph.fftaicorp.com(内网 DNS)
+   ▼
+nginx-s3 反代(10.18.53.6,nginx/1.18.0,TLS 终止)
+   ▼
+Ceph RGW(机房独立 Ceph 集群)→ OSD 物理盘
+   ✅ 全程 10.x 内网,零外部依赖,数据不出机房
+
+② 业务域名链(503 事故发生在这里,与 ① 互不影响)
+浏览器 → nginx-master 主备 → 10.18.51.8:30080 → K8s Ingress → Pod
+(这也解释了:域名 503 期间,InfluxDB 写 Ceph 的存储链一直是通的,
+ WAL 才会一直积攒 —— 写入端从集群内部直连,根本不经过外层 nginx)</code></pre>
+
+  <div class="tip"><b>⚠️ 两个顺带发现,记入加固清单:</b>① 匿名 curl 能拿到 RGW 的 200 响应(空桶列表)= 对象存储入口在内网可裸打,桶内容全靠桶级 ACL 兜底 —— 需检查 <code>influxdb-production-data</code> 桶 ACL 是否严格私有;② 回放风暴期间 687 万请求都要过 nginx-s3 这一跳,它是 Ceph 之外的第二潜在瓶颈,排障时别忘了看它的 error.log。</div>
+
+  <div class="tip"><b>💡 一句话记住:</b>我们这个 Pod 连 PVC 都没挂、只有 emptyDir 的 /tmp —— 不是配置疏漏,是 InfluxDB 3 架构本来就"无盘",一切持久化都在 Ceph 上;也因此,<b>内存 limit 是它唯一的命门</b>,给小了就是这次 156 天的 CrashLoop。</div>
+</section>
+</div>
+
+<footer class="wrap">
+  <p>K8S Web · 事故复盘文档 · <a href="index.html">返回首页</a></p>
+</footer>
+</body>
+</html>

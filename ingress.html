@@ -95,7 +95,7 @@
     <li><a href="#c1">什么是 Ingress</a></li>
     <li value="2"><a href="#c1-vs">Ingress vs 传统 NGINX · 为什么前面再挡一层</a></li>
     <li value="3"><a href="#c0">⭐ 测试架构总览(实际链路 + 配置全文)</a></li>
-    <li value="4"><a href="#c-online">🚧 线上架构 · 待上线</a></li>
+    <li value="4"><a href="#c-online">✅ 线上架构(fke · 2026-10 实测)</a></li>
   </ol>
 </nav>
 
@@ -1069,13 +1069,18 @@ ping k8s.ergesanbaishou.com</code></pre>
 
 <!-- ================= 1. 线上架构(待上线) ================= -->
 <section id="c-online">
-  <h2><span class="no">03</span>🚧 线上架构 · 待上线</h2>
-  <div class="warn"><b>⏳ 状态:</b>线上环境尚未部署。上线后在此补充<b>线上架构图与配置全文</b>(与测试链路同构:外层 NGINX 主从 → ingress-nginx → Service → Pod),并附域名、证书、节点规划等差异说明。</div>
+  <h2><span class="no">03</span>✅ 线上架构(fke · 2026-10 实测)</h2>
+  <div class="tip"><b>✅ 已实测:</b>线上 fke 集群同样有 ingress-nginx —— 但装在 <code>kube-infra</code> ns(不是默认的 ingress-nginx),NodePort <b>80:30080 / 443:30443</b>;另有 Istio 网关并存(NodePort 30538/30539)。链路与测试同构:外层 NGINX 主备 VIP → ingress-nginx NodePort → Service → Pod。</div>
+  <pre><code># 实测命令(★教训:按 -n ingress-nginx 查到空 ≠ 没有,要 -A 跨 ns 搜)
+sudo kubectl get svc -A | grep ingress
+# kube-infra     nginx-ingress-nginx-controller  NodePort  10.101.184.130  80:30080/TCP,443:30443/TCP
+# istio-system   istio-ingressgateway            NodePort  10.100.189.102  15021:30542/TCP,80:30538/TCP,443:30539/TCP</code></pre>
+  <p>与测试环境差异速览:① ns 不同(<code>kube-infra</code> vs <code>ingress-nginx</code>);② NodePort 不同(30080/30443 vs 测试 31588);③ 双网关并存(ingress-nginx + Istio,配套 admission/metrics/defaultbackend 齐全)。外层 NGINX 的 upstream 端口按此对应修改即可。完整线上架构见 <a href="k8s-online.html">线上 K8S 集群架构</a>。</p>
 </section>
 
 <!-- ================= 4. 流量链路 ================= -->
 <section id="c2">
-  <h2><span class="no">04</span>流量链路</h2>
+  <h2><span class="no">04</span>流量链路(完整架构图 + 逐层查询命令)</h2>
   <div class="flow">客户端 ──→ LB / NodePort ──→ Ingress Controller(Pod, nginx)
                               │  读取 Ingress 规则
                               ▼
@@ -1083,6 +1088,37 @@ ping k8s.ergesanbaishou.com</code></pre>
                     ├─ host: api.example.com + /bar ──→ bar-svc ──→ Pods
                     └─ 其他                          ──→ defaultBackend(404)</div>
   <p>Controller 本身也是一个 Pod,需要先通过 <code>NodePort</code> / <code>LoadBalancer</code> / <code>hostNetwork</code> 之一把自身暴露到集群外。</p>
+  <pre><code>浏览器 ── http://k8s.ergesanbaishou.com ──→ 外层 NGINX(主从 + VIP)          ← 集群外
+                 │  proxy_pass 10.18.170.34:31588 + ★透传 Host 头(丢了必 404)
+                 ▼
+ ═══════════════════════ K8S 集群边界(节点 :31588, kube-proxy 监听) ═══════════════════════
+                 ▼
+ ┌─ ns: ingress-nginx ─────────────────────────────────┐
+ │ ingress-nginx-controller-xxx (Pod, nginx 进程)      │ ← 查①:controller 活着吗
+ │    watch 全集群 Ingress 规则 → 动态生成 nginx.conf   │
+ └────────────────────┬────────────────────────────────┘
+                      │ 匹配 Host: k8s.ergesanbaishou.com
+                      ▼
+        Ingress 资源(路由规则)                          ← 查②:域名 → 哪个 svc
+                      │ 转发到 svc:80
+                      ▼
+ ┌─ ns: web ───────────────────────────────────────────┐
+ │ Service: k8s-web (ClusterIP 10.x.x.x:80)           │ ← 查③:svc + Endpoints
+ │    └─ Endpoints: [10.244.x.x]  (后端 Pod IP 列表)  │
+ │         ▼                                           │
+ │ Pod: k8s-web-xxxx (nginx:alpine, 提供静态页)        │ ← 查④:Pod 状态
+ │ (Deployment 副本控制 / 滚动更新)                    │
+ └─────────────────────────────────────────────────────┘</code></pre>
+  <pre><code># ★ 逐层排查命令(502/404 从上往下捋,一层一条)
+kubectl get pods -n ingress-nginx -o wide     # ① controller Pod 状态
+kubectl get svc -n ingress-nginx              #    80/443 映射的 nodePort(如 31588)
+kubectl get ingress -A                        # ② 全集群路由规则清单(-A 跨所有 ns)
+kubectl describe ingress &lt;名字&gt; -n web        #    细节:Host/Path → Backend(svc:port)
+kubectl get svc -n web                        # ③ Service
+kubectl get ep -n web                         #    ★ Endpoints 为 &lt;none&gt; = svc 后面没 Pod → 503!
+kubectl get pods -n web -o wide               # ④ Pod 状态(真正干活的)
+kubectl get deploy -n web                     #    Pod 的管理者(副本数/镜像)
+kubectl exec -n web &lt;pod名&gt; -- ss -lntp       # ⑤ 终点:容器里 nginx 在监听吗</code></pre>
 </section>
 
 <!-- ================= 3. 安装 Ingress Controller ================= -->
