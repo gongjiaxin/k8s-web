@@ -73,4 +73,7 @@ curl -H "Host: k8s-web.example.com" http://<INGRESS_IP>/
 | `k8s-cmd.html` | K8S 常用命令速查 |
 | `k8s-issues.html` | K8S 使用问题总汇(排障一本通) |
 | `k8s-mysql.html` | K8S 安装 MySQL(Helm · 1主1备) |
+| `k8s-monitor.html` | K8S 监控三件套:Prometheus/AlertManager/Grafana 关系图+安装顺序(大纲版) |
+| `k8s/prometheus-ingress.yaml` | Prometheus 域名入口(独立 controller 方案):class=prometheus-nginx,入口 30990;需先装 ingress-prometheus-nginx controller(见 k8s-monitor.html 5.5),回共享改 class=nginx(31588) |
+| `k8s/prometheus-nginx.conf` | 外层 NGINX 反代:prometheus.ergesanbaishou.com(80,无端口)→ 10.18.170.34:30990(Prometheus 专属 controller,同 harbor 32588 模式);含 443 升级注释段;放外层机器 /etc/nginx/conf.d/ |
 | `ingress.yaml` | ★ Ingress 规则(ergesanbaishou ns),经 controller NodePort 31588 入口访问 |

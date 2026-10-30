@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S 监控三件套 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  /* 架构图 */
+  .arch{margin:16px 0}
+  .arch .box{border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:0 auto;max-width:820px;background:var(--card)}
+  .arch .box h4{color:var(--cyan);font-size:15px;margin-bottom:6px}
+  .arch .box ul{margin:4px 0 2px 18px;font-size:13.5px;color:var(--muted)}
+  .arch .box li b{color:var(--txt)}
+  .arch .arrow{text-align:center;font-size:13.5px;color:var(--blue);margin:6px 0;line-height:1.4}
+  .arch .arrow .tri{display:block;font-size:20px}
+  .arch .box.core{border-color:rgba(50,108,229,.6);background:linear-gradient(180deg,rgba(50,108,229,.15),var(--card));
+    box-shadow:0 0 26px rgba(50,108,229,.18)}
+  .arch .box.core h4{color:#7da5f5}
+  .arch .cols{display:flex;gap:16px;max-width:820px;margin:0 auto}
+  .arch .cols>div{flex:1;min-width:0;display:flex;flex-direction:column}
+  .arch .cols .box{max-width:none;flex:1}
+  @media(max-width:720px){.arch .cols{flex-direction:column}}
+  .arch-cap{text-align:center;color:var(--muted);font-size:12.5px;margin:8px 0}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / 监控三件套(Prometheus + AlertManager + Grafana)</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>📊 K8S 监控三件套:Prometheus + AlertManager + Grafana
+    <small>动手装之前,先用一张图确认三者关系与依赖 —— 结论:① Prometheus(核心:采集+TSDB 存储+告警规则评估)→ ② AlertManager(被动收告警,去重分组发通知)→ ③ Grafana(接数据源画图,随时可装);第 04 章 Prometheus Helm 实战已上线(装→验→Ingress 全开放),05~07 章持续补充</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录(大纲)</b>
+  <ol>
+    <li><a href="#c1">一图看懂:三者关系与依赖 ⭐</a></li>
+    <li><a href="#c2">先装哪一个?结论与理由</a></li>
+    <li><a href="#c3">依赖矩阵与易混淆点(数据流 ≠ 依赖方向)</a></li>
+    <li><a href="#c4">Prometheus 部署实战(Helm·已上线)⭐</a></li>
+    <li><a href="#c5">AlertManager 部署与对接(大纲·补充中)</a></li>
+    <li><a href="#c6">Grafana 部署与看板(大纲·补充中)</a></li>
+    <li><a href="#c7">生产建议:kube-prometheus-stack(大纲·补充中)</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. 关系与依赖图 ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>一图看懂:三者关系与依赖 ⭐</h2>
+  <p>装之前先搞清楚三件事:<b>谁连谁、数据往哪流、谁离了谁不能工作</b>。下面这张图就是三件套的全景 —— ①②③ 圈号即推荐安装顺序,箭头即数据流向:</p>
+
+  <div class="arch">
+    <!-- 第 0 层:被监控对象 -->
+    <div class="box">
+      <h4>📦 被监控对象 —— 一切暴露 /metrics 的端点(数据源头,不属于三件套)</h4>
+      <ul>
+        <li><b>node-exporter</b> —— 节点 CPU/内存/磁盘(DaemonSet,每节点一个)</li>
+        <li><b>kube-state-metrics</b> —— K8s 对象状态(Deployment 副本/Pod 重启次数/Pod 非 Running)</li>
+        <li><b>kubelet + cAdvisor</b> —— 容器运行时指标(每个节点内置)</li>
+        <li><b>业务应用</b> —— 自暴露 /metrics(Spring Actuator / client_golang 等)</li>
+      </ul>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>Pull 拉取 —— Prometheus 主动按 15~30s 周期来抓(方向:Prometheus → Target)</div>
+
+    <!-- 第 1 层:Prometheus 核心 -->
+    <div class="box core">
+      <h4>⭐ ① Prometheus —— 核心引擎:采集 + 时序存储 + 告警规则评估(必须第一个装)</h4>
+      <ul>
+        <li><b>采集调度</b> —— 按配置的 scrape_targets 周期抓取,Target 挂了指标 <code>up==0</code></li>
+        <li><b>TSDB 时序库</b> —— 指标落本地盘(K8S 里需 PVC 持久化),保存 15d~30d</li>
+        <li><b>PromQL</b> —— 查询语言,下游 Grafana 取数、告警规则计算全靠它</li>
+        <li><b>告警规则评估</b> —— 周期执行规则(如 <code>up==0</code> 持续 1m),触发后主动<b>推送</b>给 AlertManager</li>
+        <li>✅ 单独即可工作:自带简陋 Web UI(9090),能查能画 —— 这是它排第一的底气</li>
+      </ul>
+    </div>
+    <div class="arrow"><span class="tri">▼▼</span>两路下游:左边推告警,右边被查数据 —— 都离不开 Prometheus 先就绪</div>
+
+    <!-- 第 2 层:两列分支 -->
+    <div class="cols">
+      <div>
+        <div class="arrow"><span class="tri">▼</span>push 推送告警(firing / resolved,方向:Prometheus → AlertManager)</div>
+        <div class="box">
+          <h4>② AlertManager —— 告警的"下游处理厂"(第二个装)</h4>
+          <ul>
+            <li><b>被动接收</b> Prometheus 推来的告警,自己不发现任何问题</li>
+            <li><b>去重 / 分组(group) / 静默(silence) / 路由(route)</b></li>
+            <li>按 severity/team 路由到不同渠道,抑制告警风暴</li>
+          </ul>
+        </div>
+        <div class="arrow"><span class="tri">▼</span>webhook / smtp 分发</div>
+        <div class="box">
+          <h4>📣 通知渠道 → 值班的人</h4>
+          <ul>
+            <li>钉钉 / 企业微信 / 飞书 / 邮件 / Slack</li>
+            <li>OOM 那次崩 156 天无人知晓,缺的就是这一环</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="arrow"><span class="tri">▲</span>query 查询取数(方向:Grafana → Prometheus)</div>
+        <div class="box">
+          <h4>③ Grafana —— 纯展示层(最后装,随时可装)</h4>
+          <ul>
+            <li>把 Prometheus 配置为<b>数据源</b>,用 PromQL 画图</li>
+            <li>社区 Dashboard:<code>315</code>(集群) <code>8588</code>(Prometheus) <code>1860</code>(节点)</li>
+            <li>✅ 没有任何组件依赖它 —— 放最后最安全</li>
+          </ul>
+        </div>
+        <div class="arrow"><span class="tri">▼</span>浏览器访问 3000</div>
+        <div class="box">
+          <h4>👤 运维 / 开发看板</h4>
+          <ul>
+            <li>日常巡检、容量趋势、周报截图</li>
+            <li>也可再接多个数据源(MySQL/Loki/ES)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="arch-cap">图:监控三件套数据流与依赖全景 —— ①②③ = 推荐安装顺序;箭头 = 数据流向;蓝框 = 核心(一切的依赖根)</p>
+
+  <div class="tip"><b>💡 一句话记住:</b>Prometheus 是<b>心脏</b>(数据进、规则算、查询出),AlertManager 是<b>嘴</b>(替它喊话),Grafana 是<b>脸</b>(替它露面)—— 心脏不跳,嘴和脸都没意义,所以先装心脏。</div>
+</section>
+
+<!-- ================= 2. 先装哪一个 ================= -->
+<section id="c2">
+  <h2><span class="no">02</span>先装哪一个?结论与理由</h2>
+
+  <h3>结论:Prometheus → AlertManager → Grafana</h3>
+  <table>
+    <tr><th>顺序</th><th>组件</th><th>角色</th><th>为什么排这个位置</th><th>装完验证</th></tr>
+    <tr>
+      <td><b>① 第 1 个</b></td>
+      <td><b>Prometheus</b></td>
+      <td>核心引擎</td>
+      <td>另两个都依赖它;单独装即完整可用(采集+存储+自带查询页)</td>
+      <td>Web UI 9090 → Status/Targets 全 <code>UP</code>;能查到 <code>up</code> 等指标</td>
+    </tr>
+    <tr>
+      <td><b>② 第 2 个</b></td>
+      <td><b>AlertManager</b></td>
+      <td>告警下游</td>
+      <td>被动收 Prometheus 推送;装好后在 Prometheus 配 <code>alertmanagers</code> 地址</td>
+      <td>造一条必触发规则(如 <code>up==0</code>),AlertManager UI(9093)能看到 alert</td>
+    </tr>
+    <tr>
+      <td><b>③ 第 3 个</b></td>
+      <td><b>Grafana</b></td>
+      <td>展示层</td>
+      <td>无任何组件依赖它;只需加数据源,随时可装</td>
+      <td>Data Source 测试连通;导入 Dashboard 315 能出图</td>
+    </tr>
+  </table>
+
+  <h3>为什么 AlertManager 排第二,而不是第一?</h3>
+  <p>有个看似反过来的理由:Prometheus 配置里要写 AlertManager 的地址,似乎该先把 AlertManager 建好?注意区分两件事:</p>
+  <ul>
+    <li><b>依赖的本质</b>是"谁离了谁不能工作":AlertManager 单独存在毫无意义(没告警可收),Grafana 单独存在毫无意义(没数据可画),而 <b>Prometheus 单独存在完全可用</b>。</li>
+    <li>没装 AlertManager 时,Prometheus 照常采集存储,只是告警发不出去(日志报 <code>connection refused</code>)—— 不影响核心功能。</li>
+  </ul>
+  <div class="tip"><b>💡 手动 YAML 部署的小技巧:</b>可以先创建 AlertManager 的 <b>Service</b>(拿到稳定的 ClusterDNS,如 <code>alertmanager.monitoring.svc:9093</code>),再装 Prometheus 时一次性写好 <code>alerting</code> 配置 —— 避免后改配置重启。这是"Service 先行",不是"组件先行"。</div>
+</section>
+
+<!-- ================= 3. 依赖矩阵 ================= -->
+<section id="c3">
+  <h2><span class="no">03</span>依赖矩阵与易混淆点 —— 数据流 ≠ 依赖方向</h2>
+
+  <h3>依赖矩阵:谁离了谁不能工作</h3>
+  <table>
+    <tr><th>组件</th><th>依赖谁</th><th>被谁依赖</th><th>单独存在是否有意义</th><th>结论</th></tr>
+    <tr>
+      <td><b>Prometheus</b></td>
+      <td>无(零依赖,只依赖被抓对象活着)</td>
+      <td>AlertManager(收它的推送)、Grafana(查它的数据)</td>
+      <td>✅ 完整可用:采集+存储+自带 9090 查询页</td>
+      <td><b>第 1 个装</b></td>
+    </tr>
+    <tr>
+      <td><b>AlertManager</b></td>
+      <td>Prometheus(功能上:没它推送就永远无事可做)</td>
+      <td>无人依赖</td>
+      <td>❌ 空转:一个告警都不会有</td>
+      <td><b>第 2 个装</b></td>
+    </tr>
+    <tr>
+      <td><b>Grafana</b></td>
+      <td>Prometheus(数据上:没数据源的看板是空壳)</td>
+      <td>无人依赖</td>
+      <td>❌ 空壳:连了 MySQL/Loki 才另当别论</td>
+      <td><b>第 3 个装</b></td>
+    </tr>
+  </table>
+
+  <h3>数据流向 vs 依赖方向(最容易搞混的一张对比)</h3>
+  <pre><code>数据流向(运行时,数据怎么走)              依赖方向(部署时,谁必须先在)
+─────────────────────────────            ─────────────────────────────
+Target ←─ pull ── Prometheus             Prometheus(根,0 依赖)
+Prometheus ── push ──► AlertManager              ├─► AlertManager(等它来推)
+Prometheus ←─ query ── Grafana                   └─► Grafana(来查数据)
+AlertManager ── webhook ──► 钉钉/邮件
+                                          部署序 = 从根往下:① P → ② A → ③ G
+推 push / 拉 pull 的主动方都是箭头尾         (数据流的主动方 ≠ 先装的一方!)</code></pre>
+
+  <h3>三个常见误区</h3>
+  <div class="warn"><b>误区一:</b>"Prometheus 配置里写了 AlertManager 地址,所以 Prometheus 依赖它" —— 错,那只是<b>配置引用</b>;没它 Prometheus 照常采集存储,只是告警发不出去。</div>
+  <div class="warn"><b>误区二:</b>"Grafana 是看监控的,得先有 Grafana 才能确认 Prometheus 装好了" —— 错,Prometheus 自带 9090 Graph 页,先装完先用它自验,Grafana 只负责好看。</div>
+  <div class="warn"><b>误区三:</b>"AlertManager 会主动去 Prometheus 拉告警" —— 错,方向正好相反:<b>Prometheus 推、AlertManager 收</b>;所以网络策略只需放行 Prometheus → 9093 这一条。</div>
+
+  <div class="tip"><b>💡 装前自检三问:</b>① 抓谁?(先部署 node-exporter/kube-state-metrics 这些采集端)② 数据存哪?(Prometheus 的 PVC 与保留天数)③ 告警发给谁?(AlertManager 的路由与接收器)—— 三问答完,安装顺序自然就是 ① ② ③。</div>
+</section>
+
+<!-- ================= 4. Prometheus 部署实战 ================= -->
+<section id="c4">
+  <h2><span class="no">04</span>Prometheus 部署实战 —— Helm 一把梭(装→验→开放)</h2>
+  <p>实战环境:测试集群 <b>qingfeng 单节点</b>(v1.35.9 · containerd),安装时间 2026-10-30 16:58,命令与输出均为真实记录,复制即可用。路线:用 Helm 单装 <code>prometheus-community/prometheus</code>(想三件套一键装齐见第 07 章)。</p>
+
+  <h3>0. 动手前 30 秒检查(两条命令避大坑)</h3>
+  <pre><code># ① 集群里是否已有三件套?(防与 Rancher monitoring 撞车 —— 有输出就要考虑复用而非重装)
+kubectl get pods -A | grep -iE "prometheus|alertmanager|grafana|node-exporter"
+# → 无任何输出 = 环境干净,可全新安装 ✅
+
+# ② 默认存储类是谁?(决定 Prometheus 数据落在哪、能不能扩容)
+kubectl get storageclass
+NAME                   PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+local-path (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  7d2h</code></pre>
+  <table>
+    <tr><th>local-path 特性(读表要点)</th><th>对安装的影响</th></tr>
+    <tr><td>本地路径存储(数据落节点磁盘)</td><td>单节点无风险;以后多节点,Pod 会被"钉"在数据所在节点</td></tr>
+    <tr><td><code>ALLOWVOLUMEEXPANSION: false</code></td><td><b>PVC 不能在线扩容</b> → 第一次就把 size 给够(本章给 10Gi)</td></tr>
+    <tr><td><code>WaitForFirstConsumer</code></td><td>PVC 等 Pod 起来才建 PV,<code>get pvc</code> 起初 Pending 是<b>正常</b>的,别慌</td></tr>
+  </table>
+
+  <h3>1. 加仓库 + 裁剪 values(不裸装)</h3>
+  <pre><code>helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm search repo prometheus-community/prometheus</code></pre>
+  <p>这个 chart 是"一父多子"结构:<code>server</code>(Prometheus 本体)、<code>alertmanager</code>、<code>nodeExporter</code>、<code>pushgateway</code>、<code>kube-state-metrics</code>,各自一个开关。按第 01 节的顺序,先只装 Prometheus 本体 + 采集端:</p>
+  <pre><code>mkdir -p ~/monitor &amp;&amp; cat &gt; ~/monitor/prom-values.yaml &lt;&lt;'EOF'
+## ============ Prometheus 本体 ============
+server:
+  enabled: true
+  retention: "7d"                # 测试环境 7 天足够,生产 15d~30d
+  persistentVolume:
+    enabled: true
+    size: 10Gi                   # local-path 不能扩容,一次给够
+    # storageClass 不写 = 用默认 local-path
+  resources:
+    requests: {cpu: 200m, memory: 768Mi}
+    limits:   {cpu: "1",  memory: 2Gi}
+  service:
+    type: ClusterIP              # 先 ClusterIP 验证,要域名见本章第 5 步 ingress 段
+
+## ============ 周边组件按需裁剪 ============
+alertmanager:
+  enabled: false                 # ← 第二步再开(第 05 章)
+nodeExporter:
+  enabled: true                  # 节点指标,保留
+pushgateway:
+  enabled: false                 # 临时任务推送用,暂时不需要
+EOF</code></pre>
+  <div class="tip"><b>💡 enabled: false 的组件 Helm 根本不会创建</b>,后面想加回来改 values 再 <code>helm upgrade</code> 即可 —— 这正是按"①②③"顺序分步装三件套的底气。</div>
+
+  <h3>2. 一键安装(真实输出)</h3>
+  <pre><code>helm install prometheus prometheus-community/prometheus \
+  -n monitoring --create-namespace \
+  -f ~/monitor/prom-values.yaml
+
+NAME: prometheus
+LAST DEPLOYED: Fri Oct 30 16:58:43 2026
+NAMESPACE: monitoring
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+The Prometheus server can be accessed via port 80 on the following DNS name from within your cluster:
+prometheus-server.monitoring.svc.cluster.local
+
+Get the Prometheus server URL by running these commands in the same shell:
+  export POD_NAME=$(kubectl get pods --namespace monitoring -l "app.kubernetes.io/name=prometheus,app.kubernetes.io/instance=prometheus" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace monitoring port-forward $POD_NAME 9090
+...(NOTES 里还有 Pushgateway 一段,见下方误区)</code></pre>
+  <ul>
+    <li><b>记下这个 DNS 名</b>:<code>prometheus-server.monitoring.svc.cluster.local</code>(端口 80)—— 以后 AlertManager/Grafana 对接、加数据源全靠它。</li>
+    <li><b>⚠️ NOTES 提到 Pushgateway,装没装要以 <code>kubectl get svc/pods</code> 为准(实测教训)</b>:NOTES 模板是无条件打印的,但本集群 <code>get svc</code> 里<b>真的出现了</b> <code>prometheus-prometheus-pushgateway</code> —— 说明实际 values 漏写了 <code>pushgateway.enabled: false</code>(漏写 = 默认 true)。处理:values 补一段 <code>pushgateway: {enabled: false}</code> 再 <code>helm upgrade</code>,该组件即被移除。</li>
+  </ul>
+
+  <h3>3. 验证四连(装好了没有,以这四条为准)</h3>
+  <pre><code># ① 实际装了哪些 Pod?预期 3 类:server / node-exporter / kube-state-metrics
+#    (不该有 alertmanager 和 pushgateway —— values 关掉了)
+kubectl get pods -n monitoring
+# NAME                                                 READY   STATUS    RESTARTS   AGE
+# prometheus-kube-state-metrics-xxxxx                  1/1     Running   0          2m   (示意,后缀以实际为准)
+# prometheus-prometheus-node-exporter-xxxxx            1/1     Running   0          2m
+# prometheus-server-xxxxxxx-xxxxx                      2/2     Running   0          2m   ← 2/2:主容器+config-reload
+
+# ② Service 清单,记住 prometheus-server 这个名字(port 80 → 9090)
+kubectl get svc -n monitoring
+
+# ③ PVC:Pod Running 之后应为 Bound(起初 Pending 是 WaitForFirstConsumer 特性,正常)
+kubectl get pvc -n monitoring
+
+# ④ Helm 视角:release 状态与版本
+helm list -n monitoring</code></pre>
+
+  <h3>4. 验收三关(9090 页面,命令行版同列)</h3>
+  <p>先用 port-forward 把页面拉到本地(仅验证用,长期访问见第 6 步):</p>
+  <pre><code># 方式一:chart NOTES 推荐的(转发 Pod)
+export POD_NAME=$(kubectl get pods -n monitoring -l "app.kubernetes.io/name=prometheus,app.kubernetes.io/instance=prometheus" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME -n monitoring 9090
+# Forwarding from 127.0.0.1:9090 -> 9090     ← 真实输出
+
+# 方式二:转发 Service(更短,效果一样)
+kubectl port-forward svc/prometheus-server -n monitoring 9090:80</code></pre>
+  <div class="tip"><b>💡 "卡着了?"</b>—— 没卡!port-forward 是<b>前台进程</b>,这两行 Forwarding 就是"隧道已建立"的成功提示,只要它不退出转发就活着,Ctrl+C 才断开。保持窗口不动,另开窗口/浏览器去访问。</div>
+  <p>在<b>服务器的另一个窗口</b>先用命令行过三关(不开浏览器也能验收):</p>
+  <pre><code># 关① 活性
+curl -s http://localhost:9090/-/healthy
+# 期望: Prometheus is Healthy.
+
+# 关② Targets 健康(命令行版"看绿点")
+curl -s http://localhost:9090/api/v1/targets | grep -o '"health":"[a-z]*"' | sort | uniq -c
+# 期望: 若干 "health":"up"
+
+# 关③ up 指标查询(命令行版 Graph 查询)
+curl -s 'http://localhost:9090/api/v1/query?query=up' | head -c 600
+# 期望: "value":[时间戳,"1"] 的若干条</code></pre>
+  <table>
+    <tr><th>#</th><th>页面操作(浏览器版)</th><th>合格标准</th></tr>
+    <tr><td>①</td><td><code>Status → Targets</code></td><td>各 job 的 target 全 <b>UP</b>(绿点),尤其 kubernetes-nodes / kubernetes-pods</td></tr>
+    <tr><td>②</td><td><code>Graph</code> 查 <code>up</code></td><td>所有返回值 = <b>1</b></td></tr>
+    <tr><td>③</td><td>查 <code>container_cpu_usage_seconds_total</code></td><td>有数据行(cAdvisor 抓通了)</td></tr>
+  </table>
+  <div class="warn"><b>⚠️ Windows 浏览器直接开 localhost:9090 不通!</b>port-forward 绑定的是<b>服务器</b>的 127.0.0.1。要在 Windows 看界面,再开一条 SSH 隧道:<code>ssh -L 9090:127.0.0.1:9090 用户@节点IP</code>,然后 Windows 浏览器开 http://localhost:9090。链路:Windows 浏览器 →(SSH)→ 服务器 localhost:9090 →(port-forward)→ Pod:9090。</div>
+
+  <h3>5. 全开放:Ingress + 域名(长期姿势,复用站内 ingress 那套)</h3>
+  <p>port-forward 一断就失效,还占终端。"全开放"= 照 <a href="ingress.html">站内 Ingress 文档</a>同款链路加一条子域名规则,测试集群入口 31588 是现成的:</p>
+  <pre><code>浏览器 http://prometheus.ergesanbaishou.com:31588/
+   │ hosts 解析到节点 IP
+   ▼
+ingress-nginx-controller (NodePort 31588 ← ingress.yaml 里已固定的入口)
+   │ 按 Host: prometheus.ergesanbaishou.com 匹配新 Ingress
+   ▼
+svc prometheus-server (monitoring ns, port 80)
+   ▼
+Pod :9090   ← 和 port-forward 看到的是同一个页面</code></pre>
+  <p>不用手写 YAML,values 的 <code>server.ingress</code> 段打开即可(Helm 统一管理,卸载不残留):</p>
+  <pre><code># ~/monitor/prom-values.yaml 的 server: 段里追加(与 retention 等字段平级):
+  ingress:
+    enabled: true
+    className: nginx                       # 对应 ingress-nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"   # 先 HTTP,同 k8s-web 站
+    hosts:
+      - prometheus.ergesanbaishou.com      # ★ 新子域名
+    path: /
+    pathType: Prefix
+
+# 生效
+helm upgrade prometheus prometheus-community/prometheus -n monitoring -f ~/monitor/prom-values.yaml
+
+# 确认 Ingress 已生成
+kubectl get ingress -n monitoring
+# NAME        CLASS   HOSTS                             ADDRESS   PORTS   AGE
+# prometheus  nginx   prometheus.ergesanbaishou.com     节点IP     80      ...   (示意)
+
+# 先在服务器上验证(不等 DNS,Host 头模拟 —— 和验证 k8s-web 的手法一模一样)
+curl -s -H "Host: prometheus.ergesanbaishou.com" http://127.0.0.1:31588/-/healthy
+# 期望: Prometheus is Healthy.   ← 通了 = Ingress→Service→Pod 全链路 OK</code></pre>
+  <p>最后在 Windows 用管理员编辑 <code>C:\Windows\System32\drivers\etc\hosts</code> 加一行(IP 换成实际节点 IP),浏览器访问 <b>http://prometheus.ergesanbaishou.com:31588/</b>:</p>
+  <pre><code>&lt;节点IP&gt;    prometheus.ergesanbaishou.com</code></pre>
+  <div class="warn"><b>⚠️ 必须带 31588 端口!</b>controller 是 NodePort 型入口,不监听 80,直接开 <code>http://prometheus.ergesanbaishou.com/</code> 是不通的。要"无端口"体验需外层 NGINX 反代 —— 配置已备好:<a href="k8s/prometheus-nginx.conf">k8s/prometheus-nginx.conf</a>(80 版可直接用 + 443 升级注释段),放到外层 NGINX 机器的 <code>/etc/nginx/conf.d/</code>(必须 .conf 后缀),<code>nginx -t &amp;&amp; nginx -s reload</code> 生效;hosts 解析改指<b>外层 NGINX 机器 IP</b>。完整说明见 <a href="k8s-cert.html">证书文档</a>。</div>
+  <div class="tip"><b>💡 同款套路直接复用:</b>后面 AlertManager 加 <code>alertmanager.ergesanbaishou.com</code>、Grafana 加 <code>grafana.ergesanbaishou.com</code> —— 三个域名都从 31588 进,Ingress 按 Host 分流,正是第 01 节图里"三件套各自有门"的落地形态。</div>
+  <div class="tip"><b>📄 独立 YAML 版(与 chart ingress 二选一):</b>仓库里备了 <a href="k8s/prometheus-ingress.yaml">k8s/prometheus-ingress.yaml</a>(链路注释 + basic auth 注释段齐全)。要用它就先把 values 里 <code>server.ingress.enabled</code> 改回 <code>false</code> 再 upgrade,然后 <code>kubectl apply -f k8s/prometheus-ingress.yaml</code> —— 同 host 双开会规则重复、管理混乱。</div>
+
+  <h3>5.5 入口方案对比:共享 31588 vs 独立 controller 30990 ⭐</h3>
+  <p><b>高频疑问:Ingress 里为什么不写端口?31588 已被 k8s-web 用了怎么办?</b>先纠正概念:Ingress 资源只有 <code>host/path → Service</code> 的映射,<b>没有入口端口参数</b>(设计使然),端口属于 controller 的 Service —— 31588 被多域名共享按 Host 分流本不算冲突。但本集群有更优雅的先例:<b>harbor 单独装了一套 controller(入口 32588)</b>;照抄该模式给 Prometheus 配<b>专属 controller + 独立端口 30990</b>,端口与规则全隔离,还不丢 Ingress 层能力:</p>
+  <table>
+    <tr><th>方案</th><th>链路</th><th>特点</th><th>入口</th></tr>
+    <tr><td>A · 共享</td><td>域名:31588 → 共享 controller → Ingress → svc:80</td><td>一个入口管所有域名,Host 分流;最省资源</td><td>prometheus.ergesanbaishou.com<b>:31588</b></td></tr>
+    <tr><td><b>B · 独立 controller(★本环境采用)</b></td><td>域名:30990 → <b>专属 controller</b> → Ingress(独立 class)→ svc:80</td><td>同 harbor(32588) 模式;端口/规则全隔离;保留 basic auth 等 Ingress 能力</td><td>prometheus.ergesanbaishou.com<b>:30990</b></td></tr>
+    <tr><td>C · svc NodePort 直连</td><td>节点:30990 → svc(跳过 controller)</td><td>最轻量,一条 helm upgrade 就有;但绕过 Ingress 层,无 basic auth</td><td>http://节点IP<b>:30990</b>(无域名)</td></tr>
+  </table>
+  <pre><code># ① 先加仓库(★本机第一次用 ingress-nginx 仓库必须这步!)
+#    repo 是"按机器"记的:装 Prometheus 时加的 prometheus-community 不通用;
+#    漏了这步 = Error: repo ingress-nginx not found(实测踩坑,已登记第 8 节坑速查)
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm repo list     # 期望看到 ingress-nginx + prometheus-community 两行
+
+# ② 装第三套 ingress-nginx:专属 class=prometheus-nginx,HTTP 固定 30990(同 harbor 32588 模式)
+helm upgrade --install ingress-prometheus-nginx ingress-nginx/ingress-nginx \
+  -n ingress-nginx \
+  --set controller.ingressClassResource.name=prometheus-nginx \
+  --set controller.ingressClassResource.controllerValue=k8s.io/ingress-prometheus-nginx \
+  --set controller.ingressClassResource.default=false \
+  --set controller.service.type=NodePort \
+  --set controller.service.nodePorts.http=30990 \
+  --set controller.service.nodePorts.https=30490 \
+  --set controller.admissionWebhooks.enabled=false \
+  --set controller.replicaCount=1
+# 三个关键参数:
+#   ingressClassResource.name → 只认领 class=prometheus-nginx 的 Ingress,不与共享款(nginx)抢
+#   nodePorts.http=30990      → 专属入口;https 顺手固定 30490,以后上证书直接用
+#   admissionWebhooks=false   → 新 controller 不装"安检门"(webhook),避开多实例抢校验
+#                               的经典坑(那两个 443 svc 是什么 → 见下方 5.6 全景表)
+
+# ③ 等新 controller 就绪(单节点约 30s)
+kubectl -n ingress-nginx get pods,svc | grep prometheus
+# 期望: pod Running;svc ingress-prometheus-nginx-controller → 80:30990/TCP,443:30490/TCP
+
+# ④ Ingress 切到新 class(k8s/prometheus-ingress.yaml 已改好 ingressClassName: prometheus-nginx)
+kubectl apply -f k8s/prometheus-ingress.yaml
+kubectl -n monitoring get ingress prometheus-ingress
+# CLASS 列: nginx → prometheus-nginx;换 class = 规则"搬家",31588 上随之失效
+
+# ⑤ 验证专属入口 + 佐证搬家
+curl -s -H "Host: prometheus.ergesanbaishou.com" http://10.18.170.34:30990/-/healthy
+# 期望: Prometheus is Healthy.
+curl -s -H "Host: prometheus.ergesanbaishou.com" -o /dev/null -w '%{http_code}\n' http://10.18.170.34:31588/
+# 期望: 404(共享款已不管这个 Host —— 是佐证不是故障)</code></pre>
+  <h3>5.6 番外:ingress-nginx 命名空间的 5 个 Service 全景(那两个 443 是什么?)</h3>
+  <p><code>kubectl -n ingress-nginx get svc</code> 装完第三套后会看到 5 个 Service,高频疑问:"下面两个 443 的没开放端口,nginx 是怎么指定的?" —— 答案:<b>它们不是流量入口,是 admission webhook(准入校验"安检门")</b>,只被 API Server 在 <code>kubectl apply</code> Ingress 的<b>那一瞬间</b>集群内部调用(校验注解/snippet 语法对不对),通过即退场,与业务流量零关系,所以 ClusterIP 足够、没 NodePort 属正常:</p>
+  <table>
+    <tr><th>Service</th><th>类型 / 端口</th><th>身份</th><th>要 NodePort 吗</th></tr>
+    <tr><td>ingress-nginx-controller</td><td>NodePort 80:<b>31588</b> / 443:30443</td><td>共享款 controller —— 业务流量入口(k8s-web/hello/xl18z)</td><td>★要,这就是 31588</td></tr>
+    <tr><td>ingress-harbor-nginx-controller</td><td>NodePort 80:<b>32588</b> / 443:31443</td><td>harbor 专属 controller —— 业务流量入口</td><td>★要(32588)</td></tr>
+    <tr><td>ingress-prometheus-nginx-controller</td><td>NodePort 80:<b>30990</b> / 443:30490</td><td>Prometheus 专属 controller(5.5 节新装)</td><td>★要(30990)</td></tr>
+    <tr><td>ingress-nginx-controller-admission</td><td>ClusterIP 443</td><td>共享款的 admission webhook("安检门")</td><td>不要 —— API Server 内网调用即可</td></tr>
+    <tr><td>ingress-nginx-ergesanbaishou</td><td>ClusterIP 443</td><td>与 harbor controller 同期出现的另一个 webhook</td><td>不要 —— 同上,非流量入口</td></tr>
+  </table>
+  <p><b>一句话:认业务入口只看带 <code>80:xxxxx</code> 的 controller Service;443 的 ClusterIP 是"安检门"。</b>这也正是 5.5 节新 controller 关 <code>admissionWebhooks.enabled=false</code> 的原因 —— 三扇"安检门"会抢校验(多 controller 共存的经典坑)。验证某扇门背后挂谁:</p>
+  <pre><code>kubectl -n ingress-nginx get svc ingress-nginx-ergesanbaishou -o yaml | grep -A3 selector
+kubectl get validatingwebhookconfigurations        # 看集群里有几扇"安检门"</code></pre>
+
+  <div class="tip"><b>💡 回退与顺序:</b>要回方案 A 只需把 Ingress 的 <code>ingressClassName</code> 改回 <code>nginx</code> 再 apply、外层 NGINX upstream 同步改 31588。注意 30990 在装好 controller 前必然不通,顺序是<b>加仓库 → 装 controller → 切 class → 验端口</b>。</div>
+
+  <h3>6. 可选加固:basic auth(全开放的代价是裸奔,顺手加把锁)</h3>
+  <pre><code># ① 生成密码文件并建 Secret(服务器没 htpasswd 就用 openssl,密码自己定)
+printf "admin:$(openssl passwd -apr1 '你的密码')\n" &gt; ~/monitor/auth
+kubectl create secret generic prom-basic-auth --from-file=~/monitor/auth -n monitoring
+
+# ② values 的 ingress.annotations 追加三行:
+#      nginx.ingress.kubernetes.io/auth-type: basic
+#      nginx.ingress.kubernetes.io/auth-secret: prom-basic-auth
+#      nginx.ingress.kubernetes.io/auth-realm: "Prometheus Login"
+
+# ③ 再 upgrade 一次,浏览器会弹登录框
+helm upgrade prometheus prometheus-community/prometheus -n monitoring -f ~/monitor/prom-values.yaml</code></pre>
+
+  <h3>7. 日常运维四连(Helm 管的组件就这四条)</h3>
+  <pre><code>helm list -n monitoring                 # 装了什么、什么版本
+helm history prometheus -n monitoring   # 改过几次(revision)
+helm upgrade prometheus prometheus-community/prometheus -n monitoring -f ~/monitor/prom-values.yaml  # 一切变更走这里
+helm rollback prometheus 1 -n monitoring  # 改坏了回第 1 版
+
+# 卸载(注意:PVC/PV 不会被删,数据还在;重装同名 release 若 PVC 未删会沿用或报错,按需清理)
+helm uninstall prometheus -n monitoring
+kubectl delete pvc -n monitoring -l app.kubernetes.io/instance=prometheus</code></pre>
+
+  <h3>8. 坑速查(本章可能遇到)</h3>
+  <table>
+    <tr><th>症状</th><th>原因/处理</th></tr>
+    <tr><td>Pod 卡 <code>ContainerCreating</code> / <code>ImagePullBackOff</code></td><td>拉 <code>quay.io</code>/<code>registry.k8s.io</code> 镜像失败;<code>kubectl describe pod</code> 看 Events,走代理或改 Harbor 中转(见 <a href="harbor.html">Harbor 文档</a>)</td></tr>
+    <tr><td><code>get pvc</code> 一直 <code>Pending</code></td><td>Prometheus Pod 还没调度起来(local-path 是 WaitForFirstConsumer);若 Pod 已 Running 仍 Pending,看 events 是否 SC 名写错</td></tr>
+    <tr><td><code>helm repo add/update</code> 超时</td><td>github.io 托管的 index 国内偶发超时,多重试几次</td></tr>
+    <tr><td>浏览器开域名不通</td><td>① 忘带 <b>:31588</b> 端口;② hosts 没解析到节点 IP;③ 先用 curl Host 头验证定位是 DNS 还是链路问题</td></tr>
+    <tr><td>不想装的组件还是出现了(如 Pushgateway)</td><td>values 漏写 <code>enabled: false</code> = 默认 true;本集群实测 svc 里出现了 pushgateway —— 补上 values 再 <code>helm upgrade</code> 即可移除</td></tr>
+    <tr><td><code>Error: repo ingress-nginx not found</code></td><td>本机没加过该仓库(装 Prometheus 时只加过 prometheus-community)。先 <code>helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx && helm repo update</code>,<code>helm repo list</code> 确认后再装 —— repo 是<b>按机器</b>记的,换机器要重加</td></tr>
+    <tr><td><code>kubectl apply -f prometheus-nginx.conf</code> 报 <code>invalid object to validate</code></td><td>文件角色搞混:<code>.conf</code> 是<b>外层 NGINX</b> 的配置(scp 到外层机器 <code>/etc/nginx/conf.d/</code> + <code>nginx -s reload</code>),kubectl 只吃 K8S YAML —— 该 apply 的是 <code>prometheus-ingress.yaml</code>(实测踩坑)</td></tr>
+    <tr><td>apply 了旧版 yaml,class 没变</td><td>仓库是两个 clone(本地改、服务器跑),apply 前 <code>grep ingressClassName prometheus-ingress.yaml</code> 确认是 <code>prometheus-nginx</code> —— 旧版 <code>nginx</code> 会让 30990 不通(规则还在共享款上)</td></tr>
+    <tr><td>数据盘满了想扩容</td><td>local-path <b>不支持在线扩容</b>:短期调小 <code>retention</code>,长期换支持扩容的 SC 或重建更大 PVC</td></tr>
+  </table>
+
+  <div class="tip"><b>✅ 至此 Prometheus 闭环完成:</b>检查(0)→ 安装(1~2)→ 验证(3~4)→ 全开放(5~6)→ 日常运维(7)。下一步:改 values 把 <code>alertmanager.enabled: true</code> 打开升级,进入第 05 章。</div>
+</section>
+
+<!-- ================= 5. AlertManager 部署(大纲) ================= -->
+<section id="c5">
+  <h2><span class="no">05</span>AlertManager 部署与对接 <span style="color:var(--orange);font-size:14px">· 大纲 · 补充中</span></h2>
+  <p>本章将覆盖:</p>
+  <ol>
+    <li>ConfigMap:route 分组/抑制/静默 + receivers(钉钉 webhook / 企业微信 / 邮件 SMTP)</li>
+    <li>Deployment + Service(9093);与 Prometheus 的 <code>alerting.alertmanagers</code> 对接</li>
+    <li>触发测试:一条必触发的规则走完全链路,钉钉群里见到消息才算通</li>
+    <li>静默(silence)实操:变更窗口压制告警,避免发布期间噪音</li>
+  </ol>
+  <div class="tip"><b>📝 大纲占位:</b>正文补充中。</div>
+</section>
+
+<!-- ================= 6. Grafana 部署(大纲) ================= -->
+<section id="c6">
+  <h2><span class="no">06</span>Grafana 部署与看板 <span style="color:var(--orange);font-size:14px">· 大纲 · 补充中</span></h2>
+  <p>本章将覆盖:</p>
+  <ol>
+    <li>Deployment + PVC(dashboard/配置持久化)+ Service(3000),经 Ingress 暴露(复用站内证书文档)</li>
+    <li>添加 Prometheus 数据源(ClusterDNS 直连,不走外网)</li>
+    <li>导入社区看板 315 / 8588 / 1860,变量与时间窗使用</li>
+    <li>告警面板与 OOM 类事故的关键指标图(内存 limit vs usage 一眼对比)</li>
+  </ol>
+  <div class="tip"><b>📝 大纲占位:</b>正文补充中。</div>
+</section>
+
+<!-- ================= 7. kube-prometheus-stack(大纲) ================= -->
+<section id="c7">
+  <h2><span class="no">07</span>生产建议:kube-prometheus-stack 一键全家桶 <span style="color:var(--orange);font-size:14px">· 大纲 · 补充中</span></h2>
+  <p>生产环境更推荐 Helm 一个 Chart 装齐(三件套 + Operator + 采集端),本章将覆盖:</p>
+  <ol>
+    <li>helm repo / install 三条命令;<code>monitoring</code> 命名空间</li>
+    <li>为什么多了 Prometheus Operator:<b>ServiceMonitor / PodMonitor / PrometheusRule</b> 声明式管理,告别手改 prometheus.yml</li>
+    <li>values 定制:持久化与保留期、告警接收器、Ingress 域名、资源配额</li>
+    <li>与手动部署的取舍:学习原理用手动,稳定生产用 Stack</li>
+  </ol>
+  <div class="tip"><b>📝 大纲占位:</b>正文补充中。</div>
+</section>
+
+<footer>
+  <p>📊 K8S 监控三件套 · 大纲版 · 先装顺序 = ① Prometheus → ② AlertManager → ③ Grafana</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

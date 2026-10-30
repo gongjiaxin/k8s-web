@@ -57,6 +57,13 @@
   <div class="sec-title">📚 知识文档</div>
   <div class="grid">
 
+    <a class="card hot" href="k8s-monitor.html">
+      <div class="icon">📊</div>
+      <h3>K8S 监控三件套(Prometheus + AlertManager + Grafana)</h3>
+      <p>⭐先装哪一个?先看一张图确认三者关系与依赖:Prometheus 是心脏(采集+TSDB 存储+告警规则评估)→ AlertManager 是嘴(被动收告警,去重分组发钉钉/邮件)→ Grafana 是脸(接数据源画图);附安装顺序结论表、依赖矩阵(数据流 ≠ 依赖方向)与三误区辟谣;04 章 Prometheus Helm 实战已上线 —— 前置检查→values 裁剪→一键安装→验收三关→Ingress 域名全开放+basic auth 加固,全程真实命令输出。</p>
+      <span class="tag">● 大纲已上线 · 点击进入 →</span>
+    </a>
+
     <a class="card hot" href="k8s-oom.html">
       <div class="icon">💥</div>
       <h3>K8S 问题之内存 OOM(线上实录)</h3>

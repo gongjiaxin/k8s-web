@@ -1,0 +1,72 @@
+# =========================================================
+# Prometheus 流量入口(监控三件套·①)—— 独立 controller 专属入口方案
+#
+# ★ 为什么本文件里没有端口字段?(高频疑问)
+#   Ingress 资源只有 host/path → Service 的映射,没有入口端口参数 —— 这是设计使然!
+#   入口端口属于 controller 的 Service,不属于某个站点。本集群三套 controller 各管一段:
+#     ingress-nginx-controller            80:31588 / 443:30443   共享款(k8s-web/hello/xl18z)
+#     ingress-harbor-nginx-controller     80:32588 / 443:31443   harbor 专属
+#     ingress-prometheus-nginx-controller 80:30990 / 443:30490   ★ 本篇 Prometheus 专属
+#
+# ★ 本文件 class=prometheus-nginx(指向专属 controller),前提:
+#   先装 ingress-prometheus-nginx controller(一条 helm 命令,见 k8s-monitor.html
+#   第 04 章 5.5 节)。没装它之前,本 Ingress 无人认领(ADDRESS 空),30990 不通。
+#   回共享方案:ingressClassName 改回 nginx 再 apply,入口变回 31588。
+#
+# 链路(本文件):
+#   浏览器 http://prometheus.ergesanbaishou.com:30990/
+#        → ingress-prometheus-nginx-controller(NodePort 30990)
+#        → 本 Ingress 按 Host 分流 → svc prometheus-server(monitoring ns):80
+#        → Pod :9090
+#
+# ★ 与 Helm chart 的 server.ingress 二选一,别同时开!
+#   方式A(Helm 管理,k8s-monitor.html 第 04 章默认): values 里 server.ingress.enabled: true
+#   方式B(本文件,手工 YAML):
+#     1) values 里把 server.ingress.enabled 改回 false, helm upgrade 生效
+#     2) kubectl apply -f k8s/prometheus-ingress.yaml
+#   同 host 双开 = 两条重复规则,管理混乱
+#
+# 用法:
+#   1) 先装专属 controller(见 k8s-monitor.html 第 04 章 5.5 节的 helm 命令)
+#   2) kubectl apply -f k8s/prometheus-ingress.yaml
+#   3) 服务器验证(暂无 DNS,Host 头模拟 —— 与 k8s-web/harbor 同款手法):
+#      curl -s -H "Host: prometheus.ergesanbaishou.com" http://10.18.170.34:30990/-/healthy
+#      期望: Prometheus is Healthy.
+#   4) Windows hosts 加 "<节点IP>  prometheus.ergesanbaishou.com" 后浏览器访问
+#      http://prometheus.ergesanbaishou.com:30990/
+#      ★ 必须带 30990!controller 是 NodePort 型入口,不监听 80
+#      (要走无端口 80,用外层 NGINX 反代,见同目录 prometheus-nginx.conf)
+#
+# 可选加固 basic auth(对应 k8s-monitor.html 第 04 章第 6 步):
+#   printf "admin:$(openssl passwd -apr1 '密码')\n" > auth
+#   kubectl create secret generic prom-basic-auth --from-file=auth -n monitoring
+#   然后取消下方三行 annotations 注释,重新 apply
+# =========================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  namespace: monitoring            # ★ 必须与后端 Service 同命名空间(三件套装在 monitoring)
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"   # 先 HTTP;上证书后删除此行强制跳 https(见 k8s-cert.html)
+    # ---- basic auth(可选,建好 prom-basic-auth Secret 后取消注释)----
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: prom-basic-auth
+    # nginx.ingress.kubernetes.io/auth-realm: "Prometheus Login"
+spec:
+  ingressClassName: prometheus-nginx   # ★ 专属 controller(先装它,见头部注释);未装时改回 nginx 走共享 31588
+  rules:
+    - host: prometheus.ergesanbaishou.com   # ★ 子域名,Host 为它的请求才命中本规则
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: prometheus-server, port: {number: 80}}   # chart 生成的 svc:port 80 → targetPort 9090
+
+# =========================================================
+# 后续第 05/06 章同款套路(复制本文件只改三处):
+#   AlertManager: host: alertmanager.ergesanbaishou.com → svc prometheus-alertmanager:80
+#   Grafana:      host: grafana.ergesanbaishou.com      → svc <grafana 的 svc>:80
+# 三域名都从专属 controller 的 30990 进,按 Host 分流,互不影响(同款独立入口模式)
+# =========================================================
