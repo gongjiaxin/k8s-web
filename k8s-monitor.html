@@ -463,8 +463,11 @@ helm upgrade --install ingress-prometheus-nginx ingress-nginx/ingress-nginx \
 kubectl -n ingress-nginx get pods,svc | grep prometheus
 # 期望: pod Running;svc ingress-prometheus-nginx-controller → 80:30990/TCP,443:30490/TCP
 
-# ④ Ingress 切到新 class(k8s/prometheus-ingress.yaml 已改好 ingressClassName: prometheus-nginx)
-kubectl apply -f k8s/prometheus-ingress.yaml
+# ④ Ingress 切到新 class —— ★前提:服务器上的 yaml 已是新版!(仓库双 clone 实测坑:
+#    apply 了旧版 class=nginx,controller 装好了 30990 也死活不通 —— 规则还挂在共享款上)
+grep ingressClassName prometheus-ingress.yaml
+# 期望输出: prometheus-nginx;若还是 nginx → git pull 或 vim 手动改这一行
+kubectl apply -f prometheus-ingress.yaml          # ★ apply 的是 .yaml,不是 .conf!(见下表)
 kubectl -n monitoring get ingress prometheus-ingress
 # CLASS 列: nginx → prometheus-nginx;换 class = 规则"搬家",31588 上随之失效
 
@@ -473,6 +476,12 @@ curl -s -H "Host: prometheus.ergesanbaishou.com" http://10.18.170.34:30990/-/hea
 # 期望: Prometheus is Healthy.
 curl -s -H "Host: prometheus.ergesanbaishou.com" -o /dev/null -w '%{http_code}\n' http://10.18.170.34:31588/
 # 期望: 404(共享款已不管这个 Host —— 是佐证不是故障)</code></pre>
+  <p><b>两个配套文件分工(实测坑:</b><code>kubectl apply -f prometheus-nginx.conf</code> 报 <code>invalid object to validate</code> —— .conf 根本不是 K8S 资源<b>):</b></p>
+  <table>
+    <tr><th>文件</th><th>归属</th><th>正确用法</th></tr>
+    <tr><td>k8s/prometheus-ingress.yaml</td><td>K8S 资源(Ingress)</td><td><code>kubectl apply -f prometheus-ingress.yaml</code></td></tr>
+    <tr><td>k8s/prometheus-nginx.conf</td><td>外层 NGINX 配置</td><td>scp 到外层机器 <code>/etc/nginx/conf.d/</code>(必须 .conf 后缀)→ <code>nginx -t && nginx -s reload</code> —— <b>永不进 kubectl</b></td></tr>
+  </table>
   <h3>5.6 番外:ingress-nginx 命名空间的 5 个 Service 全景(那两个 443 是什么?)</h3>
   <p><code>kubectl -n ingress-nginx get svc</code> 装完第三套后会看到 5 个 Service,高频疑问:"下面两个 443 的没开放端口,nginx 是怎么指定的?" —— 答案:<b>它们不是流量入口,是 admission webhook(准入校验"安检门")</b>,只被 API Server 在 <code>kubectl apply</code> Ingress 的<b>那一瞬间</b>集群内部调用(校验注解/snippet 语法对不对),通过即退场,与业务流量零关系,所以 ClusterIP 足够、没 NodePort 属正常:</p>
   <table>
