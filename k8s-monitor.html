@@ -426,6 +426,25 @@ curl -s -H "Host: prometheus.ergesanbaishou.com" http://127.0.0.1:31588/-/health
   <div class="warn"><b>⚠️ 必须带 31588 端口!</b>controller 是 NodePort 型入口,不监听 80,直接开 <code>http://prometheus.ergesanbaishou.com/</code> 是不通的。要"无端口"体验需外层 NGINX 反代 —— 配置已备好:<a href="k8s/prometheus-nginx.conf">k8s/prometheus-nginx.conf</a>(80 版可直接用 + 443 升级注释段),放到外层 NGINX 机器的 <code>/etc/nginx/conf.d/</code>(必须 .conf 后缀),<code>nginx -t &amp;&amp; nginx -s reload</code> 生效;hosts 解析改指<b>外层 NGINX 机器 IP</b>。完整说明见 <a href="k8s-cert.html">证书文档</a>。</div>
   <div class="tip"><b>💡 同款套路直接复用:</b>后面 AlertManager 加 <code>alertmanager.ergesanbaishou.com</code>、Grafana 加 <code>grafana.ergesanbaishou.com</code> —— 三个域名都从 31588 进,Ingress 按 Host 分流,正是第 01 节图里"三件套各自有门"的落地形态。</div>
   <div class="tip"><b>📄 独立 YAML 版(与 chart ingress 二选一):</b>仓库里备了 <a href="k8s/prometheus-ingress.yaml">k8s/prometheus-ingress.yaml</a>(链路注释 + basic auth 注释段齐全)。要用它就先把 values 里 <code>server.ingress.enabled</code> 改回 <code>false</code> 再 upgrade,然后 <code>kubectl apply -f k8s/prometheus-ingress.yaml</code> —— 同 host 双开会规则重复、管理混乱。</div>
+  <p>独立 YAML 的<b>最小可用版</b>就这几行(完整注释版见仓库文件)。★ 注意:全文<b>没有一个入口端口字段</b> —— 入口端口由 <code>ingressClassName</code> 背后的 controller 决定,详见 5.5 节"灵魂三问":</p>
+  <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: monitoring            # ★ 必须与后端 Service 同命名空间
+spec:
+  ingressClassName: nginx          # ★ 唯一"端口开关":nginx→共享 31588;prometheus-nginx→专属 30990
+  rules:
+  - host: prometheus.ergesanbaishou.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-server   # chart 生成的 svc:80 → targetPort 9090
+            port:
+              number: 80              # 这是后端 svc 端口,不是入口端口!</code></pre>
 
   <h3>5.5 入口方案对比:共享 31588 vs 独立 controller 30990 ⭐</h3>
   <p><b>高频疑问:Ingress 里为什么不写端口?31588 已被 k8s-web 用了怎么办?</b>先纠正概念:Ingress 资源只有 <code>host/path → Service</code> 的映射,<b>没有入口端口参数</b>(设计使然),端口属于 controller 的 Service —— 31588 被多域名共享按 Host 分流本不算冲突。但本集群有更优雅的先例:<b>harbor 单独装了一套 controller(入口 32588)</b>;照抄该模式给 Prometheus 配<b>专属 controller + 独立端口 30990</b>,端口与规则全隔离,还不丢 Ingress 层能力:</p>
@@ -435,6 +454,23 @@ curl -s -H "Host: prometheus.ergesanbaishou.com" http://127.0.0.1:31588/-/health
     <tr><td><b>B · 独立 controller(★本环境采用)</b></td><td>域名:30990 → <b>专属 controller</b> → Ingress(独立 class)→ svc:80</td><td>同 harbor(32588) 模式;端口/规则全隔离;保留 basic auth 等 Ingress 能力</td><td>prometheus.ergesanbaishou.com<b>:30990</b></td></tr>
     <tr><td>C · svc NodePort 直连</td><td>节点:30990 → svc(跳过 controller)</td><td>最轻量,一条 helm upgrade 就有;但绕过 Ingress 层,无 basic auth</td><td>http://节点IP<b>:30990</b>(无域名)</td></tr>
   </table>
+
+  <p><b>⭐ 灵魂三问:不写端口 = 默认走 31588?配了 class = 另启动一个 ingress?二者区别?</b>先把两个角色分开 —— <b>Ingress 资源</b>只是一张<b>路由规则单</b>(host/path → svc):不是进程、不监听端口,写多少条都不"启动"任何东西;真正干活的是 <b>IngressController</b>(nginx Pod + NodePort svc):读规则单、守入口端口。<b>"选 class"本质是"选执行者"</b>:</p>
+  <table>
+    <tr><th>灵魂三问</th><th>答案</th></tr>
+    <tr><td>① Ingress 里不写端口,<br>默认就走 31588?</td><td><b>结论对,机制不是"默认"而是"class 决定"</b>:入口端口 = <code>ingressClassName</code> 对应那套 controller 的 Service 端口 —— <code>nginx</code> → 共享款 <b>31588</b>;<code>prometheus-nginx</code> → 专属款 <b>30990</b>。若连 <code>ingressClassName</code> 都不写,则找集群标记为 <b>default</b> 的 class(<code>kubectl get ingressclass</code> 看 DEFAULT 列;无 default 时规则无人认领)—— 建议<b>永远显式写 class</b></td></tr>
+    <tr><td>② class 配成 prometheus-nginx,<br>等于另启动了一个 ingress?</td><td><b>半个对,拆成两步看</b>:改 Ingress 的 class 本身零成本、零新增 —— 只是规则单换了"认领人"(从共享 controller 搬家,31588 随之 404);但新 class 要有人认领,必须先 <b>helm 装一套新 controller</b>(下方 ② 步命令)—— <b>这一步才是"另启动一个 ingress"</b>:集群多一个 nginx Deployment(1 Pod,约 0.5C/0.5G 起)+ 一个 NodePort svc。只改 class 不装 controller = 规则无人认领,30990 必然不通</td></tr>
+    <tr><td>③ 共享 vs 独立<br>到底差在哪?</td><td>见下表五维对比 —— 一句话:<b>共享 = 全楼共用一个门卫(31588 一扇门,按 Host 分流);独立 = 每栋楼自带门卫(30990 专属门,端口即隔离)</b></td></tr>
+  </table>
+  <table>
+    <tr><th>维度</th><th>A · 共享(class=nginx,31588)</th><th>B · 独立 controller(class=prometheus-nginx,30990)</th></tr>
+    <tr><td>新增成本</td><td>★零:只加一条 Ingress 规则,复用现有 controller</td><td>多一套 Deployment(Pod)+ 一个 svc,吃节点资源</td></tr>
+    <tr><td>入口端口</td><td>所有域名同挤 31588,靠 Host 分流</td><td>专属 30990,端口即业务边界 —— 外层 NGINX 的 upstream 按端口指认,互不干扰</td></tr>
+    <tr><td>故障域</td><td>controller 重启/挂 → <b>所有站点一起断</b></td><td>互不影响,排查范围天然缩小</td></tr>
+    <tr><td>变更影响</td><td>升级 controller/改全局配置 = 动所有人的门</td><td>可独立升级、回滚、调参(如 Prometheus 款放宽超时,不影响 k8s-web)</td></tr>
+    <tr><td>适用场景</td><td>小集群/个人测试,站点少且同源</td><td>多业务方/生产隔离/需独立固定端口(本集群 harbor 32588 同款先例)</td></tr>
+  </table>
+
   <pre><code># ① 先加仓库(★本机第一次用 ingress-nginx 仓库必须这步!)
 #    repo 是"按机器"记的:装 Prometheus 时加的 prometheus-community 不通用;
 #    漏了这步 = Error: repo ingress-nginx not found(实测踩坑,已登记第 8 节坑速查)
@@ -461,7 +497,8 @@ helm upgrade --install ingress-prometheus-nginx ingress-nginx/ingress-nginx \
 
 # ③ 等新 controller 就绪(单节点约 30s)
 kubectl -n ingress-nginx get pods,svc | grep prometheus
-# 期望: pod Running;svc ingress-prometheus-nginx-controller → 80:30990/TCP,443:30490/TCP
+# 期望: pod Running;svc 名是"双重款" ingress-prometheus-nginx-ingress-nginx-controller → 80:30990/TCP,443:30490/TCP
+#      (helm fullname 规则:release 名不含连续子串 ingress-nginx 时会追加后缀;名字怪≠装错,详见 5.6 追问一)
 
 # ④ Ingress 切到新 class —— ★前提:服务器上的 yaml 已是新版!(仓库双 clone 实测坑:
 #    apply 了旧版 class=nginx,controller 装好了 30990 也死活不通 —— 规则还挂在共享款上)
@@ -488,13 +525,71 @@ curl -s -H "Host: prometheus.ergesanbaishou.com" -o /dev/null -w '%{http_code}\n
     <tr><th>Service</th><th>类型 / 端口</th><th>身份</th><th>要 NodePort 吗</th></tr>
     <tr><td>ingress-nginx-controller</td><td>NodePort 80:<b>31588</b> / 443:30443</td><td>共享款 controller —— 业务流量入口(k8s-web/hello/xl18z)</td><td>★要,这就是 31588</td></tr>
     <tr><td>ingress-harbor-nginx-controller</td><td>NodePort 80:<b>32588</b> / 443:31443</td><td>harbor 专属 controller —— 业务流量入口</td><td>★要(32588)</td></tr>
-    <tr><td>ingress-prometheus-nginx-controller</td><td>NodePort 80:<b>30990</b> / 443:30490</td><td>Prometheus 专属 controller(5.5 节新装)</td><td>★要(30990)</td></tr>
+    <tr><td>ingress-prometheus-nginx-ingress-nginx-controller <small>(实测名"双重",见追问一)</small></td><td>NodePort 80:<b>30990</b> / 443:30490</td><td>Prometheus 专属 controller(5.5 节新装)</td><td>★要(30990)</td></tr>
     <tr><td>ingress-nginx-controller-admission</td><td>ClusterIP 443</td><td>共享款的 admission webhook("安检门")</td><td>不要 —— API Server 内网调用即可</td></tr>
     <tr><td>ingress-nginx-ergesanbaishou</td><td>ClusterIP 443</td><td>与 harbor controller 同期出现的另一个 webhook</td><td>不要 —— 同上,非流量入口</td></tr>
   </table>
   <p><b>一句话:认业务入口只看带 <code>80:xxxxx</code> 的 controller Service;443 的 ClusterIP 是"安检门"。</b>这也正是 5.5 节新 controller 关 <code>admissionWebhooks.enabled=false</code> 的原因 —— 三扇"安检门"会抢校验(多 controller 共存的经典坑)。验证某扇门背后挂谁:</p>
   <pre><code>kubectl -n ingress-nginx get svc ingress-nginx-ergesanbaishou -o yaml | grep -A3 selector
 kubectl get validatingwebhookconfigurations        # 看集群里有几扇"安检门"</code></pre>
+
+  <p><b>⭐ 追问一:光看这份 svc 列表,数得出几套 class 吗?</b>—— <b>数得出"几套 controller",看不出"class 名"</b>:带 <code>80:xxxxx</code> 的 NodePort svc 共 3 个 = 3 套 controller(3 个流量入口);但 class 是<b>另一种独立资源(IngressClass)</b>,名字与 svc 名无关,要看名单得另查;每个 controller 真正"盯"哪个 class,看它的启动参数:</p>
+  <pre><code>kubectl get ingressclass     # class 名单(NAME/CONTROLLER/AGE)—— 上面 5 个 svc 里读不出这份名单
+# 每个 Ingress 实际用了哪个 class + host:
+kubectl get ingress -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,CLASS:.spec.ingressClassName,HOST:.spec.rules[*].host'
+# 每个 controller 盯哪个 class(启动参数):
+kubectl -n ingress-nginx get deploy -o yaml | grep -E 'ingress-class|controller-class'</code></pre>
+  <div class="warn"><b>⚠️ 实测命名惊喜:Prometheus 专属款 svc 真名是 <code>ingress-prometheus-nginx-ingress-nginx-controller</code>("双重款")!</b>helm fullname 规则:release 名里不含<b>连续子串</b> <code>ingress-nginx</code> 时,会追加 <code>-ingress-nginx</code> 再拼 <code>-controller</code> —— release 名 <code>ingress-prometheus-nginx</code>(中间隔了 prometheus,断开了)正中此规则;harbor 款当年靠改名/对齐才有干净单层名(还引发过 webhook 指向不存在 svc 的坑,见 <a href="harbor.html">Harbor 文档</a>)。排查时别按短名猜,<b>以 <code>get svc</code> 实测为准</b>。</div>
+  <p><b>★ 实测定论(2026-11 实测 <code>get ingressclass</code> + <code>get ingress -A</code>):本集群 class 只有 2 个,controller 却有 3 套 —— 数量互不相等!</b></p>
+  <table>
+    <tr><th>计数对象</th><th>数量</th><th>清单 / 关系</th></tr>
+    <tr><td>IngressClass</td><td><b>2</b></td><td><code>nginx</code>(k8s.io/ingress-nginx)、<code>prometheus-nginx</code>(k8s.io/ingress-prometheus-nginx)</td></tr>
+    <tr><td>controller / 端口入口</td><td><b>3</b></td><td>共享 31588 + harbor 32588 + prometheus 30990</td></tr>
+    <tr><td>认领关系</td><td>多对一</td><td>class <code>nginx</code> 被<b>两套 controller 同时盯</b>(共享款 + harbor 款 —— harbor 款装时没建自己的 class,也认领 nginx)→ 6 条 nginx 系规则在 <b>31588 / 32588 两个门都能进</b>;class <code>prometheus-nginx</code> 只有专属款盯 → 只能 30990 进</td></tr>
+  </table>
+  <p>两个佐证:<b>①</b> <code>get ingress -A</code> 的 ADDRESS 列,nginx 系全是节点 IP <code>10.18.170.34</code>,而 prometheus-ingress 是 <b>10.96.157.83</b> —— 正是专属 controller svc 的 ClusterIP(见上表),ADDRESS 列告诉你规则被哪套 controller 认领;<b>②</b> 这也解开了"harbor-ingress 明明写的 <code>class: nginx</code>,流量却从 32588 进"之谜 —— <b>两扇门后面加载的是同一批规则</b>。逐个 controller 验证盯的是哪个 class:</p>
+  <pre><code>kubectl -n ingress-nginx get deploy -o yaml | grep -E 'ingress-class|controller-class'
+# 实测(2026-11):共享款、harbor 款都是 --ingress-class=nginx + --controller-class=k8s.io/ingress-nginx(双门同规则 ✓)
+#              prometheus 款 --controller-class=k8s.io/ingress-prometheus-nginx ✓,但 --ingress-class 仍是默认 nginx!(见下追记)</code></pre>
+  <p><b>★ 追记:deploy 参数实测的三个新发现</b>(真实输出比预想多一课):</p>
+  <table>
+    <tr><th>发现</th><th>解读</th></tr>
+    <tr><td>① 共享款与 harbor 款参数<b>一模一样</b>(连 --election-id 都是同一个 ingress-nginx-leader,但 --configmap 各自独立)</td><td>坐实"class nginx 双门":两套 controller 加载<b>同一批规则</b>;共用 election-id 只抢 ADDRESS 状态更新的租约,不影响转发;独立 configmap 意味着两个门的全局参数可分别调</td></tr>
+    <tr><td>② prometheus 款 --controller-class 正确,但 <b>--ingress-class 仍是默认值 nginx</b>(5.5 的 helm 命令只设了 ingressClassResource.*,没设 controller.ingressClass)</td><td>对现有"字段型"Ingress(写 ingressClassName)<b>无碍</b>:字段型按 --controller-class ↔ IngressClass.spec.controller 认领 → 30990 只认 prometheus-nginx(30990 Healthy / 31588 对 prometheus host 404 / ADDRESS=专属款 ClusterIP 三事实佐证)</td></tr>
+    <tr><td>③ 两个潜在连带</td><td>老式"注解型"Ingress(annotation kubernetes.io/ingress.class: nginx)会被<b>三套同时认领</b>;30990 可能也加载了 nginx 系 6 条规则(反向"漏吸",一测便知)</td></tr>
+  </table>
+  <pre><code># 一锤定音:30990 是否也伺候 nginx 系站点?(服务器上)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Host: k8s.ergesanbaishou.com" http://10.18.170.34:30990/
+# 404 = 完全隔离(字段型只按 controller-class 认领);200 = 有"漏吸",不影响使用,介意可做下方加固
+
+# 可选加固:--ingress-class 也改独特 + 独立 election-id(会滚动重启 pod,30990 中断约 30s,选低峰执行)
+helm upgrade --install ingress-prometheus-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
+  --set controller.ingressClassResource.name=prometheus-nginx \
+  --set controller.ingressClassResource.controllerValue=k8s.io/ingress-prometheus-nginx \
+  --set controller.ingressClassResource.default=false \
+  --set controller.service.type=NodePort \
+  --set controller.service.nodePorts.http=30990 \
+  --set controller.service.nodePorts.https=30490 \
+  --set controller.admissionWebhooks.enabled=false \
+  --set controller.replicaCount=1 \
+  --set controller.ingressClass=prometheus-nginx \
+  --set controller.electionID=ingress-prometheus-nginx-leader</code></pre>
+
+  <p><b>⭐ 追问二:<code>ingress-nginx-controller-admission</code> 做什么?为什么只有一个 443,没有 80、没有 NodePort?</b>它是共享款自带的 <b>admission webhook("安检门")</b>,背后就是 controller Pod 里同一个 nginx 进程在 <b>8443</b> 上开的校验接口(svc 443 → targetPort 8443,自签证书)。它<b>不转发任何业务流量</b>,只在 <code>kubectl apply/create</code> Ingress 的那一瞬间被 API Server 调一次:</p>
+  <pre><code>kubectl apply -f xxx-ingress.yaml
+  ↓
+API Server 发现 ValidatingWebhookConfiguration 匹配 Ingress 资源
+  ↓  集群内 HTTPS POST 对象 JSON(唯一调用方,就这一次)
+svc ingress-nginx-controller-admission:443 → controller Pod:8443
+  ↓ 校验 annotation / snippet / 规则语法
+通过 → 对象落库 → controller watch 到 → 生成 nginx 配置 reload → 31588 生效
+拒绝 → kubectl 当场报错,坏配置进不了集群</code></pre>
+  <table>
+    <tr><th>为什么"只有 443"</th><th>原因</th></tr>
+    <tr><td>没有 80</td><td>80 是<b>业务 HTTP 流量</b>的端口(那是 controller svc 80:31588 的职责);webhook 属<b>管理面</b>,API Server 调 webhook <b>强制 TLS/HTTPS</b>,所以只听 443(targetPort 8443)</td></tr>
+    <tr><td>没有 NodePort</td><td>唯一调用方是 API Server,<b>集群内部网</b> POST 一次 ClusterIP 即达;暴露到节点/外网反而给外人乱敲"安检门"的机会</td></tr>
+    <tr><td>它挂了会怎样</td><td>webhook 默认 <code>failurePolicy: Fail</code>:不可达时<b>所有新建/更新 Ingress 全被拒</b>,报 <code>failed calling webhook validate.nginx.ingress.kubernetes.io</code>(harbor 装第二套 controller 时实测踩过,见 <a href="harbor.html">Harbor 文档</a>)。应急:修 svc 指向,或临时删对应 <code>validatingwebhookconfiguration</code> 放行</td></tr>
+  </table>
 
   <div class="tip"><b>💡 回退与顺序:</b>要回方案 A 只需把 Ingress 的 <code>ingressClassName</code> 改回 <code>nginx</code> 再 apply、外层 NGINX upstream 同步改 31588。注意 30990 在装好 controller 前必然不通,顺序是<b>加仓库 → 装 controller → 切 class → 验端口</b>。</div>
 

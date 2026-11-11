@@ -6,7 +6,9 @@
 #   入口端口属于 controller 的 Service,不属于某个站点。本集群三套 controller 各管一段:
 #     ingress-nginx-controller            80:31588 / 443:30443   共享款(k8s-web/hello/xl18z)
 #     ingress-harbor-nginx-controller     80:32588 / 443:31443   harbor 专属
-#     ingress-prometheus-nginx-controller 80:30990 / 443:30490   ★ 本篇 Prometheus 专属
+#     ingress-prometheus-nginx-ingress-nginx-controller 80:30990/443:30490 ★ 本篇 Prometheus 专属
+#     (实测名"双重":helm fullname 规则 —— release 名不含连续子串 ingress-nginx 会追加 -ingress-nginx;
+#      名字怪≠装错,以 kubectl get svc 实测为准,详见 k8s-monitor.html 5.6 追问一)
 #
 # ★ 本文件 class=prometheus-nginx(指向专属 controller),前提:
 #   先装 ingress-prometheus-nginx controller(一条 helm 命令,见 k8s-monitor.html
@@ -15,7 +17,7 @@
 #
 # 链路(本文件):
 #   浏览器 http://prometheus.ergesanbaishou.com:30990/
-#        → ingress-prometheus-nginx-controller(NodePort 30990)
+#        → ingress-prometheus-nginx-ingress-nginx-controller(NodePort 30990;名双重是 helm 规则,非装错)
 #        → 本 Ingress 按 Host 分流 → svc prometheus-server(monitoring ns):80
 #        → Pod :9090
 #

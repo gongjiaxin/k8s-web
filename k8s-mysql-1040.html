@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · 线上 MySQL 报错实录 · Error 1040 Router 连接打满 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px;}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  /* 架构图 */
+  .arch{margin:16px 0}
+  .arch .box{border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:0 auto;max-width:760px;background:var(--card)}
+  .arch .box h4{color:var(--cyan);font-size:15px;margin-bottom:6px}
+  .arch .box ul{margin:4px 0 2px 18px;font-size:13.5px;color:var(--muted)}
+  .arch .box li b{color:var(--txt)}
+  .arch .arrow{text-align:center;font-size:13.5px;color:var(--blue);margin:6px 0;line-height:1.4}
+  .arch .arrow .tri{display:block;font-size:20px}
+  .arch .danger{border-color:rgba(252,129,129,.5);background:rgba(252,129,129,.06)}
+  .arch .danger h4{color:var(--red)}
+
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / 线上 MySQL 报错实录(Error 1040)</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>🚨 线上 MySQL 报错实录 —— Error 1040: Too many connections to MySQL Router
+    <small>2026-11-09 fke-db / fke-mysql-hmsserver-prod 线上实录:exporter 每 30 秒报 1040 + 每 2 分钟 connection refused —— 现象 → 七步排查 → 根因(3×3000 僵尸连接 + 探针"永真"缺陷)→ 一次 rollout restart 结案 → 后期巡检命令与加固清单,全程真实命令可复制</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#c1">事故速览(一表看懂)</a></li>
+    <li><a href="#c2">现象:三类报错与"每 2 分钟"规律</a></li>
+    <li><a href="#c3">架构与关键配置(事故地形图)</a></li>
+    <li><a href="#c4">排查:七步破案</a></li>
+    <li><a href="#c5">根因:9000 条僵尸连接 + 探针永真缺陷</a></li>
+    <li><a href="#c6">解决:一次 rollout restart + 验证</a></li>
+    <li><a href="#c7">后期检查:巡检命令与判读标准</a></li>
+    <li><a href="#c8">加固清单 + 报错速查表</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. 事故速览 ================= -->
+<section id="c1">
+  <h2><span class="no">01</span>事故速览 —— 一表看懂</h2>
+  <table>
+    <tr><th>项目</th><th>内容</th></tr>
+    <tr><td>故障对象</td><td><code>fke-db/fke-mysql-hmsserver-prod</code>(Oracle MySQL Operator 部署的 InnoDBCluster:<b>3 实例</b> MySQL 8.4 + <b>4 副本</b> mysql-router 8.4.7 + mysqld_exporter)</td></tr>
+    <tr><td>故障表现</td><td>mysqld_exporter 每 30 秒报 <code>Error 1040: Too many connections to MySQL Router</code>;每 2 分钟规律性 <code>connection refused</code>;偶发 heartbeat 库不存在 / TOKUDB 引擎不存在的采集器报错</td></tr>
+    <tr><td>影响范围</td><td>所有经 Service <code>fke-mysql-hmsserver-prod:3306</code>(→ Router 6446 RW 路由)<b>新建连接</b>的应用;已有连接不受影响,<b>后端 MySQL 全程无感(主库从未打满)</b></td></tr>
+    <tr><td>时间线</td><td>报警可见 01:47–02:06 UTC(北京 09:47–10:06);真实起点约 <b>01:0x</b>(复制 applier 卡 6736s 线索,见 05 节遗留)</td></tr>
+    <tr><td>根因</td><td>① 重连风暴遗留的<b>僵尸连接</b>把 3 个 Router 副本各自的 3000 连接额度占满 → 1040;② 第 4 个 Router 容器已死,但 readiness 探针只 <code>cat</code> emptyDir 里的配置文件(<b>永远成功</b>)→ 死 endpoint 仍挂在 Service 上 → 每 4 次轮询命中 1 次 → connection refused</td></tr>
+    <tr><td>解决</td><td><code>kubectl rollout restart</code> Router Deployment:僵尸连接清零,合法应用连接池(~130 条)自动回填</td></tr>
+    <tr><td>结果</td><td>exporter 日志干净;主库 <code>Threads_connected</code> 9/3/3,真实业务连接个位数;Router 连接计数 20 分钟零增长(28 → 28)</td></tr>
+  </table>
+  <div class="tip"><b>💡 一句话:</b>报错文本带 <b>"to MySQL Router"</b> = <b>Router 进程自己的连接额度</b>(默认 512,本案已调 3000/副本)打满,与后端 MySQL 的 <code>max_connections</code> 无关;占着额度的"用户"大多是<b>早已消失的僵尸连接</b>,重启即清零。</div>
+</section>
+<!-- ================= 2. 现象 ================= -->
+<section id="c2">
+  <h2><span class="no">02</span>现象 —— 三类报错与"每 2 分钟"规律</h2>
+
+  <h3>原始日志(mysqld_exporter,每 30 秒抓取一次)</h3>
+  <pre><code>time=2026-11-09T02:01:32Z level=ERROR source=exporter.go:131 msg="Error opening connection to database" err="Error 1040: Too many connections to MySQL Router"
+time=2026-11-09T02:02:02Z ... err="dial tcp 10.107.24.34:3306: connect: connection refused"
+time=2026-11-09T02:02:32Z ... err="Error 1040: Too many connections to MySQL Router"
+time=2026-11-09T02:03:02Z ... err="Error 1040: Too many connections to MySQL Router"
+time=2026-11-09T02:03:32Z ... err="Error 1040: Too many connections to MySQL Router"
+time=2026-11-09T02:04:02Z ... err="dial tcp 10.107.24.34:3306: connect: connection refused"
+
+# 01:51:02 那次抓取曾成功过一次,带出两条采集器报错(无害噪音):
+time=2026-11-09T01:51:02Z level=ERROR source=exporter.go:160 msg="Error from scraper" scraper=heartbeat err="Error 1049 (42000): Unknown database 'heartbeat'"
+time=2026-11-09T01:51:02Z ... scraper=engine_tokudb_status err="Error 1286 (42000): Unknown storage engine 'TOKUDB'"</code></pre>
+
+  <h3>报错分类:先分清三个层面</h3>
+  <table>
+    <tr><th>报错</th><th>层面</th><th>定性</th></tr>
+    <tr><td><code>Error 1040: Too many connections to MySQL Router</code></td><td><b>Router 进程自身</b>的连接额度(默认 512,本案已调 3000/副本)</td><td>主故障</td></tr>
+    <tr><td><code>dial tcp 10.107.24.34:3306: connect: connection refused</code></td><td>TCP 层:Service 的某个 endpoint 上<b>没有进程在监听</b>(容器已死)</td><td>主故障的第二面</td></tr>
+    <tr><td><code>Error 1049 Unknown database 'heartbeat'</code> / <code>Error 1286 Unknown storage engine 'TOKUDB'</code></td><td>exporter 采集器配置噪音</td><td>无害,顺手关闭(见 08 节)</td></tr>
+  </table>
+  <div class="warn"><b>⚠️ 关键分辨点:</b>同样是 1040,<b>带 "to MySQL Router"</b> 是 Router 自己拒绝的;<b>不带</b>(只有 "Too many connections")才是后端 MySQL 的 <code>max_connections</code> 打满。一字之差,排查方向完全不同 —— 本案主库从头到尾没有打满。</div>
+
+  <h3>破案起点:时间轴上的轮询规律</h3>
+  <p>把报错按时间排开,发现 <b>"1 次 refused + 3 次 1040"以 2 分钟为周期循环</b> —— 恰好等于 4 个 endpoint × 30 秒抓取间隔:</p>
+  <pre><code>02:01:32  1040      ← endpoint B:满
+02:02:02  refused   ← endpoint A:容器已死,但还在 Service 里
+02:02:32  1040      ← endpoint C:满
+02:03:02  1040      ← endpoint D:满
+02:03:32  1040      ← 轮回 endpoint B:满
+02:04:02  refused   ← 轮回 endpoint A:仍死
+        (周期 = 4 × 30s = 2 分钟,严丝合缝)</code></pre>
+  <p>由此直接推断拓扑真相:<b>3 个活着的 Router 都已顶到各自上限,第 4 个 Router 容器已经死了</b> —— 后面所有排查都在验证这两点。</p>
+</section>
+
+<!-- ================= 3. 架构与关键配置 ================= -->
+<section id="c3">
+  <h2><span class="no">03</span>架构与关键配置 —— 事故地形图</h2>
+
+  <div class="arch">
+    <div class="box" style="max-width:640px">
+      <h4>📦 客户端 Pod(namespace app 等,~17 个)</h4>
+      <ul><li><b>release-server ×4</b> + 其余业务 Pod,每个持 <b>7~8 条</b>空闲池连接(健康稳态 ~130 条)</li>
+          <li><b>mysqld_exporter</b>:每 30s 建新连接抓指标 —— 它是报警人,也是受害最深的客户端</li></ul>
+    </div>
+    <div class="arrow">Service <b>fke-mysql-hmsserver-prod:3306</b>(ClusterIP 10.107.24.34)→ kube-proxy 轮询 4 个 endpoint<span class="tri">▼</span></div>
+    <div class="box danger">
+      <h4>🔥 4 × mysql-router:6446 [routing:bootstrap_rw](事故点)</h4>
+      <ul><li><b>max_total_connections = 3000 / 副本</b>(默认 512,已被调大)</li>
+          <li><b>3 个副本额度被僵尸连接占满</b> → 新连接一律 Error 1040</li>
+          <li><b>第 4 个副本容器死亡</b>,但 readiness 探针"永真" → endpoint 未摘除 → 轮到它就 refused</li></ul>
+    </div>
+    <div class="arrow">routing_strategy = <b>first-available</b>(全部固定指向主库)<span class="tri">▼</span></div>
+    <div class="box" style="max-width:640px">
+      <h4>🗄️ 3 × MySQL 8.4 实例(-0/-1/-2,主库 = -1)</h4>
+      <ul><li><b>max_connections = 3000,全程从未打满</b>(Threads_connected 峰值个位数)</li>
+          <li>connection_sharing=1:空闲客户端不占后端连接 → 主库被保护(本案立功)</li></ul>
+    </div>
+  </div>
+
+  <h3>从 describe pod 拿到的关键配置</h3>
+  <table>
+    <tr><th>检查点</th><th>值</th><th>对本案的意义</th></tr>
+    <tr><td>max_total_connections</td><td><code>3000</code>/副本(共 4 副本)</td><td>排除"限额太小"—— 是真的被占满了</td></tr>
+    <tr><td>配置文件位置</td><td><code>/tmp/mysqlrouter/mysqlrouter.conf</code></td><td><code>/etc/mysqlrouter/</code> 下只是镜像原版模板,<code>cat</code> 它会误判</td></tr>
+    <tr><td>RW 路由策略</td><td><code>first-available</code></td><td>所有 RW 后端连接<b>全压主库一台</b></td></tr>
+    <tr><td>connection_sharing</td><td><code>1</code></td><td>空闲客户端不占后端连接 → 主库免遭殃及</td></tr>
+    <tr><td>QoS</td><td><b>BestEffort</b>(无 requests/limits)</td><td>高负载下 CPU 被饿 → liveness 易超时被杀</td></tr>
+    <tr><td>liveness</td><td><code>https :8443/swagger.json timeout=1s</code>,3 次失败即杀</td><td>过严:负载下 30s 内即可误杀容器</td></tr>
+    <tr><td>readiness</td><td><code>cat /tmp/mysqlrouter/mysqlrouter.conf</code></td><td><b>缺陷:文件在 emptyDir 里,容器重启后仍在 → 探针"永真"</b>,死容器照样 Ready</td></tr>
+  </table>
+
+  <pre><code># 真实生效配置要 cat /tmp 下的(不是 /etc):
+$ kubectl -n fke-db exec &lt;router-pod&gt; -- cat /tmp/mysqlrouter/mysqlrouter.conf | grep -Ei 'max_total|bind_port|routing'
+max_total_connections=3000
+[routing:bootstrap_rw]
+bind_port=6446
+routing_strategy=first-available
+[routing:bootstrap_ro]
+bind_port=6447
+routing_strategy=round-robin-with-fallback
+...</code></pre>
+</section>
+<!-- ================= 4. 排查 ================= -->
+<section id="c4">
+  <h2><span class="no">04</span>排查 —— 七步破案</h2>
+
+  <h3>第 1 步:读日志找规律(零成本,信息量最大)</h3>
+  <p>不急着敲命令,先把报错按时间轴排开 —— 得到 <b>"1 refused + 3×1040"的 2 分钟循环</b>(见 02 节),直接锁定"3 满 1 死"的拓扑假设。<b>规律比单条报错值钱。</b></p>
+
+  <h3>第 2 步:describe Router Pod,拿到底牌</h3>
+  <pre><code>$ kubectl -n fke-db describe pod fke-mysql-hmsserver-prod-router-6c5f8cfb7-4jsz6
+Environment:
+  MYSQL_ROUTER_BOOTSTRAP_EXTRA_OPTIONS:  --conf-set-option=DEFAULT.max_total_connections=3000
+                                          --conf-set-option=DEFAULT.connect_timeout=10
+                                          --conf-set-option=DEFAULT.client_connect_timeout=30
+                                          --conf-set-option=routing:bootstrap_rw.connection_sharing=1
+                                          --conf-set-option=routing:bootstrap_ro.connection_sharing=1
+Liveness:       http-get https://:http/api/20190715/swagger.json delay=0s timeout=1s period=10s #failure=3
+Readiness:      exec [cat /tmp/mysqlrouter/mysqlrouter.conf] delay=0s timeout=1s period=10s
+QoS Class:      BestEffort</code></pre>
+  <p>三个结论:① 限额已是 3000,不是默认 512 → 排除"调小限额没调";② BestEffort + 1s liveness → 容器有被误杀的风险;③ readiness 只 <code>cat</code> 一个 emptyDir 文件 → <b>容器死了探针照样通过</b>,refused 之谜有了解释框架。</p>
+
+  <h3>第 3 步:看真实生效配置(避开 /etc 陷阱)</h3>
+  <pre><code>$ kubectl -n fke-db exec &lt;router-pod&gt; -- cat /etc/mysqlrouter/mysqlrouter.conf | grep -Ei 'routing'
+# → 只有 keepalive 段!这是镜像原版模板,差点误判
+$ kubectl -n fke-db exec &lt;router-pod&gt; -- cat /tmp/mysqlrouter/mysqlrouter.conf | grep -Ei 'max_total|routing'
+max_total_connections=3000        # ← 真实生效
+[routing:bootstrap_rw] routing_strategy=first-available</code></pre>
+
+  <h3>第 4 步:processlist 三连 —— 决定性反差</h3>
+  <p>实例 Pod 的容器名是 <code>mysql</code>(不是 mysqld),root 密码在 InnoDBCluster 的 <code>spec.secretName</code> 指向的 secret 里(key 为 <code>rootUser</code> / <code>rootPassword</code>):</p>
+  <pre><code>RU=$(kubectl -n fke-db get secret fke-mysql-hmsserver-prod-cluster-secret -o jsonpath='{.data.rootUser}' | base64 -d)
+PW=$(kubectl -n fke-db get secret fke-mysql-hmsserver-prod-cluster-secret -o jsonpath='{.data.rootPassword}' | base64 -d)
+for i in 0 1 2; do
+  kubectl -n fke-db exec fke-mysql-hmsserver-prod-$i -c mysql -- mysql -u"$RU" -p"$PW" -e "
+    SELECT MEMBER_ROLE FROM performance_schema.replication_group_members WHERE MEMBER_ID=@@server_uuid;
+    SELECT user, db, command, COUNT(*) cnt, MAX(time) max_idle_s
+      FROM information_schema.processlist GROUP BY user, db, command ORDER BY cnt DESC;
+    SHOW GLOBAL STATUS LIKE 'Threads_connected';"
+done
+# 主库(-1,PRIMARY)关键输出:
+#   my_role: PRIMARY
+#   hms    dmpcloud  Sleep  4    4      ← 真实业务连接只有个位数!
+#   hms    hmscloud  Sleep  1    0
+#   Threads_connected: 9 / 3 / 3(三台)</code></pre>
+  <p><b>Router 上堆着 ~9000 条连接,后端真实业务连接只有 ~6 条</b> —— 巨大反差说明那些连接不是活跃业务,而是空转的占位者。注意:RW 路由是 <code>first-available</code>,连接全在<b>主库</b>上,processlist 必须看主库才有意义(用 <code>MEMBER_ROLE</code> 先认角色)。</p>
+
+  <h3>第 5 步:MySQL 错误日志取证 —— 反证主库清白</h3>
+  <pre><code>$ kubectl -n fke-db logs fke-mysql-hmsserver-prod-1 -c mysql --since=5h | grep -iE 'too many|aborted|error'
+# ① 事故窗口内没有任何 "Too many connections" → 主库 max_connections 从未打满
+# ② 02:06(Router 重启瞬间)只有 3 条 Aborted,来源是被杀的旧 Router Pod IP:
+2026-11-09T02:06:28Z [Note] [Server] Aborted connection 9619239 to db: 'hmscloud' user: 'hms'
+  host: '10.244.58.40' (Got an error reading communication packets)</code></pre>
+  <p><b>重启瞬间只产生 3 条断开</b> → Router 手里那 ~9000 条连接几乎<b>没有后端对应物</b> → 全是"僵尸"(客户端早已消失,只剩 Router 侧的空壳计数)。</p>
+
+  <h3>第 6 步:/proc/net/tcp 抓现行 —— 零依赖的取证神器</h3>
+  <p>重启后 Router 计数从零开始,正好观察"谁在连"。6446 的十六进制是 <code>192E</code>,对端地址在第 3 列(IP 字节倒序)。一条 awk 聚合出每个客户端 IP 的连接数:</p>
+  <pre><code>for p in 4jsz6 h65pj t7mjp ztmlx; do
+  echo "== $p =="
+  kubectl -n fke-db exec fke-mysql-hmsserver-prod-router-6c5f8cfb7-$p -- \
+    sh -c "awk '\$4==\"01\" &amp;&amp; \$2 ~ /:192E\$/ {ip=substr(\$3,1,8); cnt[substr(ip,7,2) \".\" substr(ip,5,2) \".\" substr(ip,3,2) \".\" substr(ip,1,2)]++} END {for (i in cnt) printf \"%4d %s\n\", cnt[i], i}' /proc/net/tcp | sort -rn"
+done
+# == 4jsz6 ==
+#    4 10.244.190.235     ← release-server-ltzzs
+#    4 10.244.190.250     ← release-server-x5v4s
+#    ... 4 个 Router 合计 ~129 条 ESTABLISHED,来自 ~17 个客户端 Pod
+
+$ kubectl get pods -A -o wide | grep -E '10\.244\.190\.(232|235|250|251)'
+app  release-server-5568c7d5c5-xxxx  1/1  Running  ...  10.244.190.235  fke-n7  ← 客户端认领</code></pre>
+  <p>~17 个客户端 Pod × 平均 7~8 条 = <b>正常连接池形态</b>,不是泄漏进行中。</p>
+
+  <h3>第 7 步:稳定性对比 —— 盖章结案</h3>
+  <pre><code># 间隔 20 分钟跑两次第 6 步命令:
+# 第一次:4jsz6 = 28 条 ESTABLISHED
+# 第二次:4jsz6 = 28 条(零增长)→ 当前是健康稳态,僵尸未再积累</code></pre>
+</section>
+<!-- ================= 5. 根因 ================= -->
+<section id="c5">
+  <h2><span class="no">05</span>根因 —— 9000 条僵尸连接 + 探针"永真"缺陷</h2>
+
+  <h3>完整因果链</h3>
+  <pre><code>~01:0x  复制/负载事件(GR applier 卡 6736s 线索,起点未完全闭环)
+  └→ 主库变慢,应用查询超时 → 无退避地疯狂重连,旧连接被弃成"僵尸"
+       └→ 3 个 Router 各自的 3000 连接额度被僵尸占满
+            └→ 新连接一律 Error 1040 "Too many connections to MySQL Router"
+                 └→ 第 4 个 Router 容器死亡(BestEffort + 1s liveness,疑似被饿杀)
+                      └→ readiness 只 cat emptyDir 里的文件 → "永真" → 死 endpoint 仍挂 Service
+                           └→ kube-proxy 每 4 次轮询命中它 1 次 → connection refused
+                                └→ mysqld_exporter 每 30s 报警(报警人 = 受害最深的客户端)</code></pre>
+
+  <h3>为什么主库全程无感?</h3>
+  <p>三重保险叠加:① 僵尸连接全部空闲,<code>connection_sharing=1</code> 让空闲客户端<b>不占后端连接</b>(客户端连接 ~130 条时,主库 Threads_connected 只有 ~9,压缩比 15:1);② 主库 <code>max_connections=3000</code> 余量充足;③ 错误日志零 "Too many connections" 佐证。<b>死的只是 Router 的"接待能力",数据库本体毫发无损。</b></p>
+
+  <h3>为什么一次重启就能解决?</h3>
+  <p>僵尸连接的<b>客户端进程早已消失或放弃</b> —— Router 断开后它们无人重建;而合法应用(~17 个 Pod 的连接池)会在几分钟内自动回填 ~130 条正常连接。所以重启 Router = 把额度账本撕了重记,留下来的全是真用户。</p>
+
+  <h3>为什么 refused 每 2 分钟才出现一次?</h3>
+  <p>4 个 endpoint 轮询 + 30 秒抓取间隔 = 2 分钟才轮到那个死 Pod 一次。这是<b>探针缺陷的指纹</b>:readiness 探针 <code>cat /tmp/mysqlrouter/mysqlrouter.conf</code> 检查的文件放在 emptyDir 卷里,<b>容器崩溃重启后文件依然存在</b>,探针永远成功 → Pod 永远 Ready → 死 endpoint 永远在 Service 里接流量。</p>
+
+  <div class="warn"><b>⚠️ 遗留线索(未完全闭环,记入待办):</b>① SECONDARY 实例的 GR applier 线程卡了 6736 秒(≈1 小时 52 分,正好指向 01:0x 的事故起点),需查 <code>replication_group_member_stats</code> 与 <code>innodb_trx</code> 确认是否有大事务/DDL;② 主库曾出现 <code>sha256_password is deprecated</code> 告警,某客户端仍在用旧认证插件;③ 凭据曾在终端输出过,建议轮换。</div>
+</section>
+
+<!-- ================= 6. 解决 ================= -->
+<section id="c6">
+  <h2><span class="no">06</span>解决 —— 一次 rollout restart + 四连验证</h2>
+
+  <h3>止血(2026-11-09 10:06 北京时间)</h3>
+  <pre><code>sudo kubectl -n fke-db rollout restart deploy/fke-mysql-hmsserver-prod-router
+# 4 个 Router Pod 滚动重建,所有僵尸连接随旧 Pod 一起消失,额度账本清零重记</code></pre>
+
+  <h3>验证四连(每条都过才算结案)</h3>
+  <pre><code># ① exporter 是否恢复干净(连续观察,无新 ERROR)
+kubectl -n fke-db logs fke-mysql-hmsserver-prod-router-metrics-exporter-... --since=20m | grep -i error
+# → 空(干净)
+
+# ② 4 个新 Router Pod 是否稳定(重启计数不增长)
+kubectl -n fke-db get pods | grep hmsserver-prod-router
+# → 4 个 1/1 Running,RESTARTS 0
+
+# ③ 主库连接数是否回归个位数 + 复制角色正常
+# (跑 04 节第 4 步的 for 循环 → Threads_connected 9/3/3,PRIMARY 在 -1)
+
+# ④ Router 活跃连接回填速度(跑 04 节第 6 步普查 → ~130 条后趋稳,不再增长)</code></pre>
+
+  <h3>结案状态</h3>
+  <table>
+    <tr><th>指标</th><th>事故时</th><th>重启后</th></tr>
+    <tr><td>Router 连接额度占用</td><td>3 副本 × 3000 全满(1040)</td><td>~130 条稳态(4.3%)</td></tr>
+    <tr><td>connection refused</td><td>每 2 分钟 1 次</td><td>消失</td></tr>
+    <tr><td>exporter 报错</td><td>每 30 秒 1 条</td><td>0</td></tr>
+    <tr><td>主库 Threads_connected</td><td>个位数(全程未被殃及)</td><td>9 / 3 / 3</td></tr>
+    <tr><td>业务影响</td><td>新建连接失败约 20 分钟+</td><td>连接池自动回填,业务恢复</td></tr>
+  </table>
+</section>
+<!-- ================= 7. 后期检查 ================= -->
+<section id="c7">
+  <h2><span class="no">07</span>后期检查 —— 巡检命令与判读标准</h2>
+
+  <h3>巡检 A:Router 连接额度(REST API,建议每周/告警时)</h3>
+  <pre><code>RMU=$(sudo kubectl -n fke-db get secret fke-mysql-hmsserver-prod-router-rest-monitor \
+      -o jsonpath='{.data.routerUsername}' | base64 -d)   # 注意:key 是 routerUsername 不是 username
+RMP=$(sudo kubectl -n fke-db get secret fke-mysql-hmsserver-prod-router-rest-monitor \
+      -o jsonpath='{.data.routerPassword}' | base64 -d)
+for p in &lt;pod后缀1&gt; &lt;pod后缀2&gt; ...; do
+  ip=$(sudo kubectl -n fke-db get pod fke-mysql-hmsserver-prod-router-&lt;rs-hash&gt;-$p -o jsonpath='{.status.podIP}')
+  echo "== $p ($ip) =="; curl -sk -u "$RMU:$RMP" https://$ip:8443/api/20190715/routes/routing:bootstrap_rw/status; echo
+done
+# 关注返回 JSON 里的 activeConnections(健康时应为个位数~几十)</code></pre>
+
+  <h3>巡检 B:客户端普查(谁在连 Router,建议每日对比)</h3>
+  <pre><code># 04 节第 6 步那条 awk 一把梭:按客户端 IP 聚合 4 个 Router 的 ESTABLISHED 连接
+# 期望:总量稳定在 ~130(±),对端 IP 与业务 Pod 一一对应
+$ kubectl get pods -A -o wide | grep &lt;可疑IP&gt;    # 认领客户端 Pod</code></pre>
+
+  <h3>巡检 C:主库侧(连接归属 + 余量)</h3>
+  <pre><code># 04 节第 4 步的 for 循环 + 这两条:
+SELECT SUBSTRING_INDEX(host,':',1) AS src_ip, COUNT(*) AS conns
+  FROM information_schema.processlist GROUP BY src_ip ORDER BY conns DESC;
+SHOW GLOBAL STATUS LIKE 'Aborted%';   -- Aborted_clients 持续走高 = 有客户端非正常消失(僵尸前兆)</code></pre>
+
+  <h3>巡检 D:复制健康(本案遗留项,建议纳入常规)</h3>
+  <pre><code>SELECT MEMBER_HOST, MEMBER_ROLE,
+       COUNT_TRANSACTIONS_IN_QUEUE                AS cert_queue,
+       COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE AS applier_queue
+  FROM performance_schema.replication_group_member_stats s
+  JOIN performance_schema.replication_group_members m ON m.MEMBER_ID = s.MEMBER_ID;
+-- cert_queue / applier_queue 为 0 或个位数 = 健康;持续非零 = applier 卡住(01:0x 事件的形态)
+
+SELECT trx_started, trx_weight, trx_rows_locked, trx_rows_modified, trx_state
+  FROM information_schema.innodb_trx ORDER BY trx_started LIMIT 5;
+-- 长事务(trx_started 很久之前)= 大事务/DDL 卡复制的高危信号</code></pre>
+
+  <h3>判读标准(看到什么 → 下什么结论)</h3>
+  <table>
+    <tr><th>观察(巡检 A+B)</th><th>结论</th><th>动作</th></tr>
+    <tr><td>4 Router 总连接稳定在 ~130(±)</td><td>健康稳态</td><td>无需动作</td></tr>
+    <tr><td>缓慢爬升(天级),对端 IP 越来越杂</td><td>慢性僵尸积累</td><td>普查抓 IP → 认领 Pod → 查该应用的连接池归还逻辑</td></tr>
+    <tr><td>快速冲高(分钟级)+ 应用侧超时报错</td><td>重连风暴进行中</td><td>先稳主库(查巡检 D),再给应用加退避;必要时滚动重启 Router 止血</td></tr>
+    <tr><td>单副本 activeConnections → 3000</td><td>即将 1040</td><td>提前重启该副本,同时按上面两条找堆积来源</td></tr>
+    <tr><td>周期性 connection refused</td><td>有 endpoint 容器死亡但探针没摘</td><td>get endpoints 对照 get pods,重启死副本;根治见 08 节第 1 条</td></tr>
+  </table>
+</section>
+
+<!-- ================= 8. 加固清单 ================= -->
+<section id="c8">
+  <h2><span class="no">08</span>加固清单 + 报错速查表</h2>
+
+  <h3>防复发(按优先级)</h3>
+  <ol>
+    <li><b>Router 加 resources(requests/limits)</b>:摆脱 BestEffort,根治"高负载 CPU 被饿 → 1s liveness 误杀 → 死容器仍 Ready 接流量"的连锁;同时可放宽 liveness timeout(1s → 3~5s)</li>
+    <li><b>应用重试加指数退避 + 上限</b>,连接池 <code>maxLifetime &lt; wait_timeout</code>:根治"主库一慢就重连风暴",这是本次僵尸的制造机</li>
+    <li><b>Router :8443 /metrics 纳入 Prometheus</b>(凭据用 rest-monitor secret),告警阈值 <code>activeConnections &gt; 1500</code> —— 距打满 3000 还有数小时缓冲,不用再靠 exporter 的 1040 报错发现事故</li>
+    <li><b>限额对齐</b>:4 副本 × 3000 = 12000,而 first-available 把 RW 流量全灌主库(主库 max_connections=3000)。建议单副本降到 ~700(总量 ≤ 主库上限),或上调主库 max_connections 并核算内存</li>
+    <li><b>exporter 消噪</b>:加 <code>--no-collector.heartbeat --no-collector.engine_tokudb_status</code>,日志里只剩真故障</li>
+    <li><b>轮换凭据</b>:rest-monitor / router 两个 secret 的内容曾在排障终端输出过</li>
+    <li><b>01:0x 复制事件立案</b>:applier 卡 6736s 的起点(大事务/DDL?)用巡检 D 的 SQL 回溯,它是本次风暴的第一块多米诺</li>
+  </ol>
+
+  <h3>MySQL Router 类报错速查表</h3>
+  <table>
+    <tr><th>报错</th><th>真正含义</th><th>第一动作</th></tr>
+    <tr><td><code>1040: Too many connections to MySQL Router</code></td><td><b>Router 进程自身额度</b>(默认 512)打满</td><td>巡检 A 看各副本 activeConnections;重者滚动重启止血;普查 B 找占用者</td></tr>
+    <tr><td><code>1040: Too many connections</code>(不带 to MySQL Router)</td><td>后端 MySQL 的 <code>max_connections</code> 打满</td><td>processlist 按 user/db 聚合找大户;核 <code>Threads_connected</code></td></tr>
+    <tr><td><code>dial tcp ...: connect: connection refused</code></td><td>Service 的某 endpoint 无进程监听(容器死/未就绪)</td><td><code>get endpoints</code> 对照 <code>get pods</code>;查容器重启原因与探针</td></tr>
+    <tr><td><code>1049 Unknown database 'heartbeat'</code></td><td>exporter 心跳采集器找不到库</td><td>建 heartbeat 库表,或 <code>--no-collector.heartbeat</code></td></tr>
+    <tr><td><code>1286 Unknown storage engine 'TOKUDB'</code></td><td>服务器无 TokuDB 引擎</td><td><code>--no-collector.engine_tokudb_status</code></td></tr>
+  </table>
+
+  <div class="tip"><b>💡 一句话记住:</b>"to MySQL Router" 五个字是分水岭 —— 带它是 Router 额度,不带是 MySQL 本体;再把报错按<b>时间轴排开找轮询规律</b>,90% 的 Router 类故障 10 分钟内就能定性。本案全程没动数据库一行配置,一次 rollout restart 结案。</div>
+</section>
+</div>
+
+<footer class="wrap">
+  <p>K8S Web · 事故复盘文档 · <a href="index.html">返回首页</a></p>
+</footer>
+</body>
+</html>
