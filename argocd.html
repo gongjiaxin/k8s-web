@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · 线上 ArgoCD 部署档案 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  details.cfg summary{cursor:pointer;color:var(--cyan);font-size:14px}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / 线上 ArgoCD 部署档案</span>
+  </div>
+</div>
+<div class="wrap">
+<header class="doc">
+  <h1>🦑 线上 ArgoCD 部署档案(fke)
+    <small>ArgoCD ≠ Argo Workflows 一字之差 · Helm HA 部署 · 75 个应用的 GitOps 中枢 —— 信息全部来自 2026-11 线上实测</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#a1">先分清:ArgoCD ≠ Argo Workflows(本次排坑起点)</a></li>
+    <li><a href="#a2">部署形态总览(Helm HA)</a></li>
+    <li><a href="#a3">组件清单与访问入口</a></li>
+    <li><a href="#a4">GitOps 仓库结构(双仓库布局)</a></li>
+    <li><a href="#a5">管理范围与应用状态(⚠ 19 个漂移)</a></li>
+    <li><a href="#a6">排查 / 运维命令速查</a></li>
+    <li><a href="#a7">周边生态与运维待办清单</a></li>
+    <li style="list-style:none;margin-top:10px"><b style="color:var(--orange)">⬇ new-k8s 新集群:全新离线安装实操(2026-11-11)</b></li>
+    <li><a href="#a8">离线安装背景与版本矩阵(外网全断)</a></li>
+    <li><a href="#a9">第一步:开发机下载全部资源(3 镜像清单)</a></li>
+    <li><a href="#a10">第二步:上传 + 全节点镜像导入(★ 最大坑)</a></li>
+    <li><a href="#a11">第三步:helm 本地包安装 + pre-install 超时排坑</a></li>
+    <li><a href="#a12">第四步:NodePort + insecure(30443 撞号坑)</a></li>
+    <li><a href="#a13">第五步:Nginx 反代 new-argocd.ergesanbaishou.com</a></li>
+    <li><a href="#a14">第六步:密码设置 / 验证 / 踩坑总结速查</a></li>
+    <li style="list-style:none;margin-top:10px"><b style="color:var(--green)">⬇ 实战:第一个 GitOps 应用 qingfeng-test-web(2026-11-11 全链路打通)</b></li>
+    <li><a href="#a15">qingfeng-test-web:Jenkins+Harbor+ArgoCD+Nginx 全链路实战</a></li>
+    <li><a href="#a16">命令对账 kubectl vs ArgoCD · 发布回滚速查 · 多用户 RBAC</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. ArgoCD vs Argo Workflows ================= -->
+<section id="a1">
+  <h2><span class="no">01</span>先分清:ArgoCD ≠ Argo Workflows(本次排坑起点)</h2>
+  <p>两个项目同属 Argo 家族,名字像、Logo 像、版本号格式像(都是 v3.x),但是<b>两个完全不同的软件</b>。本次排坑的真实过程:先用 <code>get ns | grep -i argo</code> 只找到 <code>argo</code> 这个 namespace(里面是 Argo Workflows),一度误判"线上没装 ArgoCD" —— 实际上 <b>ArgoCD 装在 <code>kube-infra</code></b>,ns 名字不含 argo,换 <code>get deploy -A | grep -i argocd</code> 才现形。</p>
+  <table>
+    <tr><th>维度</th><th>Argo Workflows(线上 ns:<code>argo</code>)</th><th>ArgoCD(线上 ns:<code>kube-infra</code>)</th></tr>
+    <tr><td>定位</td><td>任务编排引擎:在 K8S 里跑批处理流水线(DAG/步骤)</td><td>GitOps 持续交付:把 Git 里的 YAML/Helm 同步到集群</td></tr>
+    <tr><td>干的事</td><td>跑 Job:数据转换、质检、标注、ETL、训练</td><td>管部署:应用该跑什么版本、漂了自动拉回</td></tr>
+    <tr><td>触发</td><td>手动提交 / 定时 / 事件触发</td><td>Git 仓库一变就自动同步</td></tr>
+    <tr><td>一句话</td><td>"帮我在集群里跑一批任务"</td><td>"帮我把集群变成 Git 描述的样子"</td></tr>
+  </table>
+  <h3>🔍 打开 UI 怎么一眼区分</h3>
+  <table>
+    <tr><th>特征</th><th>ArgoCD</th><th>Argo Workflows</th></tr>
+    <tr><td>左侧主菜单</td><td><b>Applications</b>、Settings、User Info</td><td><b>Workflows</b>、Workflow Templates</td></tr>
+    <tr><td>状态指标</td><td>SYNC STATUS(Synced/OutOfSync)+ HEALTH STATUS(Healthy/Degraded/Missing)</td><td>只有工作流状态(Running/Succeeded/Failed)</td></tr>
+    <tr><td>条目内容</td><td>Git 仓库、Target Revision、Path、Destination、Last Sync</td><td>步骤图、耗时、日志</td></tr>
+  </table>
+  <div class="tip"><b>💡 两者冲突吗?可以同时共存吗?</b>完全不冲突 —— 它们是两个独立开源项目,组件名(argocd-* / argo-*)、CRD(Applications / Workflows)、数据库与配置互不相干,装在不同(甚至相同)namespace 互不影响。本集群就是共存实证:<code>kube-infra</code> 里 ArgoCD 管交付,<code>argo</code> ns 里 Workflows 管数据流水线。业界常见的"Argo 全家桶"(ArgoCD + Workflows + Rollouts + Events)也全部这样共存,需要时还能联动:ArgoCD 把 WorkflowTemplate 纳入 GitOps 管理、Argo Events 事件触发 Workflows 跑批。唯一要注意的就是别把名字搞混(见 01 节开头)。</div>
+</section>
+<!-- ================= 2. 部署形态总览 ================= -->
+<section id="a2">
+  <h2><span class="no">02</span>部署形态总览(Helm HA 安装)</h2>
+  <table>
+    <tr><th>项目</th><th>值</th></tr>
+    <tr><td>安装方式</td><td><b>Helm</b>(release 名 <code>argocd</code>,当前 revision 4)</td></tr>
+    <tr><td>Chart</td><td><code>argo-cd-8.3.5</code>(官方 argo/argo-cd chart)</td></tr>
+    <tr><td>APP 版本</td><td><b>v3.1.4</b>(镜像 <code>docker.ergesanbaishou.com/kube-public/argocd:v3.1.4</code>,走公司私仓)</td></tr>
+    <tr><td>namespace</td><td><code>kube-infra</code>(基础设施区,不是 argocd!)</td></tr>
+    <tr><td>部署规格</td><td><b>HA 高可用</b>(server / repo-server 双副本 + redis-ha 三副本 + haproxy 三副本)</td></tr>
+    <tr><td>已运行</td><td>426 天(2025-09-23 最后一次 helm 更新)</td></tr>
+    <tr><td>访问入口</td><td>Ingress(class nginx)→ <code>fke-argocd.ergesanbaishou.com</code></td></tr>
+  </table>
+  <div class="tip"><b>💡 怎么看出是 Helm HA 装的:</b>① <code>helm list -n kube-infra</code> 有 release 记录;② 组件里存在 <code>argocd-redis-ha-haproxy</code> —— 这个命名是官方 Helm chart HA 模式特有,裸 YAML manifest 没有这套。<b>以后升级走 <code>helm upgrade</code></b>,别用 kubectl apply 覆盖。</div>
+</section>
+
+<!-- ================= 3. 组件清单与访问入口 ================= -->
+<section id="a3">
+  <h2><span class="no">03</span>组件清单与访问入口</h2>
+  <table>
+    <tr><th>组件</th><th>类型</th><th>副本</th><th>svc 端口</th><th>作用</th></tr>
+    <tr><td><code>argocd-server</code></td><td>Deployment</td><td>2/2</td><td>80, 443</td><td>UI + API(双副本 HA)</td></tr>
+    <tr><td><code>argocd-repo-server</code></td><td>Deployment</td><td>2/2</td><td>8081</td><td>拉取 / 渲染 Git 仓库与 Helm chart</td></tr>
+    <tr><td><code>argocd-applicationset-controller</code></td><td>Deployment</td><td>2/2</td><td>7000</td><td>ApplicationSet 模板批量生成应用</td></tr>
+    <tr><td><code>argocd-redis-ha-haproxy</code></td><td>Deployment</td><td>3/3</td><td>6379</td><td>HA Redis 代理层</td></tr>
+    <tr><td><code>argocd-application-controller</code></td><td><b>StatefulSet</b></td><td>2/2</td><td>8082(metrics)</td><td>★ 同步引擎(默认是 STS,<code>get deploy</code> 看不到它!)</td></tr>
+    <tr><td><code>argocd-redis-ha-server</code></td><td>StatefulSet</td><td>3/3</td><td>6379/26379</td><td>Redis 三副本 + 哨兵</td></tr>
+  </table>
+  <div class="warn"><b>⚠ 排查坑:</b>核心组件 <code>argocd-application-controller</code> 是 <b>StatefulSet</b>,用 <code>kubectl get deploy</code> 永远搜不到 —— 必须 <code>get sts</code>。这是"核心组件凭空消失"错觉的头号原因。</div>
+  <h3>🚪 暴露方式与认证</h3>
+  <ul>
+    <li>Ingress:<code>argocd-server</code> → <code>fke-argocd.ergesanbaishou.com</code>(class nginx,走集群统一入口)</li>
+    <li>Service 全部 ClusterIP,<b>没有开 NodePort</b> —— 只能从域名/ingress 进,好习惯 ✅</li>
+    <li>UI 有登录体系(页面可见 Log out / User Info)→ <b>认证是开启的</b>,不是裸奔</li>
+    <li>没有部署 <code>argocd-dex-server</code> → 未配 SSO,大概率用的<b>本地 admin 账号</b>(初始密码见 06 节,装好后第一件事是改掉)</li>
+  </ul>
+</section>
+<!-- ================= 4. GitOps 仓库结构 ================= -->
+<section id="a4">
+  <h2><span class="no">04</span>GitOps 仓库结构(双仓库布局,前人搭得很标准)</h2>
+  <table>
+    <tr><th>仓库</th><th>内容</th><th>Target Revision</th><th>典型 Path</th></tr>
+    <tr><td><code>git@gitlab.ergesanbaishou.com:devops/k8s-charts.git</code></td><td>基础设施 Helm charts:ingress-nginx、kafka、kubeflow(katib/kserve)、livekit…</td><td><code>HEAD</code>(跟最新)</td><td><code>charts/infra/ingress-nginx</code></td></tr>
+    <tr><td><code>git@gitlab.ergesanbaishou.com:devops/argocd-deploy.git</code></td><td>业务应用配置,按环境分目录</td><td><code>main</code>(锁分支)</td><td><code>teleop-client/environments/prod</code></td></tr>
+  </table>
+  <pre><code># 仓库分工示意
+k8s-charts.git        ← "WHAT + HOW":通用 Helm chart(怎么装)
+  charts/infra/ingress-nginx
+  charts/kubeflow/helm/katib-v0.18.0/...
+  charts/livekit-helm/livekit-server
+
+argocd-deploy.git     ← "WHERE + WHICH":各环境用哪个 chart、什么参数(装到哪)
+  teleop-client/environments/dev
+  teleop-client/environments/prod
+  hmscloudweb/environments/prod</code></pre>
+  <div class="tip"><b>💡 这就是标准 GitOps:</b>基础 chart 与环境配置分离;业务仓锁 <code>main</code> 分支(变更可审计),chart 仓跟 HEAD。回滚 = <code>git revert</code>,审计 = <code>git log</code>,集群状态永远等于 Git 内容 —— 这也是"Jenkins 做 CI + ArgoCD 做 CD"组合的 CD 半边。</div>
+</section>
+
+<!-- ================= 5. 管理范围与漂移 ================= -->
+<section id="a5">
+  <h2><span class="no">05</span>管理范围与应用状态(⚠ 19 个漂移)</h2>
+  <ul>
+    <li><b>只管本集群:</b>所有应用 Destination 均为 <code>in-cluster</code>(fke 线上集群本体),未纳管多集群</li>
+    <li><b>规模:75 个应用</b>(<code>get applications -A | wc -l</code> = 76,含表头),按 Project 分组:<code>kube-infra</code>(基础设施)/ <code>app</code>(业务)/ <code>livekit</code> 等</li>
+  </ul>
+  <table>
+    <tr><th>指标</th><th>数值</th><th>解读</th></tr>
+    <tr><td>Synced</td><td>51</td><td>Git 与集群一致</td></tr>
+    <tr><td><b style="color:var(--red)">OutOfSync</b></td><td><b style="color:var(--red)">19</b></td><td>★ <b>漂移</b>:Git 与集群不一致 = 有人绕过 ArgoCD 手改过线上(连 ingress-nginx 都在漂移清单里)</td></tr>
+    <tr><td>Unknown</td><td>5</td><td>同步状态未知(常见原因:Git 仓库连不上 / 刷新失败)</td></tr>
+    <tr><td>Healthy</td><td>17</td><td>健康</td></tr>
+    <tr><td>Missing</td><td>2</td><td>Git 里声明了、集群里资源没了(如 hmscloudweb、kubeflow-kserve)—— 要么恢复要么删条目</td></tr>
+  </table>
+  <div class="warn"><b>⚠ 漂移是定时炸弹:</b>大部分应用 Last Sync 停在 2025 年(一年没走 ArgoCD 发布),叠加 19 个 OutOfSync,说明这一年发布基本绕过 Git 直改了集群。手改若不回填 Git,<b>下次谁点了 Sync 会被静默覆盖线上配置</b>。治理方法:逐个看 DIFF → 要保留的手改提交回 Git → 再 Sync;不认可的直接 Sync 拉回。</div>
+</section>
+<!-- ================= 6. 命令速查 ================= -->
+<section id="a6">
+  <h2><span class="no">06</span>排查 / 运维命令速查(全部实测)</h2>
+  <h3>🔍 定位与形态(只读,随便跑)</h3>
+  <pre><code># ① 找 ArgoCD 装在哪(它在 kube-infra,不在 argo/argocd ns!)
+sudo kubectl get deploy -A | grep -i argocd
+
+# ② 全家福:STS 里藏着核心同步引擎 + Redis
+sudo kubectl -n kube-infra get sts | grep argocd
+
+# ③ 安装方式与版本
+sudo helm list -n kube-infra | grep argocd
+sudo kubectl -n kube-infra get deploy argocd-server \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# ④ 暴露方式(svc + ingress)
+sudo kubectl -n kube-infra get svc,ingress | grep -iE "NAME|argocd"
+
+# ⑤ 管理范围:所有应用清单 + 数量
+sudo kubectl get applications.argoproj.io -A
+sudo kubectl get applications.argoproj.io -A | wc -l     # ≈75(含表头 76)
+
+# ⑥ 配置:Git 凭据 / 认证配置
+sudo kubectl -n kube-infra get cm argocd-cm -o yaml
+sudo kubectl -n kube-infra get secret | grep repo</code></pre>
+  <h3>🔑 admin 密码(装好后第一件事:改掉)</h3>
+  <pre><code># 初始 admin 密码(许多人从没改过 —— 值得检查!)
+sudo kubectl -n kube-infra get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d; echo</code></pre>
+  <h3>⌨️ ArgoCD CLI(机器上有 argocd 客户端时)</h3>
+  <pre><code>argocd login fke-argocd.ergesanbaishou.com --username admin --grpc-web
+argocd app list                     # 应用清单与状态
+argocd app diff &lt;应用名&gt;            # 🔍 看漂移:Git vs 集群到底差在哪
+argocd app sync &lt;应用名&gt;            # 🔴 写操作:按 Git 覆盖集群 —— 先看 diff!</code></pre>
+  <div class="warn"><b>⚠ 权限纪律:</b>排查用上面的只读命令足够;带 <code>sync / set / delete</code> 的 CLI 与 UI 按钮都是<b>写操作</b> —— 19 个漂移还在时,一次 Sync 可能直接改写线上,先 <code>diff</code> 后动手。</div>
+</section>
+<!-- ================= 7. 生态与待办 ================= -->
+<section id="a7">
+  <h2><span class="no">07</span>周边生态与运维待办清单</h2>
+  <h3>🧩 同一片区的 CI/CD 生态(kube-infra)</h3>
+  <table>
+    <tr><th>组件</th><th>版本 / 形态</th><th>角色</th></tr>
+    <tr><td><b>Jenkins</b></td><td>StatefulSet · chart jenkins-5.7.9 · LTS 2.462.3 · 285 天</td><td>CI 构建端 —— "Jenkins 做 CI + ArgoCD 做 CD"的模式,CD 这半已就位</td></tr>
+    <tr><td><b>Argo Workflows</b></td><td>v3.7.9 · ns <code>argo</code> · 96 天</td><td>数据批处理流水线(converter / quality-checker / annotator),跑在专用 runner 节点</td></tr>
+    <tr><td>GitLab</td><td>gitlab.ergesanbaishou.com</td><td>代码仓 + 部署仓(k8s-charts / argocd-deploy)</td></tr>
+    <tr><td>Harbor 私仓</td><td>docker.ergesanbaishou.com</td><td>镜像仓库(所有组件镜像从这里拉)</td></tr>
+    <tr><td>ingress-nginx / cert-manager</td><td>1.12.2 / v1.17.4</td><td>入口网关与证书管理</td></tr>
+  </table>
+  <h3>📋 运维待办(按优先级)</h3>
+  <div class="warn"><b>① 治理漂移(最急):</b>19 个 OutOfSync 逐个看 DIFF,要保留的手改回填 Git,否则一次 Sync 静默覆盖线上配置(含 ingress-nginx)。<br><b>② 版本升级:</b>v3.1.4 已 14 个月,期间有安全补丁,走 <code>helm upgrade</code> 找窗口升。<br><b>③ admin 账号:</b>确认初始密码已改(06 节命令);有条件配 SSO。<br><b>④ Argo Workflows 匿名访问检查:</b><code>argo-server.ergesanbaishou.com</code> 打开是否要登录?匿名能进 = 能提交 Workflow = 能在集群跑任意容器,风险比 Longhorn UI 裸奔更高(参见 <a href="new-k8s.html" style="color:var(--cyan)">new-k8s 部署文档</a>第 10 节)。</div>
+  <div class="tip"><b>💡 CI/CD 全景一句话:</b>这套环境其实已经是 <b>Jenkins(CI)+ GitLab(代码/配置仓)+ Harbor(镜像仓)+ ArgoCD(CD)</b> 的完整 GitOps 架构,前人搭得很好 —— 当前主要矛盾不是"缺工具",而是<b>流程闲置漂移</b>:把发布拉回 Git 通道,这套架构的价值才能真正发挥。</div>
+</section>
+
+<!-- ================= 8. new-k8s 离线安装:背景与版本 ================= -->
+<section id="a8">
+  <h2><span class="no">08</span>new-k8s 离线安装:背景与版本矩阵(外网全断)</h2>
+  <p>新集群 <code>new-k8s-fke</code> 服务器<b>无法访问任何境外网络</b>:<code>argoproj.github.io</code>(Helm 仓库)、<code>github.com</code>(Chart 包)、<code>quay.io</code> / <code>ghcr.io</code> / <code>ecr-public.aws.com</code>(镜像)全部超时 —— <code>helm repo add argo https://argoproj.github.io/argo-helm</code> 直接卡死,<code>curl</code> 报 <code>(28) Failed to connect ... Connection timed out</code>。方案:<b>可联网的 Ubuntu 开发机下载全部资源 → scp 上传 → 6 节点全部导入镜像 → helm 本地 tgz 安装</b>,全程零外网依赖。</p>
+  <h3>🖥️ 集群节点(6 台)</h3>
+  <table>
+    <tr><th>节点</th><th>IP</th><th>角色</th></tr>
+    <tr><td>new-k8s-fke-m1</td><td>10.18.51.120</td><td>control-plane(操作机)</td></tr>
+    <tr><td>new-k8s-fke-m2</td><td>10.18.51.121</td><td>control-plane</td></tr>
+    <tr><td>new-k8s-fke-m3</td><td>10.18.51.122</td><td>control-plane</td></tr>
+    <tr><td>new-k8s-fke-n1</td><td>10.18.51.123</td><td>worker</td></tr>
+    <tr><td>new-k8s-fke-n2</td><td>10.18.51.124</td><td>worker</td></tr>
+    <tr><td>new-k8s-fke-n3</td><td>10.18.51.125</td><td>worker</td></tr>
+  </table>
+  <h3>📦 版本矩阵(实测可用组合)</h3>
+  <table>
+    <tr><th>组件</th><th>版本</th><th>说明</th></tr>
+    <tr><td>Kubernetes</td><td>v1.37.1</td><td>containerd 2.4.2 · Ubuntu 22.04.5 · helm v3.16.3</td></tr>
+    <tr><td>Helm Chart</td><td><code>argo-cd-10.17.2</code></td><td>要求 K8s ≥1.25;官方 Release 提供 tgz 离线包</td></tr>
+    <tr><td>Argo CD</td><td>v3.6.1</td><td>= Chart appVersion,主镜像 tag 与之一致</td></tr>
+    <tr><td>argocd CLI</td><td>v3.6.1</td><td>必须与 server 同版本</td></tr>
+    <tr><td>访问入口</td><td><code>new-argocd.ergesanbaishou.com</code></td><td>独立 Nginx(new-k8s-nginx-1)+ NodePort 30043</td></tr>
+  </table>
+  <div class="tip"><b>💡 Chart tgz 离线下载地址规律:</b><code>https://github.com/argoproj/argo-helm/releases/download/argo-cd-&lt;版本&gt;/argo-cd-&lt;版本&gt;.tgz</code> —— 每个 Chart 版本都有 release 附件,<b>离线安装完全不需要 helm repo add</b>。Chart 是社区维护(argoproj/argo-helm 仓库),升级同样走"开发机下载新 tgz → scp → helm upgrade 本地包"。</div>
+</section>
+<!-- ================= 9. 第一步:开发机下载 ================= -->
+<section id="a9">
+  <h2><span class="no">09</span>第一步:开发机(Ubuntu)下载全部资源</h2>
+  <p>需要下载 3 类资源:<b>Chart 包、argocd CLI、容器镜像</b>。镜像清单不是拍脑袋列的 —— 用本地渲染一次性拿全(该命令不联网,服务器上也能跑):</p>
+  <pre><code># 列出整套 Chart 渲染后需要的全部镜像(★ 离线安装必备命令)
+helm template argocd ./argo-cd-10.17.2.tgz -n argocd | grep -E "image:" | sort -u
+
+# 实测输出(3 个):
+#   quay.io/argoproj/argocd:v3.6.1                        ← server/repo-server/controller/job 共用
+#   ecr-public.aws.com/docker/library/redis:8.6.4-alpine  ← redis
+#   ghcr.io/dexidp/dex:v2.46.1                            ← dex(SSO)</code></pre>
+  <pre><code># ① Chart 包 + CLI(GitHub Release)
+curl -LO https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.17.2/argo-cd-10.17.2.tgz
+curl -LO https://github.com/argoproj/argo-cd/releases/download/v3.6.1/argocd-linux-amd64
+
+# ② 三个镜像拉取并打包
+docker pull quay.io/argoproj/argocd:v3.6.1
+docker pull ecr-public.aws.com/docker/library/redis:8.6.4-alpine
+docker pull ghcr.io/dexidp/dex:v2.46.1
+
+docker save -o all-images.tar \
+  quay.io/argoproj/argocd:v3.6.1 \
+  ecr-public.aws.com/docker/library/redis:8.6.4-alpine \
+  ghcr.io/dexidp/dex:v2.46.1
+
+# ③ 校验(与服务器端 sha256sum 对比,防止传输截断)
+sha256sum argo-cd-10.17.2.tgz
+ls -lh argo-cd-10.17.2.tgz argocd-linux-amd64 all-images.tar</code></pre>
+  <div class="tip"><b>💡 ecr-public 拉不动时的替代:</b>Docker Hub 有同款镜像,拉完改 tag 即可:<code>docker pull redis:8.6.4-alpine &amp;&amp; docker tag redis:8.6.4-alpine ecr-public.aws.com/docker/library/redis:8.6.4-alpine</code>(内容相同,K8s 只认 tag 名)。<b>dex 若拉不动且不需要 SSO</b>,可在 values 里 <code>dex.enabled=false</code> 干脆不装。</div>
+</section>
+
+<!-- ================= 10. 第二步:上传 + 全节点导入 ================= -->
+<section id="a10">
+  <h2><span class="no">10</span>第二步:上传 + 全节点镜像导入(★ 本次最大坑)</h2>
+  <h3>📤 上传到 m1</h3>
+  <pre><code># 开发机执行
+scp argo-cd-10.17.2.tgz argocd-linux-amd64 all-images.tar \
+    root@10.18.51.120:/root/k8s-install/argocd/</code></pre>
+  <div class="warn"><b>⚠ 核心坑:ctr import 只导入"本机"!</b><code>ctr -n k8s.io images import</code> 只把镜像写进<b>当前这台机器</b>的 containerd。K8s Pod 可能调度到任意节点,哪个节点没镜像、哪个节点就 <code>ImagePullBackOff</code>(外网又拉不动)。<b>6 台节点必须全部导入</b>。</div>
+  <h3>📥 m1 上分发导入全部 6 节点(需 SSH 免密;IP 版)</h3>
+  <pre><code>cd /root/k8s-install/argocd
+
+# m1 自己导入
+ctr -n k8s.io images import all-images.tar
+
+# 分发其余 5 台(m2/m3/n1/n2/n3)
+for node in 10.18.51.121 10.18.51.122 10.18.51.123 10.18.51.124 10.18.51.125; do
+  echo "&gt;&gt;&gt; $node"
+  scp all-images.tar root@$node:/tmp/
+  ssh root@$node "ctr -n k8s.io images import /tmp/all-images.tar &amp;&amp; rm /tmp/all-images.tar"
+done
+
+# 验证:每台都应输出 3 行镜像(argocd/redis/dex)
+for node in 10.18.51.120 10.18.51.121 10.18.51.122 10.18.51.123 10.18.51.124 10.18.51.125; do
+  echo "&gt;&gt;&gt; $node"
+  ssh root@$node "ctr -n k8s.io images ls -q | grep -E 'argocd|redis|dex'"
+done</code></pre>
+  <pre><code># 顺手装好 CLI
+install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+argocd version --client   # 确认输出 v3.6.1</code></pre>
+  <div class="tip"><b>💡 为什么是 <code>-n k8s.io</code>:</b>kubelet 使用 containerd 的 <code>k8s.io</code> namespace 存镜像;不带此参数导入会进 default namespace,<b>Pod 照样找不到镜像</b>。长期方案可搭 Harbor 私仓或给 containerd 配镜像加速,免去逐节点导入。</div>
+</section>
+<!-- ================= 11. 第三步:安装 + pre-install 排坑 ================= -->
+<section id="a11">
+  <h2><span class="no">11</span>第三步:helm 本地包安装 + pre-install 超时排坑</h2>
+  <pre><code>helm install argocd ./argo-cd-10.17.2.tgz \
+  --namespace argocd \
+  --create-namespace \
+  --timeout 10m</code></pre>
+  <h3>💥 现场报错(只导入了 m1 镜像时)</h3>
+  <pre><code>Error: INSTALLATION FAILED: failed pre-install: 1 error occurred:
+  * timed out waiting for the condition</code></pre>
+  <p>含义:Chart 有个 <b>pre-install Hook Job</b> —— <code>argocd-redis-secret-init</code>(执行 <code>argocd admin redis-initial-password</code> 生成 Redis 初始密码),它 5 分钟内没跑完。排查三连:</p>
+  <pre><code># ① Pod 调度到了哪个节点?状态如何(关键看 NODE 列!)
+kubectl get pods -n argocd -o wide
+# 实测:argocd-redis-secret-init-7gszb  0/1  ImagePullBackOff  ...  new-k8s-fke-n3   ← 调度到了 n3!
+
+# ② 事件里看拉镜像的真实报错
+kubectl get events -n argocd --sort-by=.lastTimestamp | tail -30
+# 实测:Failed to pull image "quay.io/argoproj/argocd:v3.6.1":
+#       dial tcp 18.211.141.190:443: i/o timeout   ← n3 节点拉外网超时
+
+# ③ 排除文件损坏:开发机/服务器两端 sha256sum 对比(实测一致)</code></pre>
+  <div class="warn"><b>⚠ 根因链:</b>镜像只导入 m1 → Hook Pod 被调度到 n3 → n3 本地无镜像且外网不通 → <code>ImagePullBackOff</code> → helm 等 hook 完成直到超时。<b>报错发生在 pre-install 阶段时,先查 Hook Job 的 Pod,不要怀疑网络或 Chart 本身。</b></div>
+  <h3>✅ 修复:全节点导入镜像(见第 10 节)后清理重装</h3>
+  <pre><code>helm uninstall argocd -n argocd
+kubectl delete jobs,pods -n argocd --all --ignore-not-found
+
+helm install argocd ./argo-cd-10.17.2.tgz \
+  --namespace argocd --create-namespace --timeout 10m
+
+kubectl get pods -n argocd -w</code></pre>
+  <h3>📋 成功状态(8 个 Pod 全部就位)</h3>
+  <table>
+    <tr><th>Pod</th><th>状态</th><th>说明</th></tr>
+    <tr><td><code>argocd-application-controller-0</code></td><td>1/1 Running</td><td>★ 同步引擎(StatefulSet)</td></tr>
+    <tr><td><code>argocd-repo-server-xxx</code></td><td>1/1 Running</td><td>Git 仓库渲染服务</td></tr>
+    <tr><td><code>argocd-server-xxx</code></td><td>1/1 Running</td><td>UI + API</td></tr>
+    <tr><td><code>argocd-redis-xxx</code></td><td>1/1 Running</td><td>缓存</td></tr>
+    <tr><td><code>argocd-dex-server-xxx</code></td><td>1/1 Running</td><td>SSO(默认启用)</td></tr>
+    <tr><td><code>argocd-applicationset-controller-xxx</code></td><td>1/1 Running</td><td>ApplicationSet</td></tr>
+    <tr><td><code>argocd-notifications-controller-xxx</code></td><td>1/1 Running</td><td>通知</td></tr>
+    <tr><td><code>argocd-redis-secret-init-xxx</code></td><td><b>Completed</b></td><td>Hook Job 跑完即 Completed,60 秒后自动清理,<b>这是正常的</b></td></tr>
+  </table>
+</section>
+
+<!-- ================= 12. 第四步:NodePort + insecure ================= -->
+<section id="a12">
+  <h2><span class="no">12</span>第四步:NodePort + insecure(Nginx 前置必配,30443 撞号坑)</h2>
+  <p>独立 Nginx(new-k8s-nginx-1)在集群外,访问不了 ClusterIP(10.104.254.21),因此要把 <code>argocd-server</code> 改成 <b>NodePort</b>;同时 TLS 由 Nginx 终结,Argo CD 必须开 <b>insecure</b>,否则会出现重定向循环。</p>
+  <h3>📄 /root/k8s-install/argocd/argocd-ingress.yaml(最终版全文)</h3>
+  <pre><code>global:
+  domain: new-argocd.ergesanbaishou.com   # UI 内生成链接用的域名
+configs:
+  params:
+    server.insecure: true            # TLS 交给 Nginx,避免重定向循环
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30043              # Nginx upstream 反代的就是它
+    nodePortHttps: 30444             # insecure 模式用不到,但 Service 会分配,必须给空闲值!</code></pre>
+  <h3>💥 撞号坑:只写 nodePortHttp 时必报错</h3>
+  <pre><code># 只配了 nodePortHttp: 30043 就执行 upgrade,报:
+Error: UPGRADE FAILED: cannot patch "argocd-server" with kind Service:
+Service "argocd-server" is invalid: spec.ports[1].nodePort:
+Invalid value: 30443: provided port is already allocated
+
+# 原因:chart 的 nodePortHttps 有默认值 30443,与集群已有服务撞号
+# 修复:两个端口都显式指定(30043 + 30444)</code></pre>
+  <pre><code># 查看全集群已占用的 NodePort(选端口前先跑这个,避开 30010/30880/30443)
+kubectl get svc -A -o custom-columns='NS:.metadata.namespace,SVC:.metadata.name,PORTS:.spec.ports[*].nodePort' | grep -v '&lt;none&gt;'
+
+# 升级(本地 tgz,不联网)
+helm upgrade argocd ./argo-cd-10.17.2.tgz -n argocd -f argocd-ingress.yaml
+
+# 验证:TYPE 变 NodePort,80 端口后面出现 30043
+kubectl get svc argocd-server -n argocd
+# argocd-server   NodePort   10.104.254.21   &lt;none&gt;   80:30043/TCP,443:30444/TCP
+
+# 在 Nginx 机器上验证后端连通(期待 HTTP/1.1 200 OK)
+curl -I http://10.18.51.123:30043/</code></pre>
+  <div class="tip"><b>💡 30043/30444 是自选空闲端口:</b>K8s NodePort 允许范围 30000-32767,实测避开了 Longhorn 的 30880/30010。改别的端口记得同步改 Nginx upstream 和这里。</div>
+</section>
+
+<!-- ================= 13. 第五步:Nginx 反代 ================= -->
+<section id="a13">
+  <h2><span class="no">13</span>第五步:Nginx 反代 new-argocd.ergesanbaishou.com(完整 conf)</h2>
+  <p>在 <b>new-k8s-nginx-1</b> 上创建 <code>/etc/nginx/conf.d/new-argocd.conf</code>(风格与 new-longhorn.conf 一致:多节点 NodePort 轮询 + 泛域名证书,但有三处关键差异,见下方表格):</p>
+  <pre><code># WebSocket 升级支持(Argo CD UI 的日志流 / Web 终端需要)
+# 变量名加前缀,避免与其他 conf 里的 map 重名冲突
+map $http_upgrade $argocd_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# 所有 worker 节点都监听 30043,加进来做轮询
+upstream argocd_server {
+    server 10.18.51.123:30043 max_fails=2 fail_timeout=5s;  # n1
+    server 10.18.51.124:30043 max_fails=2 fail_timeout=5s;  # n2
+    server 10.18.51.125:30043 max_fails=2 fail_timeout=5s;  # n3
+}
+
+server {
+    listen 80;
+    server_name new-argocd.ergesanbaishou.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name new-argocd.ergesanbaishou.com;
+
+    ssl_certificate     /etc/nginx/ssl/_.ergesanbaishou.com.pem;    # 泛域名证书
+    ssl_certificate_key /etc/nginx/ssl/_.ergesanbaishou.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    ignore_invalid_headers off;
+    client_max_body_size 0;
+    proxy_buffering off;
+    proxy_request_buffering off;
+
+    location / {
+        # Argo CD 自带账号体系,无需像 Longhorn 那样加 auth_basic
+
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;   # insecure 模式下 ArgoCD 依赖此头
+
+        # WebSocket 支持(与 Longhorn 的 Connection "" 不同!)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $argocd_connection_upgrade;
+
+        # 长超时: gRPC / Web 终端 / 日志流
+        proxy_connect_timeout 300;
+        proxy_read_timeout    300;
+        proxy_send_timeout    300;
+
+        # 节点故障时自动重试下一台
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+
+        proxy_pass http://argocd_server;
+    }
+}</code></pre>
+  <h3>🔧 与 new-longhorn.conf 的三处关键差异(不能照抄)</h3>
+  <table>
+    <tr><th>配置项</th><th>Longhorn</th><th>Argo CD</th><th>原因</th></tr>
+    <tr><td><code>Connection</code> 头</td><td><code>""</code>(纯 keepalive)</td><td><code>$argocd_connection_upgrade</code>(map)</td><td>Argo CD 需要 WebSocket 升级(UI 日志流/Web 终端)</td></tr>
+    <tr><td><code>X-Forwarded-Proto</code></td><td>可有可无</td><td><b>必需</b></td><td>insecure 模式下 Argo CD 靠它生成正确的跳转链接</td></tr>
+    <tr><td><code>proxy_read_timeout</code></td><td>300(够用)</td><td>300(必须有)</td><td>gRPC 长连接不能被中途切断</td></tr>
+  </table>
+  <pre><code># 生效与验证
+nginx -t &amp;&amp; systemctl reload nginx
+curl -kI https://new-argocd.ergesanbaishou.com/    # 期待 200 或 302
+
+# DNS:内网加记录 new-argocd.ergesanbaishou.com → new-k8s-nginx-1 的 IP
+# 与 new-longhorn 指向同一台 Nginx,靠 server_name 区分,互不影响</code></pre>
+</section>
+
+<!-- ================= 14. 第六步:密码 / 验证 / 速查 ================= -->
+<section id="a14">
+  <h2><span class="no">14</span>第六步:密码设置 / 验证 / 踩坑总结速查</h2>
+  <h3>🔑 初始密码获取 → 修改(m1 上)</h3>
+  <pre><code># ① 获取初始 admin 密码(chart NOTES 提供的方式)
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d; echo
+
+# 备用(若上面的 secret 不存在,新版 chart 放这里)
+kubectl -n argocd get secret argocd-secret \
+  -o jsonpath='{.data.clearPassword}' | base64 -d; echo
+
+# ② CLI 登录(NodePort http 方式,注意 --insecure;nginx 域名配好后可用域名+--grpc-web)
+argocd login 10.18.51.123:30043 \
+  --username admin --password '&lt;初始密码&gt;' --insecure --grpc-web
+
+# ③ 改成自己的密码(提示输入当前密码 + 新密码)
+argocd account update-password
+
+# ④ 改完按官方建议删除初始密码 secret
+kubectl -n argocd delete secret argocd-initial-admin-secret --ignore-not-found</code></pre>
+  <div class="tip"><b>💡 声明式固定密码(可选):</b>想让密码重装/升级不变,生成 bcrypt 哈希写进 values:<code>htpasswd -bnBC 10 "" '你的密码' | tr -d ':\n'</code>,把结果放到 <code>argocd-ingress.yaml</code> 的 <code>configs.secret.argocdServerAdminPassword</code>(注意与 <code>configs.params</code> 合并在同一个 <code>configs:</code> 段下),再 helm upgrade 生效。</div>
+  <h3>✅ 最终验证清单</h3>
+  <pre><code>curl -I http://10.18.51.123:30043/            # NodePort 直连:HTTP/1.1 200 OK
+curl -kI https://new-argocd.ergesanbaishou.com/   # 经 Nginx:200 或 302
+# UI:浏览器 https://new-argocd.ergesanbaishou.com → admin 登录
+# CLI:argocd login new-argocd.ergesanbaishou.com --username admin --grpc-web</code></pre>
+  <h3>💣 踩坑总结表(离线安装五连坑)</h3>
+  <table>
+    <tr><th>#</th><th>现象</th><th>根因</th><th>解法</th></tr>
+    <tr><td>1</td><td><code>helm repo add</code> 卡死超时</td><td>github.io 被墙无法直连</td><td>不用 repo,直接 GitHub Release 下载 tgz 本地安装(见 08/09 节)</td></tr>
+    <tr><td>2</td><td><code>failed pre-install: timed out</code></td><td>redis-secret-init Hook Job 调度到无镜像节点,ImagePullBackOff</td><td><code>get pods -o wide</code> 看 NODE 列 + <code>get events</code> 看真实报错;全节点导入镜像(见 10/11 节)</td></tr>
+    <tr><td>3</td><td>镜像明明导入了还是拉取失败</td><td><code>ctr import</code> 只导本机;或漏了 <code>-n k8s.io</code></td><td>6 节点全部用 <code>ctr -n k8s.io images import</code> 导入</td></tr>
+    <tr><td>4</td><td>upgrade 报 <code>30443: already allocated</code></td><td>chart 的 nodePortHttps 默认 30443 撞号</td><td>nodePortHttp/nodePortHttps 都显式指定(30043/30444,见 12 节)</td></tr>
+    <tr><td>5</td><td>经 Nginx 访问重定向循环</td><td>Nginx 终结 TLS 但 Argo CD 还是 secure 模式</td><td><code>configs.params.server.insecure: true</code> + <code>X-Forwarded-Proto</code>(见 12/13 节)</td></tr>
+  </table>
+  <h3>🔁 日常运维速查</h3>
+  <pre><code>helm ls -n argocd                                    # 查看 release/revision
+kubectl get pods -n argocd                           # 组件状态
+kubectl logs -f deploy/argocd-server -n argocd       # server 日志
+
+# 升级:开发机下载新 tgz → scp →(新版本通常要补新镜像到全节点)
+helm upgrade argocd ./argo-cd-10.17.X.tgz -n argocd -f argocd-ingress.yaml
+
+# 卸载(CRD 默认保留 crds.keep=true,彻底清除需手动删 CRD)
+helm uninstall argocd -n argocd</code></pre>
+  <div class="warn"><b>⚠ 后续注意:</b>① Argo CD 内部拉 Git 仓库、以及它部署的应用拉镜像,同样受集群外网限制 —— 优先用 Gitee/内网 GitLab 与国内/私仓镜像;② 老集群(fke)的 v3.1.4 与新集群 v3.6.1 现并行运行,升级老集群时参考本文离线流程;③ HA 模式(生产)至少 3 worker 且 redis-ha 要求 Pod 分散,当前为单副本模式。</div>
+</section>
+
+<!-- ================= 15. 实战:qingfeng-test-web 全链路 ================= -->
+<section id="a15">
+  <h2><span class="no">15</span>实战:qingfeng-test-web 全链路(Jenkins + Harbor + ArgoCD + Nginx)</h2>
+  <p>前面 08-14 节把 ArgoCD 本体装好了,这一节用<b>第一个真实应用</b>走通完整 GitOps 链路:改代码 → Jenkins 构建推镜像 → 自动改部署仓 → ArgoCD 同步 → Nginx 域名访问。2026-11-11 线上全流程验证通过。</p>
+  <h3>📦 架构链路</h3>
+  <pre><code>开发机 push ──► Jenkins(双 SCM,选 tag 构建)
+                   │ ①检出源码 ②零依赖构建 ③docker build/push
+                   │   镜像 → docker.ergesanbaishou.com/qingfeng/qingfeng-test-web:tag
+                   │ ④改部署仓 deployment.yaml 的 image tag 并 push 回 GitLab
+                   ▼
+              部署仓(独立 Git 仓,只放 K8S YAML + nginx conf)
+                   │ 人工/CLI 触发 Sync(Manual 模式)
+                   ▼
+              ArgoCD App: qingfeng-test-web(main 分支 /k8s)
+                   ▼
+        Deployment(qingfeng ns ×2)→ Service NodePort 30090
+                   ▼
+        Nginx 443 泛域名证书 + upstream 三节点轮询
+                   ▼
+        https://qingfeng-test-web.ergesanbaishou.com ✅</code></pre>
+  <h3>🗂️ 三个仓库 + 凭据(前置)</h3>
+  <table>
+    <tr><th>仓库</th><th>分支</th><th>内容</th></tr>
+    <tr><td>jenkins-groovy</td><td>qingfeng</td><td>Jenkinsfile(流水线逻辑,与源码解耦)</td></tr>
+    <tr><td>qingfeng-test-web</td><td>main</td><td>前端源码 + Dockerfile(零 npm 依赖,构建不用外网)</td></tr>
+    <tr><td>qingfeng-test-web-deploy</td><td>main</td><td>K8S YAML(ns/deploy/svc)+ nginx conf,ArgoCD 只认这个仓</td></tr>
+  </table>
+  <p>Jenkins 凭据:<code>gitlabCert</code>(SSH 私钥,拉三仓 + 推部署仓)、<code>harbor-login</code>(推镜像)。Harbor 项目 <code>qingfeng</code> 自持基础镜像 <code>node:24-bookworm-slim</code> / <code>nginx:alpine</code>。</p>
+  <h3>⚙️ Jenkins Job(一次性)</h3>
+  <ul>
+    <li>Pipeline 任务 + <b>Git Parameter</b>:名 <code>TAG</code>,类型 Tag,倒序(选源码 tag 发版)</li>
+    <li>Definition:Pipeline script from SCM,<b>Additional Behaviours 加两个 Git</b>:源码仓(main)+ jenkins-groovy 仓(qingfeng 分支),凭据 <code>gitlabCert</code></li>
+    <li>Script Path:<code>qingfeng/qingfeng-test-web/Jenkinsfile</code></li>
+  </ul>
+  <h3>🔌 集群 + ArgoCD 接入(一次性,m1 上)</h3>
+  <pre><code># 集群:ns + Harbor 拉取凭据(部署仓内 yaml 直接 apply)
+kubectl apply -f k8s/namespace.yaml -f k8s/harbor-pull-secret.yaml
+
+# ArgoCD:登录 → 添加部署仓(复用同一把 SSH 私钥)→ 建应用
+argocd login 10.18.51.123:30043 --username admin --insecure --grpc-web
+argocd repo add git@gitlab.ergesanbaishou.com:gongjx/qingfeng-test-web-deploy.git \
+  --ssh-private-key-path ~/.ssh/id_ed25519        # argocd repo list 验证 Successful
+
+argocd app create qingfeng-test-web \
+  --repo git@gitlab.ergesanbaishou.com:gongjx/qingfeng-test-web-deploy.git \
+  --revision main --path k8s \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace qingfeng --sync-policy none   # Manual:Jenkins 改 YAML,人触发 Sync</code></pre>
+  <h3>🚀 发布流程(每次发版四步)</h3>
+  <pre><code># ① 源码仓打 tag
+git tag v1.0.0 &amp;&amp; git push origin v1.0.0
+# ② Jenkins 构建,参数 TAG=v1.0.0(约 1 分钟:镜像进 Harbor + 部署仓 image tag 自动更新)
+# ③ ArgoCD 同步
+argocd app sync qingfeng-test-web
+argocd app get qingfeng-test-web        # Synced / Healthy
+# ④ 验证
+kubectl get pods -n qingfeng
+curl -I http://10.18.51.123:30090/</code></pre>
+  <div class="tip"><b>💡 GitOps 要点:</b>Jenkins 只负责<b>改部署仓的 image tag</b>(ArgoCD 随即感知 OutOfSync),集群变更权始终在 ArgoCD 手里。回滚 = <code>argocd app rollback</code> 或把部署仓 tag 改回去,天然有审计记录。</div>
+  <h3>🌐 域名接入(Nginx,与 new-longhorn 同机同风格)</h3>
+  <p><code>/etc/nginx/conf.d/qingfeng-test-web.conf</code>:80 强制 301 → 443 泛域名证书,upstream 三台 worker 的 NodePort 30090 轮询 + 故障自动切换。</p>
+  <pre><code>upstream qingfeng_test_web {
+    server 10.18.51.123:30090 max_fails=2 fail_timeout=5s;   # n1
+    server 10.18.51.124:30090 max_fails=2 fail_timeout=5s;   # n2
+    server 10.18.51.125:30090 max_fails=2 fail_timeout=5s;   # n3
+}
+server {
+    listen 80;
+    server_name qingfeng-test-web.ergesanbaishou.com;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name qingfeng-test-web.ergesanbaishou.com;
+    ssl_certificate     /etc/nginx/ssl/_.ergesanbaishou.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/_.ergesanbaishou.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    access_log /var/log/nginx/qingfeng-test-web.access.log;
+    error_log  /var/log/nginx/qingfeng-test-web.error.log;
+    # 公开测试页不设 auth_basic;敏感应用仿 longhorn 加 auth_basic 两行
+    location / {
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;
+        proxy_send_timeout    60s;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_pass http://qingfeng_test_web;
+    }
+}
+
+# 部署:nginx -t &amp;&amp; systemctl reload nginx
+# DNS :qingfeng-test-web.ergesanbaishou.com → 本 Nginx 主机 IP
+# 验证:curl -kI https://qingfeng-test-web.ergesanbaishou.com → 200 ✅</code></pre>
+  <h3>💣 踩坑记录(实战五连坑)</h3>
+  <table>
+    <tr><th>#</th><th>现象</th><th>根因</th><th>解法</th></tr>
+    <tr><td>1</td><td>构建阶段 <code>npm ci</code> 卡死</td><td>前端零依赖却照搬 npm 流程,离线环境拉不动</td><td>build.js 原生 fs 复制文件,Dockerfile 删掉 npm 阶段</td></tr>
+    <tr><td>2</td><td>基础镜像 <code>node:24:1.27-alpine</code> 拉取失败</td><td>tag 不存在 / 平台不匹配</td><td>换 Harbor 自持 <code>qingfeng/node:24-bookworm-slim</code></td></tr>
+    <tr><td>3</td><td>Jenkinsfile 改部署仓地址不生效</td><td>Groovy <code>withEnv</code> 作用域,变量没进 <code>sh</code></td><td>sh 内直接 export 或双引号字符串插值</td></tr>
+    <tr><td>4</td><td>Service 起在 30080,Pod 起不来</td><td>30080 被 ingress-nginx 占用,NodePort 撞号</td><td>NodePort 改 30090,先用 <code>kubectl get svc -A | grep 30090</code> 查重</td></tr>
+    <tr><td>5</td><td>容器内推部署仓报 git 不存在</td><td>dind 构建镜像不含 git</td><td>构建镜像补装 git,或 build-arg 注入 token 走 HTTPS</td></tr>
+  </table>
+  <div class="tip"><b>✅ 全链路自检清单:</b>Jenkins 构建绿 ✔ → 部署仓出现 <code>img: vX.Y.Z</code> 提交 ✔ → Harbor 有新 tag ✔ → ArgoCD Synced/Healthy ✔ → <code>kubectl get pods -n qingfeng</code> 2/2 Running ✔ → NodePort 30090 返回 200 ✔ → https 域名绿锁 200 ✔ —— 至此 ArgoCD 从"装好了"变成"用起来了"。</div>
+</section>
+
+<!-- ================= 16. 命令对账 + 发布回滚速查 + RBAC ================= -->
+<section id="a16">
+  <h2><span class="no">16</span>命令对账 kubectl vs ArgoCD · 发布回滚速查 · 多用户 RBAC</h2>
+  <p>跑通第一个应用后最常被问的三个问题:"<b>kubectl 也能发也能回滚,ArgoCD 强在哪?</b>"、"<b>能混着用吗?</b>"、"<b>能不能让开发自己在 UI 上发布回滚?</b>" —— 这一章一次答完。</p>
+
+  <h3>⚖️ 命令对账(每一条都有实战背书)</h3>
+  <table>
+    <tr><th>维度</th><th>kubectl 直连(6443)</th><th>ArgoCD</th></tr>
+    <tr><td>发布</td><td><code>kubectl set image deploy/&lt;部署名&gt; &lt;容器名&gt;=&lt;镜像:tag&gt; -n &lt;ns&gt;</code></td><td><code>argocd app sync xxx</code>(或 UI 点 Sync)</td></tr>
+    <tr><td>回滚</td><td><code>kubectl rollout undo deploy/xxx -n ns</code></td><td><code>argocd app rollback xxx &lt;ID&gt;</code>(或 UI History)</td></tr>
+    <tr><td>前提权限</td><td>kubeconfig = <b>集群管理员</b>,6443 必须可达</td><td>ArgoCD 账号,可精确到"只能动某个 App";6443 不暴露</td></tr>
+    <tr><td>敲错代价</td><td>资源名 typo 直接报错;tag 敲错 = ImagePullBackOff(实测把 deploy 敲成 deply)</td><td>Git MR 有 review 拦截;UI Sync 前有 Diff 预览</td></tr>
+    <tr><td>留痕</td><td>零记录(埋在 apiserver audit log 没人看)</td><td>Git commit + Sync 历史:谁、何时、发的哪个版本</td></tr>
+    <tr><td>回滚深度</td><td>只能回<b>上一个 RS</b>,历史 10 条封顶,只回 Deployment 一层</td><td>任意历史版本、整个 App 全资源一起回</td></tr>
+    <tr><td>事后状态</td><td>集群里跑着什么只有敲命令的人知道,Git 与现实脱节</td><td>集群永远 == Git,新人 clone 部署仓就看懂线上</td></tr>
+    <tr><td>持续性</td><td>apply 完就"失联",被人改了无人知</td><td>每 3 分钟持续比对,歪了标黄 OutOfSync,self-heal 直接拉回</td></tr>
+  </table>
+  <div class="warn"><b>⚠ 混用原则(break-glass):</b>技术上能混用(最终都写 apiserver),但两本账必然打架 —— 实测 <code>rollout undo</code> 手改集群后 ArgoCD 标黄,点一次 Sync 秒被拉回 Git 版本。kubectl 只留给<b>线上着火时的紧急逃生</b>,救完火必须把改动补回 Git,否则状态永远漂着。日常发布只有一条道:Jenkins 自动改部署仓 → ArgoCD Sync。</div>
+
+  <h3>🔁 发布 / 回滚速查(按场景选命令)</h3>
+  <pre><code># ── 日常发布(唯一正道)────────────────────────────
+# ① Jenkins 构建完(镜像进 Harbor + 部署仓 tag 已更新,≤3min 内 OutOfSync)
+argocd app sync qingfeng-test-web               # 或 UI 点 Sync
+argocd app get  qingfeng-test-web               # Synced / Healthy 即上线
+
+# ── 回滚:临时回看(集群回去,Git 不动,下次 Sync 又滚回来)──
+argocd app history qingfeng-test-web            # 列出历史 ID
+argocd app rollback qingfeng-test-web 5         # 回到 ID=5 那次
+
+# ── 回滚:正式回退(Git 与集群一起回去,审计干净)────────
+cd qingfeng-test-web-deploy &amp;&amp; git revert &lt;commit&gt; &amp;&amp; git push
+argocd app sync qingfeng-test-web
+
+# ── 紧急逃生(break-glass,事后必须补 Git)────────────
+# 发布到指定镜像:格式 &lt;容器名&gt;=&lt;镜像:tag&gt;(容器名≠部署名!本仓容器名叫 web)
+kubectl set image deploy/qingfeng-test-web web=docker.ergesanbaishou.com/qingfeng/qingfeng-test-web:main-14f5f56 -n qingfeng-test
+#   ⚠ 实测踩坑:漏了"容器名="报 more than one slash;容器名猜错报 unable to find container
+#   忘了容器名先查:kubectl get deploy qingfeng-test-web -n qingfeng-test -o jsonpath='{.spec.template.spec.containers[*].name}'
+kubectl rollout undo deploy/qingfeng-test-web -n qingfeng-test
+kubectl rollout history deploy/qingfeng-test-web -n qingfeng-test
+
+# ── 构建产物验证(Jenkins 日志/构建描述里有完整镜像名)──
+docker pull docker.ergesanbaishou.com/qingfeng/qingfeng-test-web:main-xxxxxxx</code></pre>
+
+  <h3>🔄 配置文件修改怎么生效?(无 CI 场景:数据库/中间件改参数)</h3>
+  <p>灵魂拷问:"数据库这种不用打包的,改完 values 点 Sync,配置是<b>复制进 pod</b> 还是<b>新建 pod 复制</b>?"——<b>都不是</b>。配置从不"进 pod",机制是 <b>ConfigMap 投影</b>。</p>
+  <p><b>无 CI 的流程</b>(CI 只是往 Git 塞东西的机器人,没有它就手动塞):</p>
+  <pre><code>改 values(yaml)→ git push → ArgoCD 标黄(OutOfSync)→ Sync
+→ ArgoCD helm 渲染最终 YAML → kubectl apply 改的是【集群对象】:
+   ConfigMap(配置) / StatefulSet(工作负载) —— 从不直接碰 pod!</code></pre>
+  <p><b>配置的真实去向</b>:apply 后配置变成集群里的 ConfigMap 对象(存 etcd);kubelet 把它以<b>挂载投影</b>方式呈现在容器路径下(内存盘实时投影,不是拷贝副本)。pod 里的 <code>/etc/xxx.conf</code> 本质是 ConfigMap 的"直播画面"。</p>
+  <table>
+    <tr><th>你改了什么</th><th>pod 结果</th><th>怎么生效</th></tr>
+    <tr><td>配置内容(卷挂载方式)</td><td>不重建</td><td>kubelet 约 1 分钟自动刷新容器内文件;<b>但应用多半要重启才读新配置</b>(nginx 要 reload,pg/redis 只在启动时读一次)</td></tr>
+    <tr><td>配置内容(环境变量方式)</td><td>必须重建</td><td>env 在 pod 出生时一次性固化,后改 ConfigMap 无效</td></tr>
+    <tr><td>配置内容(chart 带 checksum 注解)</td><td>自动滚动重建(主流做法)</td><td>配置 hash 算进 pod 注解 → pod 模板变 → 自动重建强制生效</td></tr>
+    <tr><td>资源限额 / 镜像 / 副本数</td><td>滚动重建</td><td>StatefulSet/Deployment 的 spec 直接变了</td></tr>
+  </table>
+  <div class="warn"><b>★ 数据库类 pod 重建不丢数据:</b>数据在 PVC、配置在 ConfigMap,pod 只是可抛弃的"计算外壳"——新 pod 起来后重新挂回<b>同一个 PVC</b>(数据都在)+ 挂新 ConfigMap(参数是新的),读新配置启动。注意:单副本 + 独占 RWO 盘的(如 influxdb)必须用 <code>Recreate</code> 策略先删旧再起新,否则新 pod 抢不到盘、卡死 ContainerCreating。</div>
+
+  <h3>👥 多用户:创建用户并只授权指定 App(开发自助发布)</h3>
+  <p><b>场景:</b>开发 <code>dev1</code> 只能操作 <code>qingfeng-test-web</code> 这一个应用(可 Sync/回滚),删不了、碰不了别人的应用;其他未授权用户只读。全程不用发 kubeconfig。</p>
+  <h3>第①步:创建本地用户(argocd-cm)</h3>
+  <pre><code>kubectl -n argocd edit configmap argocd-cm
+# 在 data: 段增加一行(多个用户就多行):
+#   data:
+#     accounts.dev1: apiKey,login      # 允许 UI 登录 + API/CLI
+#     # accounts.dev1.enabled: "false" # 以后想禁用加这行
+
+# 生效(重建 server Pod,约 10 秒)
+kubectl rollout restart deploy/argocd-server -n argocd</code></pre>
+  <h3>第②步:给 dev1 设密码(admin 登录后执行)</h3>
+  <pre><code>argocd login 10.18.51.123:30043 --username admin --insecure --grpc-web
+argocd account update-password --account dev1   # 提示输入 dev1 的新密码
+argocd account list                            # 确认账号已存在</code></pre>
+  <div class="warn"><b>⚠ 实测踩坑:</b><code>rpc error: current password does not match</code> —— 第一个提示要的是 <b>admin 当前明文密码</b>(敏感操作当场复验,和 login 用的同一个),手输易错建议粘贴。若 admin 密码记混了,重置:<code>argocd account bcrypt --password '新密码'</code> 生成 hash → <code>kubectl -n argocd patch secret argocd-secret -p '{"stringData":{"admin.password":"&lt;hash&gt;","admin.passwordMtime":"2026-11-12T09:00:00Z"}}'</code> → 重启 server → <code>argocd relogin</code> 再设。</div>
+  <h3>第③步:授权到指定 App(argocd-rbac-cm)</h3>
+  <p>新建集群打开是<b>全空默认态</b>(<code>policy.csv: ""</code>、<code>policy.default: ""</code>)。填法:<code>policy.csv</code> 从 <code>""</code> 改成竖线 <code>|</code>(竖线后不能有任何字符),策略行缩进 4 空格;<code>matchMode</code>/<code>scopes</code>/metadata 原有的一律不动:</p>
+  <pre><code>kubectl -n argocd edit configmap argocd-rbac-cm
+# policy 资源格式:&lt;project&gt;/&lt;application&gt;(default 是 AppProject 名,不是 namespace!)
+data:
+  policy.csv: |                        # "" → | 竖线块,下面每行缩进 4 空格
+    # 定义"应用开发者"角色:只对这一个 App 有 查看/同步/更新(回滚) 权限
+    p, role:app-dev, applications, get,    default/qingfeng-test-web, allow
+    p, role:app-dev, applications, sync,   default/qingfeng-test-web, allow
+    p, role:app-dev, applications, update, default/qingfeng-test-web, allow
+    # 没给 delete → 删不了
+    g, dev1, role:app-dev               # 用户入组(可加多人:dev1、dev2...)
+  policy.default: role:readonly        # "" → 兜底:未授权的人只读
+  policy.matchMode: glob                # ↓ 原有两行,不动
+  scopes: '[groups]'
+# 改完同样 rollout restart deploy/argocd-server -n argocd 生效</code></pre>
+  <h3>第④步:验证</h3>
+  <pre><code># admin 视角:模拟 dev1 的权限(不用真登录)
+argocd account can-i sync applications default/qingfeng-test-web --account dev1
+# → yes;换个 App 名或 delete 动作 → no
+
+# dev1 视角:登录后自助闭环
+argocd login 10.18.51.123:30043 --username dev1 --insecure --grpc-web
+argocd app list                       # 未授权 App 也在列(只读),动手会 Permission denied
+argocd app sync qingfeng-test-web     # 自己发版
+argocd app rollback qingfeng-test-web 3   # 自己回滚
+# UI 同理:浏览器登录 → Applications → Sync / History → Rollback 全自助</code></pre>
+
+  <h3>➕ 以后每分配一个 App / 一个开发(固定套路)</h3>
+  <p>分配 = 给 <code>role:app-dev</code> 加条目,角色定义永不重写:</p>
+  <pre><code># 新 App = 照抄三行 p 改名(get/sync/update);新同事 = 加一行 g
+kubectl -n argocd edit configmap argocd-rbac-cm
+kubectl rollout restart deploy/argocd-server -n argocd
+argocd account can-i sync applications default/&lt;新App&gt; --account dev1   # yes 才算数</code></pre>
+  <table>
+    <tr><th>粒度写法</th><th>效果</th><th>适用</th></tr>
+    <tr><td><code>default/&lt;app&gt;</code> 逐个加三行</td><td>精确到单 App</td><td>现阶段推荐,一目了然</td></tr>
+    <tr><td><code>default/*</code></td><td>default 项目下全部 App 全权(含删)</td><td>太宽,不建议</td></tr>
+    <tr><td><code>proj/qingfeng/*</code></td><td>整个 AppProject 内全部 App</td><td>App 多了的正道:建专属 project,一行授权全组</td></tr>
+  </table>
+  <p><b>可见性说明:</b><code>policy.default: role:readonly</code> 下,未授权的 App 依旧<b>可见但只读</b>——分配只影响"能不能动手";要连看都隔离,得用 AppProject 把应用建进专属项目。</p>
+  <table>
+    <tr><th>常用对象</th><th>说明</th></tr>
+    <tr><td><code>role:admin / role:readonly</code></td><td>内置角色:全权 / 只读</td></tr>
+    <tr><td><code>g, dev1, role:app-dev</code></td><td>用户入组;也可给 OIDC 组整组授权 <code>g, dev-team, role:app-dev</code></td></tr>
+    <tr><td>AppProject</td><td>更硬的边界:专属项目限定仓库/目标 ns/集群,角色只作用于 <code>proj/*</code> 内的应用</td></tr>
+    <tr><td>SSO(Dex)</td><td>企业账号(OIDC/LDAP)统一登录,本地用户只是轻量方案</td></tr>
+  </table>
+  <div class="tip"><b>💡 一句话总结 ArgoCD 的存在意义:</b>把"集群现在长什么样"从一次性命令和人脑记忆,变成 Git 里一份可版本化、可 review、可回滚、可审计的文件 —— 集群只是这份文件的投影,歪了就拉回。kubectl 是<b>遥控器</b>(谁拿到都能按,按完不留痕);ArgoCD 是<b>自动驾驶 + 行车记录仪</b>(路线=Git,偏航自动回正,全程录像,每个乘客只能按自己车门上的按钮)。</div>
+</section>
+
+<footer>
+  <p>清风 · K8S Web 学习中心 —— ArgoCD 部署档案篇(fke 线上档案 + new-k8s 离线安装实操 + 第一个 GitOps 应用全链路)· 2026-11 · <a href="index.html">返回首页</a></p>
+</footer>
+</div>
+
+
+
+
+
+</body>
+</html>
