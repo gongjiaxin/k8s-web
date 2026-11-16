@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · 线上 ELK 日志栈部署档案 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / 线上 ELK 日志栈部署档案</span>
+  </div>
+</div>
+<div class="wrap">
+<header class="doc">
+  <h1>🪵 线上 ELK 日志栈部署档案(fke)
+    <small>loggie → kafka → logstash → elasticsearch → kibana 五层链路 · 采集范围 / 存储保留 / 监控巡检周期 / 日常维护一页通 —— 信息全部来自 2026-11 线上实测</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#a1">架构总览与数据流</a></li>
+    <li><a href="#a2">部署档案:组件清单 / 关键配置全文</a></li>
+    <li><a href="#a3">采集范围:哪些日志会进 ELK</a></li>
+    <li><a href="#a4">存储与保留:存哪 / 多大 / 留多久</a></li>
+    <li><a href="#a5">访问入口与监控路径</a></li>
+    <li><a href="#a6">日常维护命令速查</a></li>
+    <li><a href="#a7">监控巡检周期表 + 告警建议</a></li>
+    <li><a href="#a8">真实故障复盘 + 常见故障速查</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 1. 架构总览 ================= -->
+<section id="a1">
+  <h2><span class="no">01</span>架构总览与数据流</h2>
+  <pre><code>Pod stdout/stderr
+  → loggie DaemonSet(fke-loggie, 22 个 zone=log 节点; K8s 容器自动发现:
+    containerd + parseStdout, 读宿主机 /var/log/pods)
+  → kafka topic「logs-fke-loggie-topic」(loggie-kafka, 3 broker + 3 controller)
+  → logstash(fke-loggie-logstash-logstash-0; group logstash-fke-loggie-consumer)
+  → elasticsearch data_stream「logs-fke-loggie-default」(fke-db ns,
+    STS elasticsearch-master 3 副本, longhorn PVC 3×100Gi; 落盘 .ds-logs-*)
+  → kibana(fke-kibana, 7.17.3, 经 ingress-nginx 暴露)</code></pre>
+  <table>
+    <tr><th>组件</th><th>工作负载</th><th>ns / Helm release</th><th>版本</th><th>职责</th></tr>
+    <tr><td>loggie</td><td>DS <code>fke-loggie</code>(22/22)</td><td><code>kube-infra</code> / fke-loggie</td><td>loggie-v1.4.0</td><td>节点上采集容器 stdout</td></tr>
+    <tr><td>kafka</td><td>STS <code>loggie-kafka</code>(3+3)</td><td><code>kube-infra</code> / loggie-kafka</td><td>kafka 3.6.1</td><td>日志缓冲/削峰/断流回放</td></tr>
+    <tr><td>logstash</td><td>STS <code>fke-loggie-logstash-logstash-0</code></td><td><code>kube-infra</code> / fke-loggie-logstash</td><td>7.17.3</td><td>消费 kafka → 写 ES</td></tr>
+    <tr><td>elasticsearch</td><td>STS <code>elasticsearch-master</code>(3 副本)</td><td><code>fke-db</code> /(非 helm 直管)</td><td>7.17.x</td><td>存储/检索,data stream</td></tr>
+    <tr><td>kibana</td><td>Deploy <code>fke-kibana-kibana</code></td><td><code>kube-infra</code> / fke-kibana</td><td>7.17.3</td><td>查询界面</td></tr>
+    <tr><td>ingress</td><td>DS <code>nginx-ingress-nginx-controller</code>(hostNetwork)</td><td><code>kube-infra</code> / nginx</td><td>4.12.2</td><td>域名入口</td></tr>
+  </table>
+  <div class="tip"><b>💡 从零重建的部署顺序:</b>① ES STS(等 3 节点 green)→ ② kibana + Ingress → ③ kafka → ④ logstash → ⑤ loggie DS(节点打标签 <code>fke.fftaicorp.com/zone=log</code>)→ ⑥ LogConfig 采集规则。自底向上,任一层未就绪上层空转。</div>
+</section>
+<!-- ================= 2. 部署档案 ================= -->
+<section id="a2">
+  <h2><span class="no">02</span>部署档案:组件清单 / 关键配置全文</h2>
+  <h3>📦 loggie(DaemonSet 采集端)</h3>
+  <ul>
+    <li>nodeSelector:<code>fke.fftaicorp.com/zone=log</code> → 只调度到打该标签的 22 个节点</li>
+    <li>宿主机挂载:<code>/var/log/pods</code>(采集源)、<code>/var/lib/kubelet/pods</code>(元数据)、<code>/data/loggie-fke-loggie</code>(registry 断点续传)、<code>/run/containerd/containerd.sock</code>(容器发现)</li>
+    <li>主配置 cm <code>loggie-config-fke-loggie</code> 关键项:</li>
+  </ul>
+  <pre><code>loggie:
+  discovery:                    # K8s 容器自动发现模式(无固定 paths)
+    enabled: true
+    kubernetes:
+      cluster: fke-loggie
+      containerRuntime: containerd
+      dynamicContainerLog: true # 跟随容器日志轮转
+      parseStdout: true         # 解析 CRI 日志格式
+      typePodFields:            # 事件自动注入字段(Kibana 筛选依据)
+        containername: ${_k8s.pod.container.name}
+        namespace: ${_k8s.pod.namespace}
+        nodename: ${_k8s.node.name}
+        podname: ${_k8s.pod.name}
+  monitor: { logger: { period: 30s } }   # 每 30s 一条心跳 metric 日志(正常)</code></pre>
+  <h3>🔁 logstash(cm <code>fke-loggie-logstash-logstash-pipeline</code> 全文)</h3>
+  <pre><code>input  { kafka {
+         bootstrap_servers => "loggie-kafka.kube-infra.svc.cluster.local:9092"
+         topics => ["logs-fke-loggie-topic"]
+         group_id => "logstash-fke-loggie-consumer"
+         auto_offset_reset => "latest"    # 仅新消费组生效;断流续传按已提交 offset
+         codec => "json" } }
+filter { json { source => "message" } }
+output { elasticsearch {
+         hosts => ["http://elasticsearch-master.fke-db.svc.cluster.local:9200"]
+         data_stream => true
+         data_stream_type => "logs"
+         data_stream_dataset => "fke-loggie"
+         data_stream_namespace => "default" } }</code></pre>
+  <div class="warn"><b>⚠ 生产注意:</b>线上 output 里还有调试遗留的 <code>stdout { codec => "json" }</code> —— 每条日志双写 stdout 白费 IO,建议删除后 <code>delete pod</code> 重启 logstash 生效。</div>
+  <h3>🗄️ elasticsearch / kibana</h3>
+  <ul>
+    <li>ES:STS <code>elasticsearch-master</code>(fke-db),svc <code>elasticsearch-master:9200</code>,PVC longhorn 3×100Gi,索引 1 主 1 副本</li>
+    <li>kibana 环境变量:<code>ELASTICSEARCH_HOSTS=http://elasticsearch-master.fke-db.svc:9200</code></li>
+    <li>Ingress:<code>fke-kibana-kibana</code>(class nginx),host 见第 05 节入口表</li>
+  </ul>
+</section>
+
+<!-- ================= 3. 采集范围 ================= -->
+<section id="a3">
+  <h2><span class="no">03</span>采集范围:哪些日志会进 ELK</h2>
+  <div class="warn"><b>⚠ 最重要的认知:</b>不是全集群日志都进 ELK!只有 <b>app + argo 两个 namespace</b> 的日志被采集,其余 40+ ns(kube-system/istio-system/kube-infra/fke-db 等)的日志只能用 <code>kubectl logs</code> 看。</div>
+  <table>
+    <tr><th>维度</th><th>实际范围</th><th>判定依据</th></tr>
+    <tr><td>节点</td><td>22 个(标签 <code>fke.fftaicorp.com/zone=log</code>)</td><td>loggie DS nodeSelector</td></tr>
+    <tr><td>namespace</td><td>仅 <code>app</code>(全量 pod)+ <code>argo</code>(选择性)</td><td>LogConfig 选择器</td></tr>
+    <tr><td>日志类型</td><td>容器 stdout/stderr(K8s 标准输出)</td><td>读宿主机 <code>/var/log/pods</code></td></tr>
+    <tr><td>文件日志</td><td>❌ 不采集</td><td>discovery 模式只走 stdout</td></tr>
+  </table>
+  <p>快速自查:pod 在 app/argo ns + 节点带 <code>zone=log</code> 标签 + 输出 stdout → 日志在 Kibana;<code>kubectl logs</code> 能看到的 ELK 不一定有(跨 ns 时反向也不成立,ELK 只有 app/argo)。</p>
+</section>
+
+<!-- ================= 4. 存储与保留 ================= -->
+<section id="a4">
+  <h2><span class="no">04</span>存储与保留:存哪 / 多大 / 留多久</h2>
+  <table>
+    <tr><th>问题</th><th>答案</th></tr>
+    <tr><td>存到哪</td><td>ES data stream <code>logs-fke-loggie-default</code> → 索引 <code>.ds-logs-fke-loggie-default-*</code> → fke-db 三个 ES pod 的 longhorn PVC</td></tr>
+    <tr><td>多少容量</td><td><b>3 × 100Gi</b>(300Gi;每条日志 1 主 1 副本双份),当前占用极低(峰值约 7GB 索引数据)</td></tr>
+    <tr><td>留多久</td><td>ILM policy <code>logs-7d</code>(<b>7 天</b>自动删除;rollover 约每天 2 个 backing index;实测现存最老索引 ≈3.5 天,以 <code>_cat/indices</code> 实查为准)</td></tr>
+    <tr><td>要手动清理吗</td><td><b>不需要</b>,到期自动删;写入突增(如回放)也会在保留期后自限</td></tr>
+  </table>
+  <pre><code># 保留策略三连查(经 elasticsearch-master-0 容器执行)
+curl -s 'localhost:9200/_data_stream/logs-fke-loggie-default?pretty' | grep -i ilm_policy
+curl -s 'localhost:9200/_ilm/policy/logs-7d?pretty'          # delete 阶段 min_age
+curl -s 'localhost:9200/_cat/indices/.ds-logs-fke-loggie-default-*?h=index,docs.count,store.size&s=index'</code></pre>
+</section>
+<!-- ================= 5. 访问入口与监控路径 ================= -->
+<section id="a5">
+  <h2><span class="no">05</span>访问入口与监控路径</h2>
+  <table>
+    <tr><th>入口</th><th>地址</th><th>用途 / 看什么</th></tr>
+    <tr><td>Kibana</td><td><code>http://kibana.ergesanbaishou.com</code></td><td>查日志:Discover → data stream <code>logs-fke-loggie-default</code> → 时间过滤 + <code>podname/namespace/nodename</code> 字段筛选</td></tr>
+    <tr><td>Kafka UI</td><td><code>http://kafka-ui.ergesanbaishou.com</code></td><td>看消费滞后:topic <code>logs-fke-loggie-topic</code> → consumer group <code>logstash-fke-loggie-consumer</code> → <b>lag 应接近 0</b>;brokers 存活</td></tr>
+    <tr><td>ES API</td><td>容器内 <code>curl localhost:9200/_cluster/health</code></td><td><code>number_of_nodes: 3</code> + <code>status: green</code> = 底座健康</td></tr>
+    <tr><td>Longhorn UI</td><td>longhorn ns 入口(见集群架构页)</td><td>ES 3 块 PVC 的卷健康度/robustness = healthy</td></tr>
+  </table>
+  <div class="tip"><b>💡 Kibana 查日志三步:</b>① 左上角时间选择器切到目标时段(默认 15 分钟,最常见"查不到"原因);②索引模式选 <code>logs-fke-loggie-default</code>;③ 用 <code>podname</code> 字段精确过滤,或 KQL:<code>podname: "xxx" and namespace: "app"</code>。</div>
+</section>
+
+<!-- ================= 6. 日常维护命令速查 ================= -->
+<section id="a6">
+  <h2><span class="no">06</span>日常维护命令速查</h2>
+  <h3>🩺 一分钟全链路体检(六条命令)</h3>
+  <pre><code># 1. 采集端:DS 应 22/22 Running
+sudo kubectl -n kube-infra get ds fke-loggie
+
+# 2. 缓冲:kafka broker 应 3 个就绪
+sudo kubectl -n kube-infra get sts | grep loggie-kafka
+
+# 3. 消费/写入:logstash pod Running 且日志无 503/rerty 循环
+sudo kubectl -n kube-infra logs fke-loggie-logstash-logstash-0 --since=5m | tail -5
+
+# 4. 存储:ES 3 副本 Running
+sudo kubectl -n fke-db get pods
+
+# 5. ES 集群:number_of_nodes=3 且 status=green
+sudo kubectl -n fke-db exec elasticsearch-master-0 -- \
+  curl -s 'localhost:9200/_cluster/health?pretty' | grep -E 'number_of_nodes|status'
+
+# 6. 写入量:最新索引 docs.count 应持续增长
+sudo kubectl -n fke-db exec elasticsearch-master-0 -- \
+  curl -s 'localhost:9200/_cat/indices/.ds-logs-fke-loggie-default-*?h=index,docs.count&s=index' | tail -3</code></pre>
+  <h3>🔧 常用运维操作</h3>
+  <pre><code># 重启 logstash(改完 pipeline cm 后必须)
+sudo kubectl -n kube-infra delete pod fke-loggie-logstash-logstash-0
+
+# 查看/编辑 loggie 采集规则
+sudo kubectl -n kube-infra get logconfig
+sudo kubectl -n kube-infra edit logconfig <name>
+
+# 查 logstash 消费 lag(等价 kafka-ui)
+sudo kubectl -n kube-infra exec loggie-kafka-0 -- \
+  kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+  --describe --group logstash-fke-loggie-consumer
+
+# ES 磁盘水位(任一节点 >85% 会停写入新索引,&gt;95% 全停,read_only)
+sudo kubectl -n fke-db exec elasticsearch-master-0 -- \
+  curl -s 'localhost:9200/_cat/allocation?v'
+
+# Longhorn 卷健康(ES PVC)
+sudo kubectl -n longhorn-system get volumes | grep -v healthy</code></pre>
+  <div class="warn"><b>⚠ ES 只读应急(磁盘水位触发后):</b>清理磁盘后需手动解锁:<code>curl -XPUT 'localhost:9200/_all/_settings' -H 'Content-Type:application/json' -d '{"index.blocks.read_only_allow_delete": null}'</code>(经 master-0 容器执行)。</div>
+</section>
+<!-- ================= 7. 监控巡检周期 ================= -->
+<section id="a7">
+  <h2><span class="no">07</span>监控巡检周期表 + 告警建议</h2>
+  <h3>📅 巡检周期</h3>
+  <table>
+    <tr><th>周期</th><th>动作</th><th>入口/命令</th><th>健康基线</th></tr>
+    <tr><td><b>每日</b>(1 分钟)</td><td>全链路六条体检(见 06 节)</td><td>kubectl / ES API</td><td>DS 22/22;ES nodes=3 green;最新索引 docs.count 增长;kafka lag≈0</td></tr>
+    <tr><td><b>每日</b>(30 秒)</td><td>Kibana 打开确认当日有日志</td><td>kibana.ergesanbaishou.com</td><td>Discover 今天时段有事件(时间过滤器切"Today")</td></tr>
+    <tr><td><b>每周</b></td><td>存储水位 + 卷健康复核</td><td><code>_cat/allocation</code> / longhorn</td><td>磁盘 &lt;60%;ES 3 卷 robustness=healthy;最老索引日期符合保留策略</td></tr>
+    <tr><td><b>每周</b></td><td>Top 日志大户复核(业务侧降噪)</td><td>Kibana 按 podname 聚合 doc_count</td><td>单服务日量突增 3 倍以上 → 找业务确认</td></tr>
+    <tr><td><b>每月</b></td><td>容量趋势 + ILM 策略复核</td><td><code>_cat/indices</code> 总 store.size 趋势</td><td>7 天保留 &lt; 300Gi 容量的 60%,超了扩容或缩短保留</td></tr>
+    <tr><td><b>每季度</b></td><td>ES 版本/证书/快照策略复核</td><td>_nodes / _ssl</td><td>跟随集群整体升级节奏</td></tr>
+  </table>
+  <h3>🚨 告警建议(当前无告警,建议尽快补上)</h3>
+  <table>
+    <tr><th>告警项</th><th>条件</th><th>为什么</th></tr>
+    <tr><td>ES 节点数</td><td><code>number_of_nodes != 3</code> 持续 5 分钟</td><td>本次事故正是 master-2 掉队 87 天无人发现 → 日志断流</td></tr>
+    <tr><td>日志零写入</td><td>最新索引 docs.count 30 分钟无增长</td><td>任何一层断裂的最终共同表征,一票否决式信号</td></tr>
+    <tr><td>kafka 消费滞后</td><td>logstash group lag &gt; 10 万 或持续增长 30 分钟</td><td>写入跟不上/ES 不可用的前兆</td></tr>
+    <tr><td>logstash 错误循环</td><td>日志出现 <code>503</code> / retry 循环</td><td>svc 后端有坏节点的指纹(本次根因的直接表象)</td></tr>
+    <tr><td>Longhorn 卷非 healthy</td><td>robustness != healthy / 卷 degraded</td><td>存储层是本次根因;healthy 也不排除只读降级,配合节点数告警双保险</td></tr>
+  </table>
+</section>
+
+
+<!-- ================= 8. 故障复盘与速查 ================= -->
+<section id="a8">
+  <h2><span class="no">08</span>真实故障复盘 + 常见故障速查</h2>
+  <h3>💥 案例:Longhorn 卷只读 → 日志断流 2 天(2026-11 修复)</h3>
+  <table>
+    <tr><th>环节</th><th>事实</th></tr>
+    <tr><td>根因</td><td>87 天前 ES master-2 的 longhorn 卷降级为<b>只读</b>(frontend RO 不会自愈),ES FsHealthService 报错掉出集群,但 pod 仍 Running</td></tr>
+    <tr><td>表象</td><td>svc 轮询 1/3 请求打到坏节点 → 503 → logstash 停写 2 天;Kibana 查不到新日志</td></tr>
+    <tr><td>修复</td><td><code>delete pod elasticsearch-master-2</code>(软重启=卷卸载重挂 RW)→ 集群回 3 节点 green,零数据损失,kafka 积压自动回放</td></tr>
+    <tr><td>要点</td><td>① STS 3/3 Running ≠ 应用健康;② "随机 1/N 请求失败" = svc 后端有坏节点指纹;③ data_stream 回放写入当前索引但保留原 @timestamp → 某些日期索引 0 文档 ≠ 丢数据</td></tr>
+  </table>
+  <h3>🧯 常见故障速查表</h3>
+  <table>
+    <tr><th>症状</th><th>最可能层</th><th>一击必杀命令</th></tr>
+    <tr><td>Kibana 查不到日志</td><td>任一层</td><td>06 节六条体检,从下往上查</td></tr>
+    <tr><td>Kibana 只显示 15 分钟</td><td>使用姿势</td><td>时间选择器切 Today/自定义时段</td></tr>
+    <tr><td>某服务日志缺失</td><td>采集范围</td><td>确认 pod 在 app/argo ns 且节点带 <code>zone=log</code> 标签</td></tr>
+    <tr><td>ES 节点少一个</td><td>存储/ES</td><td>该 pod 日志找 FsHealthService / read-only;longhorn 卷状态</td></tr>
+    <tr><td>logstash 503 循环</td><td>ES svc 后端</td><td>逐个 exec ES pod <code>curl localhost:9200/_cluster/health</code> 找坏节点</td></tr>
+    <tr><td>磁盘满 read_only</td><td>ES 磁盘水位</td><td><code>_cat/allocation</code> → 清理 → 解锁(见 06 节)</td></tr>
+    <tr><td>kafka lag 持续涨</td><td>消费/写入</td><td>logstash 日志 + ES 健康度;kafka 只是蓄水池不是病灶</td></tr>
+  </table>
+</section>
+
+<footer class="wrap">
+  <p>ELK 日志栈档案 · 2026-11 线上实测整理 · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a></p>
+</footer>
+</div>
+</body>
+</html>
