@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08 节点能跑多少 Pod · maxPods 查询修改与调整 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 08 maxPods 查询修改与调整</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">08</span> 🔢 节点能跑多少 Pod 不够使用 —— maxPods 查询修改与调整
+    <small>110 是默认值不是真实值:两条命令查上限与用量,改 kubelet 在线调整</small>
+  </h1>
+</header>
+
+<section>
+  <h3>查询命令(两条就够)</h3>
+  <pre><code># 1. 最多能跑几个:读节点 status.allocatable.pods(kubelet 上报的可分配上限)
+kubectl get node qingfeng -o jsonpath='{.status.allocatable.pods}'; echo
+110
+
+# 2. 已经用了多少:describe 的 Allocated resources 段,盯 pods 那一行
+kubectl describe node qingfeng | grep -A8 'Allocated resources'
+  Resource           Requests      Limits
+  cpu                850m (21%)    300m (7%)
+  memory             690Mi (9%)    512Mi (7%)
+  ephemeral-storage  0 (0%)        0 (0%)
+  pods               7 (6%)        0 (0%)      ← 已分配 7 个 / 上限 110
+
+# 附加:所有节点容量一览表
+kubectl get nodes -o custom-columns='NODE:.metadata.name,MAX-PODS:.status.allocatable.pods'
+NODE       MAX-PODS
+qingfeng   110
+
+# 多节点集群:全部节点的 Pod 容量"总和"(jsonpath 逐行取出再 awk 累加)
+kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.pods}{"\n"}{end}' \
+  | awk '{s+=$1} END{print "集群 Pod 总容量:", s}'
+
+# 明细 + 合计一起看(表格末尾追加 TOTAL 行)
+kubectl get nodes -o custom-columns='NODE:.metadata.name,MAX-PODS:.status.allocatable.pods' \
+  | awk 'NR&gt;1{print; s+=$2} END{print "--------"; printf "TOTAL\t%d\n", s}'
+
+# 对比"已经用了多少":集群当前 Pod 总数 / 只数 Running
+kubectl get pods -A --no-headers | wc -l
+kubectl get pods -A --field-selector=status.phase=Running --no-headers | wc -l</code></pre>
+
+  <h3>110 是怎么评估出来的?</h3>
+  <ul>
+    <li><b>不是算出来的,是默认值:</b>110 来自 kubelet 参数 <code>--max-pods</code>(即 KubeletConfiguration 的 <code>maxPods: 110</code>),kubelet 启动时把它写进 <code>status.capacity.pods</code> 并上报 apiserver —— 这是社区经验值,兼顾每个 Pod 的进程/内存开销。</li>
+    <li><b>默认值不一定真是 110:</b>发行版/云厂商常会定制(实测 FKE 集群节点为 <code>100</code>) —— 所以别硬编码 110,以 <code>allocatable.pods</code> 查询结果为准;"集群总容量" = 各节点 allocatable.pods 逐个相加(见上方 jsonpath+awk 命令)。</li>
+    <li><b>真正还能不能调度,是调度器综合判断:</b><code>min(maxPods, 剩余 CPU requests, 剩余内存 requests, CNI 剩余 IP)</code>。所以即便 pods 显示 (6%) 很空闲,CPU 100% 照样 <code>Pending</code>(见<a href="issue-tips.html">附 · 状态速查表</a>)。</li>
+    <li><b>隐性上限还有三个:</b>CNI 每节点 Pod CIDR(Flannel 默认 /24 = 254 个 IP)、节点级 PID 上限(每 Pod 至少 1 个容器进程)、云厂商 CNI(如阿里云 Terway / AWS VPC CNI 按 ENI×辅助 IP 数限制,此时 maxPods 由厂商参数决定)。</li>
+  </ul>
+
+  <h3>后期可以修改吗 —— 可以,只改 kubelet,不用动集群</h3>
+  <pre><code># 1. 先确认当前生效值(节点上的 kubelet 配置)
+grep maxPods /var/lib/kubelet/config.yaml
+maxPods: 110
+
+# 2. 改成目标值(如 200)
+sed -i 's/^maxPods:.*/maxPods: 200/' /var/lib/kubelet/config.yaml
+
+# 3. 重启 kubelet 生效(节点上执行,秒级,不影响已运行 Pod)
+systemctl restart kubelet
+
+# 4. 验证:上报的 allocatable.pods 已变成新值
+kubectl get node qingfeng -o jsonpath='{.status.allocatable.pods}'; echo
+200</code></pre>
+
+  <div class="warn"><b>⚠️ 调大之前先确认:</b>maxPods 只解"数量名额",不解资源 —— CPU/内存(<a href="issue-02-disk.html">02 磁盘</a>同理)、CNI IP 池、PID 上限真的撑得住才能调;云托管集群(ACK/EKS/GKE)的默认值和改法由厂商参数/CNI 决定,别直接改托管节点。调小则要谨慎:低于当前已运行 Pod 数会导致节点被判超卖。</div>
+
+  <h3>易混点:node 和 namespace 是两种东西,别搞混</h3>
+  <p><code>kubectl get node qingfeng</code> 查的是<b>节点</b>(一台真实的机器,本集群单节点就叫 qingfeng) —— maxPods 是<b>节点</b>属性,所以要 get node;而 namespace 是集群里的<b>逻辑分区</b>(default / kube-system / harbor ...),只负责把资源分组隔离,和节点没有包含关系。</p>
+  <table>
+    <tr><th></th><th>node 节点</th><th>namespace 命名空间</th></tr>
+    <tr><td>是什么</td><td>一台跑容器的机器(kubelet 所在)</td><td>集群内的逻辑分组/虚拟小集群</td></tr>
+    <tr><td>典型名字</td><td>qingfeng、worker-01</td><td>default、kube-system、harbor、prod</td></tr>
+    <tr><td>查看命令</td><td><code>kubectl get nodes</code></td><td><code>kubectl get ns</code></td></tr>
+    <tr><td>Pod 数量上限</td><td><code>maxPods</code>(kubelet,默认 110)</td><td><code>ResourceQuota</code> 的 <code>pods: N</code>(不配则不限)</td></tr>
+  </table>
+  <pre><code># 查看某个命名空间
+kubectl get ns                       # 列出全部命名空间
+kubectl get ns harbor -o wide        # 看某个 ns 的状态
+kubectl describe ns harbor           # 详情:标签、资源配额(Quota)、状态
+
+# "看一个 ns 里的东西"(最常见诉求,用 -n 指定)
+kubectl get pods -n harbor           # 该 ns 的 Pod
+kubectl get all -n harbor            # Pod/Svc/Deploy 一次全看
+kubectl get pods -A                  # 想全看就去掉 -n 加 -A
+
+# ns 级别的 Pod 数上限 = ResourceQuota(不建就没有限制)
+kubectl get resourcequota -n harbor
+# 给 harbor ns 限制最多 50 个 Pod:
+kubectl create quota pod-limit -n harbor --hard=pods=50</code></pre>
+  <div class="tip"><b>💡 一句话分清:</b>node 管"在哪台机器上跑、最多跑几个"(maxPods);namespace 管"资源属于哪个组、组里能用多少"(ResourceQuota) —— 查前者 <code>get node</code>,查后者 <code>get ns</code>,查"某个组里的资源"要加 <code>-n</code>。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-06-db-disk.html">← 上一篇:06 线上数据库磁盘满</a>
+  <a href="k8s-mysql-1040.html">下一篇:09 MySQL 1040 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 08 maxPods 查询修改与调整 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

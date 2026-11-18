@@ -101,7 +101,7 @@
   <table>
     <tr><th>项目</th><th>内容</th></tr>
     <tr><td>故障对象</td><td><code>kube-infra/fke-influxdb</code>(InfluxDB 3.3.0 Bitnami 镜像,后端存储 Ceph S3,生产库 <code>hms-history-31d-v1-3</code>)</td></tr>
-    <tr><td>故障表现</td><td>域名 <code>fke-influxdb.fftaicorp.com</code> 整站 503;外部 nginx <code>SSL_read() unexpected eof</code> crit 风暴;Pod <code>CrashLoopBackOff</code></td></tr>
+    <tr><td>故障表现</td><td>域名 <code>fke-influxdb.ergesanbaishou.com</code> 整站 503;外部 nginx <code>SSL_read() unexpected eof</code> crit 风暴;Pod <code>CrashLoopBackOff</code></td></tr>
     <tr><td>持续时长</td><td><b>156 天</b>,累计重启 <b>4256+ 次</b>(事件计数 BackOff x95395)</td></tr>
     <tr><td>根因</td><td><b>OOMKilled(exitCode 137)</b>:内存 limit 仅 <code>4Gi</code>,而启动时要回放 <b>687 万个</b> WAL 碎片文件,回放期间内存峰值 10 秒内冲破上限被杀,无限死循环</td></tr>
     <tr><td>修复</td><td>一条 <code>kubectl patch</code>:内存提到 <code>48Gi</code> + 摘除 liveness/readiness 探针 + 钉到大内存节点 → 一次启动成功</td></tr>
@@ -119,7 +119,7 @@
   <p>客户端<b>粗暴掐断 TLS 连接</b>导致。当时以为是 InfluxDB 写入客户端超时断连 —— 后经 access.log 核实,这批 crit 主要来自 <b>apt 软件源客户端中断下载</b>(UA 为 <code>Debian APT-HTTP/1.3</code>),与本案是两件事(见第 06 节附注)。教训:crit 日志先看请求来源再定性。</p>
 
   <h3>表象二:域名整站 503</h3>
-  <pre><code>$ curl -sk -o /dev/null -w '%{http_code}\n' https://fke-influxdb.fftaicorp.com/health
+  <pre><code>$ curl -sk -o /dev/null -w '%{http_code}\n' https://fke-influxdb.ergesanbaishou.com/health
 503</code></pre>
 
   <h3>表象三:Pod 崩了 156 天没人发现</h3>
@@ -152,7 +152,7 @@ sudo kubectl get endpoints fke-influxdb -n kube-infra
 # Events:
 #   Warning  BackOff  2m21s (x95395 over 14d)  kubelet  Back-off restarting failed container
 # Conditions: Ready=False, ContainersReady=False
-# 关键环境变量: INFLUXDB_OBJECT_STORE=s3, AWS_ENDPOINT=https://fke-ceph.fftaicorp.com
+# 关键环境变量: INFLUXDB_OBJECT_STORE=s3, AWS_ENDPOINT=https://fke-ceph.ergesanbaishou.com
 # 挂载: 只有 secret + /tmp emptyDir(无 PVC,WAL 在对象存储上)</code></pre>
 
   <h3>第 3 步:拿"死因"—— 退出码(本案定音锤)</h3>
@@ -222,7 +222,7 @@ sudo kubectl get endpoints fke-influxdb -n kube-infra
   {"op":"remove","path":"/spec/template/spec/containers/0/readinessProbe"},
   {"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"48Gi"},
   {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"16Gi"},
-  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"kubernetes.io/hostname":"fke-02-runner.fftaicorp.com"}}
+  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"kubernetes.io/hostname":"fke-02-runner.ergesanbaishou.com"}}
 ]'</code></pre>
 
   <h3>为什么要做这三件事</h3>
@@ -239,7 +239,7 @@ sudo kubectl get endpoints fke-influxdb -n kube-infra
 # 原因:节点的 kubernetes.io/hostname 标签值可能与节点名不一致(短名 vs FQDN)
 
 # 正确姿势:先读节点真实标签值,再用它打补丁
-H=$(sudo kubectl get node fke-02-runner.fftaicorp.com \
+H=$(sudo kubectl get node fke-02-runner.ergesanbaishou.com \
   -o jsonpath='{.metadata.labels.kubernetes\.io/hostname}')
 echo "实际标签值: [$H]"
 sudo kubectl patch deploy fke-influxdb -n kube-infra --type json -p \
@@ -256,7 +256,7 @@ kubectl logs -f &lt;新pod名&gt; -n kube-infra 2&gt;&amp;1 | grep --line-buffer
 TOKEN=$(sudo kubectl get secret fke-influxdb -n kube-infra \
   -o jsonpath='{.data.admin-token}' | base64 -d)
 curl -s -o /dev/null -w 'health: %{http_code}\n' -H "Authorization: Bearer $TOKEN" \
-  -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health</code></pre>
+  -H 'Host: fke-influxdb.ergesanbaishou.com' http://10.18.51.8:30080/health</code></pre>
 </section>
 <!-- ================= 6. 已验证 ================= -->
 <section id="c6">
@@ -274,12 +274,12 @@ fke-influxdb-c698999cd-dqzzx   15m   319Mi</code></pre>
   <p>说明 4Gi 撑不住的是<b>启动回放的瞬时峰值</b>,不是常态负载——这也是 OOM 类问题最迷惑人的地方:<code>kubectl top</code> 平时根本看不到峰值。</p>
 
   <h3>证据 3:域名 503 → 401(服务复活)</h3>
-  <pre><code>$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: fke-influxdb.fftaicorp.com' \
+  <pre><code>$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: fke-influxdb.ergesanbaishou.com' \
     http://10.18.51.8:30080/health
 401          # 带鉴权的 API 服务,没带 token 返回 401 = 正常(503 才是故障)
 
 $ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
-    -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health
+    -H 'Host: fke-influxdb.ergesanbaishou.com' http://10.18.51.8:30080/health
 200          # ✅ 数据面正式恢复</code></pre>
 
   <h3>证据 4:生产写入已恢复(最硬指标)</h3>
@@ -354,7 +354,7 @@ kubectl top pod -n kube-infra | grep influx
 TOKEN=$(sudo kubectl get secret fke-influxdb -n kube-infra \
   -o jsonpath='{.data.admin-token}' | base64 -d)
 curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
-  -H 'Host: fke-influxdb.fftaicorp.com' http://10.18.51.8:30080/health   # 期望 200
+  -H 'Host: fke-influxdb.ergesanbaishou.com' http://10.18.51.8:30080/health   # 期望 200
 
 # 写入是否恢复:WAL 时间戳应贴着当前时间推进
 kubectl logs -n kube-infra deploy/fke-influxdb --since=5m 2&gt;&amp;1 \
@@ -389,7 +389,7 @@ kubectl logs -n kube-infra deploy/fke-influxdb 2&gt;&amp;1 \
     <div class="box">
       <h4>💾 对象存储 = Ceph RGW(机房独立 Ceph 集群,经 nginx-s3 接入)</h4>
       <ul>
-        <li><b>接入链</b>:fke-ceph.fftaicorp.com → CNAME → nginx-s3(10.18.53.6,TLS 终止)→ RGW</li>
+        <li><b>接入链</b>:fke-ceph.ergesanbaishou.com → CNAME → nginx-s3(10.18.53.6,TLS 终止)→ RGW</li>
         <li>桶 <b>influxdb-production-data</b> —— 真正的持久层,一切数据都在这里</li>
         <li><b>WAL 文件</b>(687 万个 n_ops=1 碎片)<span style="color:var(--red)">⬅ 启动时全量回放 = 内存黑洞</span></li>
         <li><b>parquet 列存文件</b> —— 最终数据:<code>0/dbs/hms-history-31d-v1-3/robot_data_record_v3-0/2026-10-09/xx.parquet</code></li>
@@ -404,7 +404,7 @@ kubectl logs -n kube-infra deploy/fke-influxdb 2&gt;&amp;1 \
     <tr><th>后端</th><th>说明</th></tr>
     <tr><td>AWS S3</td><td>官方云上方案</td></tr>
     <tr><td>Google Cloud Storage / Azure Blob</td><td>另外两家公有云</td></tr>
-    <tr><td><b>任意 S3 兼容端点</b></td><td><b>⭐ 我们用的:Ceph RGW</b>(同类还有 MinIO、阿里 OSS 等),配置即 <code>AWS_ENDPOINT=https://fke-ceph.fftaicorp.com</code></td></tr>
+    <tr><td><b>任意 S3 兼容端点</b></td><td><b>⭐ 我们用的:Ceph RGW</b>(同类还有 MinIO、阿里 OSS 等),配置即 <code>AWS_ENDPOINT=https://fke-ceph.ergesanbaishou.com</code></td></tr>
     <tr><td>memory</td><td>仅测试用,数据放内存、重启即丢</td></tr>
   </table>
 
@@ -426,16 +426,16 @@ kubectl logs -n kube-infra deploy/fke-influxdb 2&gt;&amp;1 \
   <h3>实证:这条链路是怎么一步步验证的(眼见为实)</h3>
   <table>
     <tr><th>命令</th><th>输出 → 结论</th></tr>
-    <tr><td><code>nslookup fke-ceph.fftaicorp.com</code></td><td>CNAME → <code>nginx-s3.fftaicorp.com</code> → <b>10.18.53.6</b> —— 内网 IP,数据不出机房 ✅</td></tr>
+    <tr><td><code>nslookup fke-ceph.ergesanbaishou.com</code></td><td>CNAME → <code>nginx-s3.ergesanbaishou.com</code> → <b>10.18.53.6</b> —— 内网 IP,数据不出机房 ✅</td></tr>
     <tr><td><code>kubectl get pods -A | grep ceph</code></td><td>只有 <b>ceph-csi</b>(消费外部 Ceph 的"翻译官"DaemonSet),集群内无 RGW → Ceph 是机房独立集群</td></tr>
     <tr><td><code>kubectl get storageclass</code></td><td>双存储体系:<b>Longhorn(默认 SC,节点本地盘)</b> + <b>csi-cephfs-sc(外部 CephFS)</b>;InfluxDB 两条路都没走,直用 S3</td></tr>
-    <tr><td><code>curl -skI https://fke-ceph.fftaicorp.com/</code></td><td><code>Server: nginx/1.18.0</code> → S3 流量前面挡着 nginx-s3 反代(TLS 终止)</td></tr>
-    <tr><td><code>curl -sk https://fke-ceph.fftaicorp.com/ | head</code></td><td><code>&lt;ListAllMyBucketsResult&gt;...&lt;Owner&gt;&lt;ID&gt;anonymous&lt;/ID&gt;...&lt;Buckets&gt;&lt;/Buckets&gt;</code> —— <b>RGW 独有指纹</b>(匿名返回 200 空桶列表;MinIO 会回 AccessDenied)→ 后端实锤 Ceph RGW</td></tr>
+    <tr><td><code>curl -skI https://fke-ceph.ergesanbaishou.com/</code></td><td><code>Server: nginx/1.18.0</code> → S3 流量前面挡着 nginx-s3 反代(TLS 终止)</td></tr>
+    <tr><td><code>curl -sk https://fke-ceph.ergesanbaishou.com/ | head</code></td><td><code>&lt;ListAllMyBucketsResult&gt;...&lt;Owner&gt;&lt;ID&gt;anonymous&lt;/ID&gt;...&lt;Buckets&gt;&lt;/Buckets&gt;</code> —— <b>RGW 独有指纹</b>(匿名返回 200 空桶列表;MinIO 会回 AccessDenied)→ 后端实锤 Ceph RGW</td></tr>
   </table>
   <p>最终确认的完整链路 —— 注意 <b>S3 流量与业务域名走的是两组不同的 nginx</b>:</p>
   <pre><code>① InfluxDB 存储链(本次架构)
 fke-influxdb Pod(fke 集群节点 10.18.51.x)
-   │ https://fke-ceph.fftaicorp.com(内网 DNS)
+   │ https://fke-ceph.ergesanbaishou.com(内网 DNS)
    ▼
 nginx-s3 反代(10.18.53.6,nginx/1.18.0,TLS 终止)
    ▼

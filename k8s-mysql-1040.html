@@ -18,7 +18,7 @@
   .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
     border-bottom:1px solid var(--line);padding:12px 0}
   .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
   .topbar a.home:hover{text-decoration:underline}
   .topbar .crumb{color:var(--muted);font-size:13px}
   header.doc{padding:44px 0 8px}
@@ -50,6 +50,10 @@
   .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
   .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
   .tip b{color:var(--green)} .warn b{color:var(--red)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
   footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
   footer a{color:var(--blue);text-decoration:none}
   /* 架构图 */
@@ -68,8 +72,11 @@
 <body>
 <div class="topbar">
   <div class="wrap">
-    <a class="home" href="index.html">← 返回首页</a>
-    <span class="crumb">K8S Web / 文档 / 线上 MySQL 报错实录(Error 1040)</span>
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 09 线上 MySQL 报错实录(Error 1040)</span>
   </div>
 </div>
 
@@ -402,10 +409,15 @@ SELECT trx_started, trx_weight, trx_rows_locked, trx_rows_modified, trx_state
 
   <div class="tip"><b>💡 一句话记住:</b>"to MySQL Router" 五个字是分水岭 —— 带它是 Router 额度,不带是 MySQL 本体;再把报错按<b>时间轴排开找轮询规律</b>,90% 的 Router 类故障 10 分钟内就能定性。本案全程没动数据库一行配置,一次 rollout restart 结案。</div>
 </section>
+
+<nav class="nav">
+  <a href="issue-08-maxpods.html">← 上一篇:08 maxPods 查询修改与调整</a>
+  <a href="k8s-issues.html">← 返回问题总汇</a>
+</nav>
 </div>
 
 <footer class="wrap">
-  <p>K8S Web · 事故复盘文档 · <a href="index.html">返回首页</a></p>
+  <p>🧯 K8S 使用问题总汇 · 09 线上 MySQL 报错实录(Error 1040) · <a href="k8s-issues.html">返回问题总汇</a> · <a href="index.html">返回首页</a></p>
 </footer>
 </body>
 </html>

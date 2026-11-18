@@ -79,6 +79,7 @@
     <li><a href="#a6">日常维护命令速查</a></li>
     <li><a href="#a7">监控巡检周期表 + 告警建议</a></li>
     <li><a href="#a8">真实故障复盘 + 常见故障速查</a></li>
+    <li><a href="#a9">离线安装到 new-k8s(外网全断 · 本地下载搬运全流程)</a></li>
   </ol>
 </nav>
 
@@ -102,14 +103,14 @@
     <tr><td>kibana</td><td>Deploy <code>fke-kibana-kibana</code></td><td><code>kube-infra</code> / fke-kibana</td><td>7.17.3</td><td>查询界面</td></tr>
     <tr><td>ingress</td><td>DS <code>nginx-ingress-nginx-controller</code>(hostNetwork)</td><td><code>kube-infra</code> / nginx</td><td>4.12.2</td><td>域名入口</td></tr>
   </table>
-  <div class="tip"><b>💡 从零重建的部署顺序:</b>① ES STS(等 3 节点 green)→ ② kibana + Ingress → ③ kafka → ④ logstash → ⑤ loggie DS(节点打标签 <code>fke.fftaicorp.com/zone=log</code>)→ ⑥ LogConfig 采集规则。自底向上,任一层未就绪上层空转。</div>
+  <div class="tip"><b>💡 从零重建的部署顺序:</b>① ES STS(等 3 节点 green)→ ② kibana + Ingress → ③ kafka → ④ logstash → ⑤ loggie DS(节点打标签 <code>fke.ergesanbaishou.com/zone=log</code>)→ ⑥ LogConfig 采集规则。自底向上,任一层未就绪上层空转。</div>
 </section>
 <!-- ================= 2. 部署档案 ================= -->
 <section id="a2">
   <h2><span class="no">02</span>部署档案:组件清单 / 关键配置全文</h2>
   <h3>📦 loggie(DaemonSet 采集端)</h3>
   <ul>
-    <li>nodeSelector:<code>fke.fftaicorp.com/zone=log</code> → 只调度到打该标签的 22 个节点</li>
+    <li>nodeSelector:<code>fke.ergesanbaishou.com/zone=log</code> → 只调度到打该标签的 22 个节点</li>
     <li>宿主机挂载:<code>/var/log/pods</code>(采集源)、<code>/var/lib/kubelet/pods</code>(元数据)、<code>/data/loggie-fke-loggie</code>(registry 断点续传)、<code>/run/containerd/containerd.sock</code>(容器发现)</li>
     <li>主配置 cm <code>loggie-config-fke-loggie</code> 关键项:</li>
   </ul>
@@ -156,7 +157,7 @@ output { elasticsearch {
   <div class="warn"><b>⚠ 最重要的认知:</b>不是全集群日志都进 ELK!只有 <b>app + argo 两个 namespace</b> 的日志被采集,其余 40+ ns(kube-system/istio-system/kube-infra/fke-db 等)的日志只能用 <code>kubectl logs</code> 看。</div>
   <table>
     <tr><th>维度</th><th>实际范围</th><th>判定依据</th></tr>
-    <tr><td>节点</td><td>22 个(标签 <code>fke.fftaicorp.com/zone=log</code>)</td><td>loggie DS nodeSelector</td></tr>
+    <tr><td>节点</td><td>22 个(标签 <code>fke.ergesanbaishou.com/zone=log</code>)</td><td>loggie DS nodeSelector</td></tr>
     <tr><td>namespace</td><td>仅 <code>app</code>(全量 pod)+ <code>argo</code>(选择性)</td><td>LogConfig 选择器</td></tr>
     <tr><td>日志类型</td><td>容器 stdout/stderr(K8s 标准输出)</td><td>读宿主机 <code>/var/log/pods</code></td></tr>
     <tr><td>文件日志</td><td>❌ 不采集</td><td>discovery 模式只走 stdout</td></tr>
@@ -283,6 +284,365 @@ sudo kubectl -n longhorn-system get volumes | grep -v healthy</code></pre>
     <tr><td>磁盘满 read_only</td><td>ES 磁盘水位</td><td><code>_cat/allocation</code> → 清理 → 解锁(见 06 节)</td></tr>
     <tr><td>kafka lag 持续涨</td><td>消费/写入</td><td>logstash 日志 + ES 健康度;kafka 只是蓄水池不是病灶</td></tr>
   </table>
+</section>
+
+<!-- ================= 9. 离线安装到 new-k8s ================= -->
+<section id="a9">
+  <h2><span class="no">09</span>离线安装到 new-k8s(外网全断 · 本地下载搬运全流程)</h2>
+  <p>把 fke 同款 ELK 搬进 <code>new-k8s-fke</code>(6 节点·外网全断):<b>同样 7 天保留、只采容器 stdout(/var/log/pods)</b>。流程与 ArgoCD 离线安装同套路:<b>线上 fke 提取真实版本 → 开发机下载镜像+Chart → scp → 6 节点 ctr 导入 → helm 本地包安装</b>。</p>
+
+  <h3>📐 方案总览(fke vs new-k8s 差异)</h3>
+  <table>
+    <tr><th>组件</th><th>fke(线上)</th><th>new-k8s(目标)</th><th>差异说明</th></tr>
+    <tr><td>elasticsearch</td><td>3 副本 × 100Gi</td><td><b>1 副本 single-node × 10Gi</b></td><td>小集群精简;索引副本数设 0(单节点放不了副本);不够再扩 PVC</td></tr>
+    <tr><td>kibana</td><td>ingress 域名</td><td><b>NodePort 30081 + nginx 反代</b></td><td>直连 30081 验证后,接 nginx 加域名 new-fke-kibana.ergesanbaishou.com(见第 4 步"域名接入")</td></tr>
+    <tr><td>kafka</td><td>3 broker + 3 controller</td><td><b>1 broker(KRaft 合一)× 10Gi</b></td><td>精简;kafka 侧只留 2 天缓冲</td></tr>
+    <tr><td>logstash</td><td>bitnami chart</td><td><b>手写 YAML(STS+CM)</b></td><td>离线集群手写更透明,pipeline 与 fke 一字不差</td></tr>
+    <tr><td>loggie</td><td>DS 22 节点(zone=log)</td><td><b>DS 全 6 节点</b>(含 master,需 tolerations)</td><td>全集群 stdout 都采</td></tr>
+    <tr><td>保留策略</td><td>ILM logs-7d</td><td><b>ILM logs-7d(同款 7 天)</b></td><td>装完 ES 后 curl 创建</td></tr>
+    <tr><td>namespace</td><td>kube-infra + fke-db</td><td><b>统一 logging</b></td><td>简化地址</td></tr>
+  </table>
+
+  <h3>🧾 第 0 步:线上 fke 提取真实版本(★ 镜像 tag 必须精确)</h3>
+  <pre><code># 在 fke-m1 执行:一次拿全 5 个组件的镜像 + chart 版本
+kubectl -n kube-infra get ds fke-loggie -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+kubectl -n kube-infra get sts loggie-kafka-controller -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+ || kubectl -n kube-infra get sts -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}' | grep -i kafka
+kubectl -n kube-infra get sts fke-loggie-logstash-logstash -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+kubectl -n fke-db get sts elasticsearch-master -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+kubectl -n kube-infra get deploy fke-kibana-kibana -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+sudo helm ls -n kube-infra -o custom-columns-putty 2>/dev/null || sudo helm ls -A | grep -E 'loggie|kafka|kibana'</code></pre>
+  <p>记下输出(下面步骤按此替换;本文预填 fke 实测值:<code>loggieio/loggie:v1.4.0</code>、<code>bitnami/kafka:3.6.x</code>、<code>bitnami/logstash:7.17.3</code>、<code>docker.elastic.co/elasticsearch/elasticsearch:7.17.x</code>、<code>docker.elastic.co/kibana/kibana:7.17.3</code>)。</p>
+
+  <h3>⬇️ 第 1 步:开发机(Ubuntu)下载全部资源</h3>
+  <div class="warn"><b>⚠ 方案选择(2026-11 实测):</b>① <b>bitnami 镜像已撤离 Docker Hub</b>(2025-08 起),<code>docker pull bitnami/kafka:*</code> / <code>bitnami/logstash:*</code> 直接 404,旧版存档在官方的 <code>bitnamilegacy/*</code>,tag 必须带 <code>-debian-XX-rYY</code> 精确后缀(先用 Docker Hub API 查准);② 实际采用<b>方案 B:纯开发机下载保存再上传</b>(不碰线上 fke),elastic 官方源实测可拉;方案 A(fke 内网导出,版本零偏差)保留作备选。</div>
+  <pre><code>【方案 A · 主推】在 fke 上导出全部镜像(内网直达 new-k8s,零外网)
+# ① fke-m1:查 5 个组件的真实镜像名
+sudo kubectl -n kube-infra get ds fke-loggie -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+sudo kubectl -n kube-infra get sts -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].image}{"\n"}{end}' | grep -iE 'kafka|logstash'
+sudo kubectl -n fke-db get sts elasticsearch-master -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+sudo kubectl -n kube-infra get deploy fke-kibana-kibana -o jsonpath='{.spec.template.spec.containers[0].image}';echo
+
+# ② 找每个组件 pod 所在节点(镜像在该节点的 containerd 里)
+sudo kubectl get pods -A -o wide | grep -E 'fke-loggie-|loggie-kafka|logstash-0|elasticsearch-master-0|fke-kibana-' | awk '{printf "%-14s %-52s %s\n",$1,$2,$8}'
+
+# ③ 到 pod 所在节点导出(镜像名替换成①的输出;一条命令可带多个镜像)
+sudo ctr -n k8s.io images export /tmp/elk-fke.tar \
+  docker.io/loggieio/loggie:v1.4.0 \
+  &lt;kafka镜像&gt; &lt;logstash镜像&gt; &lt;es镜像&gt; &lt;kibana镜像&gt;
+
+# ④ 内网直达 new-k8s m1(不经开发机)
+scp /tmp/elk-fke.tar root@10.18.51.120:/root/k8s-install/elk/</code></pre>
+  <pre><code>【方案 B · 采用】开发机外网拉取(qingfeng 实测 2026-11:loggie/elastic 可拉,bitnami 走 legacy 存档库)
+mkdir -p ~/k8s-install/elk && cd ~/k8s-install/elk
+
+# ① 先查 bitnamilegacy 的精确 tag(rYY 后缀必须查准,猜不中)
+curl -s "https://hub.docker.com/v2/repositories/bitnamilegacy/kafka/tags?page_size=100&name=3.6.1" | tr ',' '\n' | grep -o '"3\.6\.1[^"]*"'
+curl -s "https://hub.docker.com/v2/repositories/bitnamilegacy/logstash/tags?page_size=100&name=7.17.3" | tr ',' '\n' | grep -o '"7\.17\.3[^"]*"'
+# 实测(2026-11-13):kafka 有裸 tag "3.6.1"(滚动指向最新构建 3.6.1-debian-12-r14);
+#                   logstash 只有裸 tag "7.17.3" —— 两个都直接用裸 tag,无需拼 rYY
+
+# ② 拉镜像(5 个;实测 tag 已确认)
+docker pull loggieio/loggie:v1.4.0                            # ✅ 已拉成功
+docker pull bitnamilegacy/kafka:3.6.1
+docker pull bitnamilegacy/logstash:7.17.3
+docker pull docker.elastic.co/elasticsearch/elasticsearch:7.17.3   # 可拉,耐心
+docker pull docker.elastic.co/kibana/kibana:7.17.3                  # 可拉
+# 统一改回 bitnami/ 名字(values 习惯与线上一致)
+docker tag bitnamilegacy/kafka:3.6.1 bitnami/kafka:3.6.1
+docker tag bitnamilegacy/logstash:7.17.3 bitnami/logstash:7.17.3
+# docker.elastic.co 慢时的国内代理(daocloud 直代官方源,同 digest):
+#   docker pull docker.m.daocloud.io/docker.elastic.co/elasticsearch/elasticsearch:7.17.3
+#   docker tag  docker.m.daocloud.io/docker.elastic.co/elasticsearch/elasticsearch:7.17.3 \
+#              docker.elastic.co/elasticsearch/elasticsearch:7.17.3
+
+# ③ 打包成一个 tar(约 2.5GB) + 校验
+docker save -o elk-images.tar \
+  loggieio/loggie:v1.4.0 \
+  bitnami/kafka:3.6.1 \
+  bitnami/logstash:7.17.3 \
+  docker.elastic.co/elasticsearch/elasticsearch:7.17.3 \
+  docker.elastic.co/kibana/kibana:7.17.3
+sha256sum elk-images.tar > elk-images.sha256 && ls -lh elk-images.tar
+
+# ④ 下载 4 个 Chart tgz(logstash 手写 YAML 不需要)
+# loggie:官方 helm repo 已下线(404)——chart 在 loggie-io/installation 的 GitHub Release(实测 2026-11)
+curl -LO https://github.com/loggie-io/installation/releases/download/v1.4.0/loggie-v1.4.0.tgz
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add elastic https://helm.elastic.co
+helm repo update
+# kafka:chart 版本号必须现查(不能猜)——找 APP VERSION 恰为 3.6.1 的行,抄它的 CHART VERSION
+helm search repo bitnami/kafka --versions | grep -E '3\.6\.1' | head
+helm pull bitnami/kafka --version &lt;上一行查到的 CHART VERSION&gt;
+helm pull elastic/elasticsearch --version 7.17.3   # ✅ 实测成功
+helm pull elastic/kibana --version 7.17.3           # ✅ 实测成功
+
+# ⑤ 全部上传 new-k8s m1
+scp elk-images.tar elk-images.sha256 *.tgz root@10.18.51.120:/root/k8s-install/elk/</code></pre>
+  <div class="tip"><b>💡 版本保真度:</b>方案 A 导出的 bitnami/kafka、bitnami/logstash 与线上 fke 完全同 digest,values 里的 tag 照抄①的输出即可;方案 B 的 bitnamilegacy tag 后缀可用 <code>curl -s https://registry.hub.docker.com/v2/repositories/bitnamilegacy/kafka/tags\?page_size\=100 | grep -o '"3.6.1[^"]*"'</code> 查询(需外网)。</div>
+
+  <h3>📤 第 2 步:上传 + 全 6 节点导入(★ ctr 只导本机)</h3>
+  <pre><code># 开发机 → m1
+scp elk-images.tar elk-images.sha256 *.tgz root@10.18.51.120:/root/k8s-install/elk/
+
+# m1 上:校验 → 自己导入 → 分发其余 5 台(需 SSH 免密)
+cd /root/k8s-install/elk
+sha256sum -c elk-images.sha256                      # 防传输截断
+ctr -n k8s.io images import elk-images.tar
+for node in 10.18.51.121 10.18.51.122 10.18.51.123 10.18.51.124 10.18.51.125; do
+  echo ">>> $node"
+  scp elk-images.tar root@$node:/tmp/
+  ssh root@$node "ctr -n k8s.io images import /tmp/elk-images.tar && rm /tmp/elk-images.tar"
+done
+# 验证:每台 5 个镜像
+for node in 10.18.51.120 10.18.51.121 10.18.51.122 10.18.51.123 10.18.51.124 10.18.51.125; do
+  echo ">>> $node"; ssh root@$node "ctr -n k8s.io images ls -q | grep -cE 'loggie|kafka|logstash|elasticsearch|kibana'"
+done   # 每台应输出 5</code></pre>
+  <div class="warn"><b>⚠ 离线集群两大铁律:</b>① <b>全节点导入</b>(Pod 调度到无镜像节点 = ImagePullBackOff);② 所有组件 <b>imagePullPolicy: IfNotPresent</b> —— 若是 Always,kubelet 即便本地有镜像也会先尝试联网拉取然后失败!下面所有 values 里都已显式设置。</div>
+  <h3>🚀 第 3 步:安装(顺序:ES → ILM → kibana → kafka → logstash → loggie → 采集规则)</h3>
+  <pre><code>cd /root/k8s-install/elk
+kubectl create ns logging
+
+# ① elasticsearch(1 副本单节点;注意:不是 discovery.type single-node,见下方注释)
+cat > es-values.yaml <<'EOF'
+clusterName: elasticsearch
+nodeGroup: master
+replicas: 1
+minimumMasterNodes: 1
+roles:                          # elastic 7.x chart:roles 是映射不是数组!
+  master: "true"
+  ingest: "true"
+  data: "true"
+antiAffinity: "false"
+esJavaOpts: "-Xms1g -Xmx1g"
+resources: {requests: {cpu: "500m", memory: "2Gi"}, limits: {memory: "2Gi"}}
+image: "docker.elastic.co/elasticsearch/elasticsearch"
+imageTag: "7.17.3"
+imagePullPolicy: "IfNotPresent"
+# 不要写 esConfig discovery.type: single-node —— 与 chart 因 roles.master=true 自动注入的
+# cluster.initial_master_nodes 互斥,ES 会拒绝启动(single-node 模式必须二选一)
+volumeClaimTemplate:            # 该段被整体 toYaml 进 PVC spec,必须用 PVC 原生字段
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: "longhorn"
+  resources:
+    requests:
+      storage: 10Gi
+EOF
+helm install es ./elasticsearch-7.17.3.tgz -n logging -f es-values.yaml --timeout 10m
+kubectl -n logging get pods -w    # 等 elasticsearch-master-0 1/1 Running(ES 冷启动约 2 分钟,太早 curl 会 connection refused)
+# RESTARTS 增长 = 崩溃循环,先查 logs --previous 找根因再动;起来后确认 green + PVC Bound:
+kubectl -n logging exec elasticsearch-master-0 -- curl -s 'localhost:9200/_cluster/health?pretty' | grep -E 'status'
+kubectl -n logging get pvc        # elasticsearch-master-elasticsearch-master-0 应 Bound(longhorn 10Gi)</code></pre>
+  <pre><code># ② 7 天保留策略 + 数据流模板(与 fke 同款 logs-7d;数据流名 logs-new-loggie-default)
+kubectl -n logging exec elasticsearch-master-0 -- curl -s -XPUT 'localhost:9200/_ilm/policy/logs-7d' \
+  -H 'Content-Type:application/json' -d '{
+  "policy": {"phases": {
+    "hot":   {"min_age": "0ms", "actions": {"rollover": {"max_size": "5gb", "max_age": "1d"}}},
+    "delete":{"min_age": "7d",  "actions": {"delete": {}}}}}}'
+kubectl -n logging exec elasticsearch-master-0 -- curl -s -XPUT 'localhost:9200/_index_template/logs-new-loggie' \
+  -H 'Content-Type:application/json' -d '{
+  "index_patterns": ["logs-new-loggie*"],
+  "data_stream": {},
+  "template": {"settings": {
+    "number_of_shards": 1, "number_of_replicas": 0,
+    "index.lifecycle.name": "logs-7d" },
+    "mappings": {"properties": {"@timestamp": {"type": "date"}}}}}'</code></pre>
+  <pre><code># ③ kibana(NodePort 30081)
+cat > kibana-values.yaml <<'EOF'
+elasticsearchHosts: "http://elasticsearch-master.logging.svc.cluster.local:9200"
+image: "docker.elastic.co/kibana/kibana"
+imageTag: "7.17.3"
+imagePullPolicy: "IfNotPresent"
+resources: {requests: {memory: "512Mi"}, limits: {memory: "1Gi"}}
+service: {type: "NodePort", nodePort: 30081, port: 5601}
+EOF
+helm install kibana ./kibana-7.17.3.tgz -n logging -f kibana-values.yaml --timeout 10m
+kubectl -n logging get pods -w    # 等 kibana-kibana-xxx 1/1(kibana 冷启动 2~3 分钟,太早 curl 会挂起/refused)
+curl -I http://10.18.51.120:30081/
+# 健康标准:HTTP/1.1 302 Found + location: /spaces/enter + kbn-name: kibana-kibana-xxx</code></pre>
+  <pre><code># ④ kafka(1 broker,KRaft 合一,自动建 topic)
+cat > kafka-values.yaml <<'EOF'
+image: {repository: "bitnami/kafka", tag: "3.6.1", pullPolicy: "IfNotPresent"}
+listeners:                       # 26.11.4 实测:键名全小写;默认 SASL_PLAINTEXT 必须显式改回
+  client:      {protocol: "PLAINTEXT"}
+  interbroker: {protocol: "PLAINTEXT"}
+  controller:  {protocol: "PLAINTEXT"}
+controller:                     # KRaft 合一模式(controllerOnly 默认 false)
+  replicaCount: 1               # 26.x 用 replicaCount(默认3);controllerIds 是旧版字段已废弃
+  resources: {requests: {memory: "512Mi"}, limits: {memory: "1Gi"}}
+  persistence: {enabled: true, size: "10Gi", storageClass: "longhorn"}
+broker:
+  replicaCount: 0
+externalAccess: {enabled: false}
+extraConfig: |
+  auto.create.topics.enable=true
+  log.retention.hours=48
+EOF
+helm install kafka ./kafka-26.11.4.tgz -n logging -f kafka-values.yaml --timeout 10m
+kubectl -n logging get pods -w    # 等 kafka-controller-0 Running</code></pre>
+  <pre><code># ⑤ logstash(手写 STS + CM,pipeline 与 fke 一字不差只改地址)
+cat > logstash.yaml <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: logstash-pipeline, namespace: logging}
+data:
+  pipelines.yml: |
+    - pipeline.id: main
+      path.config: "/usr/share/logstash/pipeline/*.conf"
+  main.conf: |
+    input { kafka {
+        bootstrap_servers => "kafka.logging.svc.cluster.local:9092"
+        topics => ["logs-new-loggie-topic"]
+        group_id => "logstash-new-loggie-consumer"
+        codec => "json" } }
+    filter { json { source => "message" } }
+    output { elasticsearch {
+        hosts => ["http://elasticsearch-master.logging.svc.cluster.local:9200"]
+        data_stream => true
+        data_stream_type => "logs"
+        data_stream_dataset => "new-loggie"
+        data_stream_namespace => "default" } }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: logstash, namespace: logging}
+spec:
+  serviceName: logstash
+  replicas: 1
+  selector: {matchLabels: {app: logstash}}
+  template:
+    metadata: {labels: {app: logstash}}
+    spec:
+      containers:
+      - name: logstash
+        image: bitnami/logstash:7.17.3
+        imagePullPolicy: IfNotPresent
+        resources: {requests: {memory: "512Mi"}, limits: {memory: "1Gi"}}
+        env:
+        - {name: LS_JAVA_OPTS, value: "-Xms256m -Xmx256m"}
+        volumeMounts:
+        - {name: pipeline, mountPath: /usr/share/logstash/pipeline}
+      volumes:
+      - name: pipeline
+        configMap: {name: logstash-pipeline}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: logstash, namespace: logging}
+spec: {selector: {app: logstash}, ports: [{port: 5044}]}
+EOF
+kubectl apply -f logstash.yaml</code></pre>
+  <pre><code># ⑥ loggie(DS 全 6 节点,master 也要采 → tolerations)
+cat > loggie-values.yaml <<'EOF'
+image: "loggieio/loggie:v1.4.0"   # chart 1.4.0 的 image 是纯字符串(实测源 values)
+tolerations:                      # 顶层字段,无 daemonSet. 前缀
+- operator: "Exists"              # control-plane 节点也跑(全 6 节点采集)
+config:
+  loggie:                         # 顶层 config.loggie 对象嵌套
+    discovery:
+      enabled: true
+      kubernetes:
+        cluster: new-loggie
+        containerRuntime: containerd
+        parseStdout: true         # 解开容器 stdout 的 JSON 包装取原始日志行
+    monitor:
+      logger:
+        period: 30s
+EOF
+helm install loggie ./loggie-v1.4.0.tgz -n logging -f loggie-values.yaml --timeout 10m
+kubectl -n logging get ds   # 期望 6/6</code></pre>
+  <pre><code># ⑦ 采集规则:全集群所有 pod 的 stdout → kafka
+cat > logconfig-all-stdout.yaml <<'EOF'
+apiVersion: loggie.io/v1beta1
+kind: ClusterLogConfig
+metadata: {name: all-stdout}
+spec:
+  selector:
+    type: pod
+    labelSelector: {}          # 空 = 全部 namespace 的全部 pod
+  pipeline:
+    sources: |                 # sources/sink 是字符串块(官方 quick start 原样)
+      - type: file             # 容器 stdout 用 file 源 + paths: [stdout](无 kubeContainer 类型)
+        name: stdout
+        paths:
+        - stdout
+    sink: |
+      type: kafka
+      topic: logs-new-loggie-topic
+      brokers: kafka.logging.svc.cluster.local:9092
+EOF
+kubectl apply -f logconfig-all-stdout.yaml</code></pre>
+  <div class="tip"><b>💡 只想收部分 ns?</b>selector 改 <code>namespaceSelector: {matchNames: ["xxx"]}</code>,或加 labelSelector 按标签挑 pod;fke 就是这么做的(app 全量 + argo 选择性)。</div>
+
+  <h3>✅ 第 4 步:全链路验证(五分钟)</h3>
+  <pre><code># 1) 各组件 Running
+kubectl -n logging get pods
+#   期望:elasticsearch-master-0 / kibana-kibana-xxx / kafka-controller-0 / logstash-0 1/1,loggie 6/6
+
+# 2) ES 单节点 yellow 是正常的(副本数 0 后应为 green)
+kubectl -n logging exec elasticsearch-master-0 -- curl -s 'localhost:9200/_cluster/health?pretty' | grep -E 'number_of|status'
+
+# 3) 数据流自动创建(logstash 一写入就会建)
+kubectl -n logging exec elasticsearch-master-0 -- curl -s 'localhost:9200/_data_stream/logs-new-loggie-default?pretty' | grep -E 'ilm_policy|name'
+
+# 4) 有日志进来(随便找个 ns 的 pod 打日志后 30s 内查)
+kubectl -n logging exec elasticsearch-master-0 -- \
+  curl -s 'localhost:9200/logs-new-loggie-default/_count'
+#   count 应 > 0 且持续增长
+
+# 5) Kibana:浏览器 http://10.18.51.120:30081(或域名 new-fke-kibana.ergesanbaishou.com,见下方"域名接入")
+#   左上菜单 → Stack Management → 数据视图(7.14+ 不再叫索引模式) → 创建数据视图:
+#   名称 logs-new-loggie / 模式 logs-new-loggie-* / 时间字段 @timestamp → 保存
+#   → Discover 选该视图,时间过滤器切 Today → 应看到全集群容器日志流</code></pre>
+  <table>
+    <tr><th>#</th><th>现象</th><th>根因</th><th>解法</th></tr>
+    <tr><td>1</td><td>Pod ImagePullBackOff</td><td>镜像没导到该节点 / pullPolicy=Always</td><td><code>get pods -o wide</code> 看 NODE,补 <code>ctr -n k8s.io import</code>;values 加 IfNotPresent</td></tr>
+    <tr><td>2</td><td>ES CrashLoop,日志报 <code>setting [cluster.initial_master_nodes] is not allowed when [discovery.type] is set to [single-node]</code></td><td>esConfig 里写了 <code>discovery.type: single-node</code>,与 chart 因 <code>roles.master=true</code> 自动注入的 initial_master_nodes 互斥(实测踩坑)</td><td>删掉 esConfig 的 discovery.type 行;<b>单副本 + roles.master=true 时 chart 注入 initial_master_nodes 本身就是单节点模式,不要再写 single-node</b></td></tr>
+    <tr><td>3</td><td>logstash 连不上 kafka</td><td>svc 名写错</td><td><code>kubectl -n logging get svc</code> 核对 bootstrap_servers</td></tr>
+    <tr><td>4</td><td>topic 没建 / 采不到日志</td><td>kafka 未开自动建 topic;loggie DS 没起 ClusterLogConfig</td><td>kafka-values extraConfig 已开;<code>kubectl get clusterlogconfig</code> + loggie pod 日志验证</td></tr>
+    <tr><td>5</td><td>Kibana 30081 不通 / 域名打不开</td><td>防火墙未放行 30081;域名则是 DNS 或 nginx 反代缺失</td><td>防火墙放行 30081;域名按下方"域名接入"四层排查(m1 上 curl 30081 通 = 集群侧无责)</td></tr>
+    <tr><td>6</td><td>7 天后没删</td><td>ILM 没绑上数据流</td><td>第②步 _data_stream 输出应含 <code>logs-7d</code>;index_template 在首次写入前创建才生效</td></tr>
+    <tr><td>7</td><td>helm install ES 直接报 <code>can't evaluate field master in type interface {}</code></td><td>values 里 <code>roles</code> 写成了数组 —— elastic 7.x chart 的 roles 是映射(实测踩坑)</td><td>改成 <code>roles: {master: "true", ingest: "true", data: "true"}</code></td></tr>
+    <tr><td>8</td><td>ES 的 PVC Pending / 建不出来</td><td>volumeClaimTemplate 写了 <code>storageClass</code>/<code>size</code> 无效字段 —— 该段被整体 toYaml 进 PVC spec</td><td>用 PVC 原生字段:<code>storageClassName</code> + <code>resources.requests.storage</code></td></tr>
+    <tr><td>9</td><td>刚装完查 _data_stream 返回 404</td><td>正常!链路冷启动(loggie→kafka→logstash→ES)要 1~3 分钟才出第一批数据</td><td>等 2 分钟再查 _count;持续 404 才排查:<code>kubectl -n logging logs loggie-xxx</code> 和 <code>logstash-0</code> 日志</td></tr>
+  </table>
+  <h3>🌐 Kibana 域名接入(new-fke-kibana.ergesanbaishou.com · 2026-11 实测)</h3>
+  <p>链路:浏览器 → 内网 DNS(A 记录→nginx 服务器) → nginx 反代 → 节点 30081。任何一环缺失都表现为"打不开",按四层从下往上定位:</p>
+  <pre><code># 第 1 层 kibana 本身(m1 上跑):通 = 集群侧无责,问题必在域名链路
+curl -I http://10.18.51.120:30081/     # 302 Found + location:/spaces/enter 即健康
+
+# 第 2 层 DNS(自己电脑上跑):找不到域 = A 记录没加(最常见),找 DNS 管理员加:
+#   new-fke-kibana.ergesanbaishou.com  A  &lt;nginx 服务器 IP&gt;
+#   临时验证:本机 hosts 加一行 &lt;nginx IP&gt; new-fke-kibana.ergesanbaishou.com
+nslookup new-fke-kibana.ergesanbaishou.com
+
+# 第 3 层 nginx(nginx 服务器上跑):server 块配了没?reload 了没?
+nginx -t &amp;&amp; nginx -s reload
+curl -H 'Host: new-fke-kibana.ergesanbaishou.com' http://localhost/   # 返回 302 即反代 OK
+
+# 第 4 层 兜底:绕过域名,浏览器直接开 http://10.18.51.120:30081 先验收 ELK 栈</code></pre>
+  <p>nginx server 块(反代 NodePort 30081,与 fke 的 kibana 域名同套路):</p>
+  <pre><code>server {
+    listen 80;
+    server_name new-fke-kibana.ergesanbaishou.com;
+
+    location / {
+        proxy_pass http://10.18.51.120:30081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_buffering off;
+    }
+}</code></pre>
+  <div class="warn"><b>⚠ 顺序铁律:</b>index_template(第②步)必须在 logstash 首次写入<b>之前</b>创建 —— data stream 首建时套模板,后建模板不会改已有数据流(需 <code>_data_stream/_rollup</code> 迁移)。所以按 ①→⑦ 顺序走,不要跳步。</div>
+
+
 </section>
 
 <footer class="wrap">

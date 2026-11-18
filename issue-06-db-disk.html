@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06 线上数据库磁盘满 · 止血 → 扩容 → 防复发 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 06 线上数据库磁盘满</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">06</span> 🗄️ 线上数据库磁盘满 —— 止血 → 扩容 → 防复发
+    <small>处理顺序永远是:先止血保服务,再扩容,最后防复发</small>
+  </h1>
+</header>
+
+<section>
+  <p>数据库是最怕磁盘满的工作负载:一旦写不进 binlog/数据文件,MySQL 会把自己挂起来,业务直接中断。处理顺序永远是<b>先止血保服务,再扩容,最后防复发</b>。</p>
+
+  <h3>现象确认(告警 90%+ 或已写入失败)</h3>
+  <pre><code># 1. PVC 使用率告警
+kubectl get pvc data-mysql -n prod
+NAME        STATUS   VOLUME     CAPACITY   ...
+data-mysql  Bound    pvc-8f3..  20Gi
+
+# 2. 进容器看实际占用(看挂载点,不是根分区)
+kubectl exec -it mysql-0 -n prod -- df -h /var/lib/mysql
+/dev/sdb   20G   18.5G   1.5G  93% /var/lib/mysql
+
+# 3. 是数据涨了还是日志涨了?
+kubectl exec -it mysql-0 -n prod -- sh -c 'du -sh /var/lib/mysql/* | sort -rh | head'
+# binlog.0000xx  动辄几十 G —— 最常见的元凶
+# ibdata1 / ib_logfile0 —— 真实数据/redo,不能删</code></pre>
+
+  <h3>第一步:止血(只清日志,绝不动数据文件)</h3>
+  <pre><code># 1. binlog 立刻瘦身:只保留最近 2 天
+kubectl exec -it mysql-0 -n prod -- \
+  mysql -uroot -p"$PW" -e "PURGE BINARY LOGS BEFORE NOW() - INTERVAL 2 DAY;"
+
+# 2. 慢日志/错误日志轮转(&gt; 清空不换句柄,不断连接)
+kubectl exec -it mysql-0 -n prod -- sh -c '&gt; /var/log/mysql/slow.log'
+
+# 3. 临时表/备份残留确认后再删(先看时间戳,别一把梭)</code></pre>
+
+  <h3>第二步:PVC 在线扩容(业务不中断)</h3>
+  <pre><code># 前提 1:StorageClass 必须允许扩容
+kubectl get sc
+NAME       PROVISIONER      ALLOWVOLUMEEXPANSION
+nfs-sc     nfs-provisioner  true        ← 允许,继续
+local-sc   kubernetes.io/no-provisioner  false   ← 本地盘不支持在线扩,只能迁移
+
+# 直接 patch 目标容量(只能扩大,永远不能缩小!)
+kubectl patch pvc data-mysql -n prod \
+  -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+# 盯进度:先等 controller 扩 PV,再等文件系统在线 expand(xfs/ext4 均支持)
+kubectl get pvc data-mysql -n prod -w
+
+# 容器内验证(无需重启 Pod)
+kubectl exec -it mysql-0 -n prod -- df -h /var/lib/mysql
+/dev/sdb   50G   18.5G   32G  37% /var/lib/mysql</code></pre>
+
+  <h3>第三步:防复发</h3>
+  <pre><code># 1. binlog 自动过期(my.cnf [mysqld],3 天)
+binlog_expire_logs_seconds = 259200
+max_binlog_size            = 512M
+
+# 2. 容器日志限制(见 <a href="issue-02-disk.html">02 磁盘问题</a> containerLogMaxSize)
+# 3. 监控告警阈值提前到 75%,别等 90% 才动手</code></pre>
+
+  <div class="warn"><b>⚠️ 两条红线:</b>① <b>永远不要</b>手工删除 <code>/var/lib/mysql</code> 下的 <code>ibdata1</code>、<code>binlog.index</code> 等文件(想清 binlog 用 SQL <code>PURGE</code>);② PVC 扩容只能<b>扩大</b>,缩容不支持;local PV / hostPath 无法在线扩,唯一路径是"新 PVC + 逻辑备份迁移 + 切换"。</div>
+
+  <div class="tip"><b>💡 相关:</b>节点级磁盘满/DiskPressure 驱逐 → <a href="issue-02-disk.html">02 磁盘问题</a>;连接数类故障另见 <a href="k8s-mysql-1040.html">09 MySQL 1040 实录</a>。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-05-image.html">← 上一篇:05 拉不下镜像</a>
+  <a href="issue-08-maxpods.html">下一篇:08 maxPods →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 06 线上数据库磁盘满 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

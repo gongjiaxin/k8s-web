@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>02 磁盘问题 · 磁盘满 / DiskPressure 驱逐 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 02 磁盘问题</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">02</span> 💾 磁盘问题 —— 磁盘满 / DiskPressure 驱逐
+    <small>节点打上 DiskPressure、大批 Pod Evicted:三大户定位 → 按安全顺序清理 → 阈值兜底</small>
+  </h1>
+</header>
+
+<section>
+  <h3>典型现象</h3>
+  <pre><code># 节点被打了磁盘压力标签
+kubectl describe node qingfeng | grep -A2 DiskPressure
+  DiskPressure   True   KubeletHasDiskPressure   kubelet has disk pressure
+
+# 大批 Pod 被驱逐(Evicted)
+kubectl get pods -A | grep -i evicted
+harbor   harbor-core-5d7c9f8b-x2k9p   Evicted   0   23h
+
+# 应用写文件直接报错(数据库最常见,见 06)
+IOError: [Errno 28] No space left on device</code></pre>
+
+  <h3>排查:先找到磁盘被谁吃掉</h3>
+  <pre><code># 1. 总览:运行时与 kubelet 所在分区
+df -h /var/lib/containerd /var/lib/kubelet
+
+# 2. 三大户逐一定位(镜像层 / 容器日志 / journald)
+du -h --max-depth=1 /var/lib/containerd | sort -rh | head
+du -h --max-depth=1 /var/log/pods     | sort -rh | head   # 容器 stdout 日志
+journalctl --disk-usage</code></pre>
+
+  <h3>清理(按安全顺序执行)</h3>
+  <pre><code># 1. 删"没有任何 Pod 在用"的镜像(最安全、见效最快)
+crictl rmi --prune
+
+# 2. 收缩 journald 系统日志,只保留 3 天
+journalctl --vacuum-time=3d
+
+# 3. 清理已被驱逐/失败的 Pod 残留
+kubectl delete pods -A --field-selector=status.phase=Failed
+
+# 4. 长效:限制单容器日志体积(/var/lib/kubelet/config.yaml)
+containerLogMaxSize: 50Mi
+containerLogMaxFiles: 3
+# 改完 systemctl restart kubelet</code></pre>
+
+  <h3>兜底:临时下调驱逐阈值(只救急,清完就改回)</h3>
+  <pre><code># /var/lib/kubelet/config.yaml
+evictionHard:
+  nodefs.available: "5%"
+  imagefs.available: "5%"
+# systemctl restart kubelet 后 DiskPressure 会自动恢复为 False</code></pre>
+
+  <div class="warn"><b>⚠️ 千万别:</b>直接 <code>rm -rf /var/lib/containerd/io.containerd.*</code> 里的目录 —— 会把正在用的镜像/快照删坏;删镜像必须走 <code>crictl rmi</code>。</div>
+
+  <div class="tip"><b>💡 相关:</b>数据库类 PVC 被日志/binlog 吃满的完整实录 → <a href="issue-06-db-disk.html">06 线上数据库磁盘满</a>。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-01-kubeadm.html">← 上一篇:01 集群安装失败</a>
+  <a href="issue-03-mount.html">下一篇:03 挂载问题 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 02 磁盘问题 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

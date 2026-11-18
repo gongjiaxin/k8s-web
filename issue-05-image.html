@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 拉不下镜像 · ImagePullBackOff · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 05 拉不下镜像</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">05</span> 📦 拉不下镜像 —— ImagePullBackOff
+    <small>五类根因对照 + 四套方案:国内加速 / 离线导入 / 私有仓库凭证,总有一款救活你</small>
+  </h1>
+</header>
+
+<section>
+  <h3>典型现象与四类根因</h3>
+  <pre><code>kubectl get pods -n web
+nginx-6b7f5d8c-x9k2p   0/1   ImagePullBackOff   0   3m
+
+kubectl describe pod nginx-6b7f5d8c-x9k2p -n web | grep -A3 "Failed to pull"
+  Failed to pull image "nginx:1.27": failed to pull and unpack ... i/o timeout</code></pre>
+  <table>
+    <tr><th>Events 里的报错</th><th>根因</th><th>跳转方案</th></tr>
+    <tr><td><code>manifest unknown / not found</code></td><td>镜像名或 Tag 写错</td><td>方案 A</td></tr>
+    <tr><td><code>i/o timeout / no route to host</code></td><td>国内网络拉不到 Docker Hub</td><td>方案 B(加速器)</td></tr>
+    <tr><td><code>toomanyrequests / rate limited</code></td><td>Docker Hub 限流</td><td>方案 B / C</td></tr>
+    <tr><td><code>unauthorized: authentication required</code></td><td>私有仓库没带凭证</td><td>方案 D(imagePullSecrets)</td></tr>
+    <tr><td><code>exec format error</code></td><td>架构不匹配(x86 机器拉了 arm64 镜像)</td><td>换 <code>nginx:1.27-amd64</code> 类带架构 Tag</td></tr>
+  </table>
+
+  <h3>方案 A:先确认镜像真的存在</h3>
+  <pre><code># 在任意节点上手工拉一次,报 not found 就是名字/Tag 写错
+crictl pull nginx:1.27</code></pre>
+
+  <h3>方案 B:containerd 配置国内加速(一劳永逸)</h3>
+  <pre><code># 1. /etc/containerd/config.toml 启用 certs.d 目录(v2 推荐方式)
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+
+# 2. 给 docker.io 配加速源:/etc/containerd/certs.d/docker.io/hosts.toml
+server = "https://docker.io"
+[host."https://docker.m.daocloud.io"]
+  capabilities = ["pull", "resolve"]
+#   ★ 加速器对某些仓库(如 bitnamilegacy)可能挂起/不回源 → pull 卡住不动:
+#     先 rm hosts.toml 恢复直连(机器 curl 通 docker.io 就直连可拉);
+#     直连也不行再换源:docker.1ms.run / dockerproxy.net 等,改 [host."..."] 后重启 containerd
+
+# 3. 重启生效(改了配置不重启 = 白改)
+systemctl restart containerd
+crictl pull nginx:1.27        # 现在应该秒拉
+
+# 4. sandbox/pause 镜像也超时的话,init 第一步就卡死 —— 顺手改同文件里
+#    sandbox_image = "registry.aliyuncs.com/google_containers/pause:3.10"</code></pre>
+
+  <h3>方案 C:离线导入(内网/保密环境终极方案)</h3>
+  <pre><code># 有网机器上导出,拷进内网节点导入(注意必须是 k8s.io 命名空间)
+ctr -n k8s.io images import nginx-1.27.tar
+crictl images | grep nginx   # 能看到即成功,Pod 会自动重试拉起</code></pre>
+
+  <h3>方案 D:私有仓库认证(Harbor 等)</h3>
+  <pre><code># 1. 建拉取凭证(用户名里 $ 记得转义,Robot 账号常见)
+kubectl create secret docker-registry regcred -n web \
+  --docker-server=harbor.qingfeng.local \
+  --docker-username='robot$ci' \
+  --docker-password='Harbor12345'
+
+# 2. Pod/Deployment spec 里引用
+spec:
+  imagePullSecrets:
+  - name: regcred</code></pre>
+
+  <div class="tip"><b>💡 私仓完整实践</b>(Robot 账号、CI 推送、admission webhook 排障)见 <a href="harbor.html">Harbor 安装与使用</a>;修改镜像后不想等退避重试,<code>kubectl delete pod xxx</code> 重建最快。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-04-rbac.html">← 上一篇:04 权限问题</a>
+  <a href="issue-06-db-disk.html">下一篇:06 线上数据库磁盘满 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 05 拉不下镜像 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 权限问题 · Permission denied / RBAC · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 04 权限问题</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">04</span> 🔑 权限问题 —— Permission denied / RBAC
+    <small>容器内权限、节点 SELinux、kubectl 认证授权,三类问题分开治</small>
+  </h1>
+</header>
+
+<section>
+  <h3>① 挂载目录没写权限(数据库类应用第一名坑)</h3>
+  <pre><code># 现象:Pod 反复 CrashLoopBackOff,logs 里是经典的 permission denied
+kubectl logs mysql-0 -n prod
+mkdir: cannot create directory '/var/lib/mysql': Permission denied
+
+# 解决:Pod securityContext 加 fsGroup(让 kubelet 把卷 chown 给该组)
+#      fsGroup 的值 = 镜像内运行业务的系统用户组 id(mysql 官方镜像为 999)
+spec:
+  securityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsGroup: 999</code></pre>
+
+  <h3>② SELinux 拦截(CentOS / RHEL 常见)</h3>
+  <pre><code># 快速判断:临时关闭后能写了,就是 SELinux 的锅
+setenforce 0          # 临时 Permissive(重启失效)
+
+# 正确做法(别长期关闭):给目录打容器标签
+chcon -Rt svirt_sandbox_file_t /data/nfs/mysql
+# 永久生效用 semanage fcontext -a -t svirt_sandbox_file_t "/data/nfs/mysql(/.*)?" &amp;&amp; restorecon -Rv /data/nfs/mysql</code></pre>
+
+  <h3>③ RBAC / 认证类报错</h3>
+  <table>
+    <tr><th>报错</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>Forbidden: User "system:anonymous" cannot get ...</code></td><td>kubeconfig 没带凭证 / 权限未绑定</td><td>检查 <code>KUBECONFIG</code>;给 SA 绑 Role/ClusterRole</td></tr>
+    <tr><td><code>x509: certificate has expired</code></td><td>集群证书到期(常伴随节点时间不准)</td><td><code>ntpdate</code> 校时;<code>kubeadm certs renew all</code> + 重启控制面</td></tr>
+    <tr><td><code>You must be logged in to the server (Unauthorized)</code></td><td>client 证书/ token 失效</td><td>重新分发 <code>admin.conf</code> 或重新签发用户证书</td></tr>
+  </table>
+  <pre><code># 权限自检两连:我是谁 / 我能不能
+kubectl config current-context
+kubectl auth can-i get pods -n prod          # 回答 yes/no,一目了然
+kubectl auth can-i '*' '*' --as=system:serviceaccount:prod:deploy-sa
+
+# 看证书还剩多久
+kubeadm certs check-expiration</code></pre>
+
+  <div class="tip"><b>💡 定位口诀:</b>容器内报 <code>Permission denied</code> → 先 <code>fsGroup</code>;节点上手工写也失败 → 查 <code>SELinux/目录属主</code>;kubectl 报 <code>Forbidden/Unauthorized</code> → 查 <code>RBAC/证书</code>。三类权限别混。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-03-mount.html">← 上一篇:03 挂载问题</a>
+  <a href="issue-05-image.html">下一篇:05 拉不下镜像 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 04 权限问题 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

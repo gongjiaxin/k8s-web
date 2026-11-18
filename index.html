@@ -37,6 +37,14 @@
   .card .tag.soon{color:var(--muted)}
   .card.hot{border-color:rgba(50,108,229,.55);background:linear-gradient(90deg,rgba(50,108,229,.12),var(--card))}
   .card.hot .tag{color:var(--cyan)}
+  .card.top-issue{border-color:rgba(252,129,129,.45);
+    background:linear-gradient(90deg,rgba(252,129,129,.12),var(--card))}
+  .card.top-issue .icon{filter:drop-shadow(0 0 9px rgba(252,129,129,.75));animation:alertPulse 2.4s ease-in-out infinite}
+  .card.top-issue h3{background:linear-gradient(90deg,#fc8181,#f6ad55,#fbd38d);
+    -webkit-background-clip:text;background-clip:text;color:transparent;max-width:300px}
+  .card.top-issue .tag{color:#fc8181}
+  .card.top-issue:hover{border-color:rgba(252,129,129,.8);box-shadow:0 8px 26px rgba(252,129,129,.18)}
+  @keyframes alertPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
   .search{margin:0 0 22px}
   .sbox{position:relative}
   .sbox .mag{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:19px;pointer-events:none;filter:saturate(1.3)}
@@ -91,10 +99,17 @@
   </div>
   <div class="grid" id="docs">
 
+    <a class="card top-issue" href="k8s-issues.html">
+      <div class="icon">🚨</div>
+      <h3>K8S 使用问题总汇</h3>
+      <p>排障一本通:kubeadm 安装失败(Swap/etcd 残留/端口占用)、磁盘满与 DiskPressure 驱逐、挂载失败(NFS/subPath/multi-attach)、权限拒绝(fsGroup/SELinux/RBAC)、拉不下镜像(国内加速/离线导入/imagePullSecrets),外加线上数据库磁盘满的止血与 PVC 在线扩容实战。</p>
+      <span class="tag">● 9 大问题 · 点击进入 →</span>
+    </a>
+
     <a class="card hot" href="elk.html" data-k="elk efk lk 日志 log logging kibana elasticsearch es logstash kafka loggie 采集 收集 存储 保留 ilm 巡检 监控 告警">
       <div class="icon">🪵</div>
       <h3>线上 ELK 日志栈部署档案(fke)</h3>
-      <p>loggie→kafka→logstash→ES→Kibana 全链路:组件清单与配置全文、采集范围真相(仅 app+argo ns·22 节点·stdout)、存储与 ILM 7 天保留、访问入口、日常维护命令速查、每日/周/月巡检周期与告警建议,附 Longhorn 只读卷致日志断流 2 天真实复盘。</p>
+      <p>loggie→kafka→logstash→ES→Kibana 全链路:组件清单与配置全文、采集范围真相(仅 app+argo ns·22 节点·stdout)、存储与 ILM 7 天保留、访问入口、日常维护命令速查、每日/周/月巡检周期与告警建议,附 Longhorn 只读卷断流复盘 + <b>new-k8s 离线安装全流程</b>(开发机下载镜像/Chart→6 节点 ctr 导入→helm 本地包安装,同款 7 天保留)。</p>
       <span class="tag">● 已上线 · 点击进入 →</span>
     </a>
 
@@ -151,13 +166,6 @@
       <div class="icon">⌨️</div>
       <h3>K8S 常用命令速查</h3>
       <p>kubectl 实战速查:节点/Pod/Service 查看全家桶、describe/logs/events 排障三件套、exec 进容器与端口转发、apply/scale/rollout 变更操作、清单生成 —— 全部附本集群真实命令输出。</p>
-      <span class="tag">● 已上线 · 点击进入 →</span>
-    </a>
-
-    <a class="card hot" href="k8s-issues.html">
-      <div class="icon">🧯</div>
-      <h3>K8S 使用问题总汇</h3>
-      <p>排障一本通:kubeadm 安装失败(Swap/etcd 残留/端口占用)、磁盘满与 DiskPressure 驱逐、挂载失败(NFS/subPath/multi-attach)、权限拒绝(fsGroup/SELinux/RBAC)、拉不下镜像(国内加速/离线导入/imagePullSecrets),外加线上数据库磁盘满的止血与 PVC 在线扩容实战。</p>
       <span class="tag">● 已上线 · 点击进入 →</span>
     </a>
 

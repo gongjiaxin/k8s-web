@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03 挂载问题 · Volume / PVC 挂载失败 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 03 挂载问题</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">03</span> 🔗 挂载问题 —— Volume / PVC 挂载失败
+    <small>Pod 卡在 ContainerCreating 十有八九是挂载,Events 里必有答案</small>
+  </h1>
+</header>
+
+<section>
+  <h3>第一步:看 Events 定位</h3>
+  <pre><code>kubectl describe pod mysql-0 | sed -n '/Events:/,$p'
+kubectl get events -A --sort-by=.lastTimestamp | grep -iE 'volume|mount|attach'
+
+# PVC 是否 Bound?Pending 多半是 PV/StorageClass 没配好
+kubectl get pvc -A</code></pre>
+
+  <h3>高频报错对照表</h3>
+  <table>
+    <tr><th>Events 报错</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>mount.nfs: access denied by server</code></td><td>NFS exports 白名单没放行 / root_squash</td><td>编辑 <code>/etc/exports</code> 加节点网段 + <code>no_root_squash</code>,<code>exportfs -rv</code></td></tr>
+    <tr><td><code>mount: wrong fs type, bad option</code></td><td>节点没装 NFS 客户端</td><td><code>yum install -y nfs-utils</code>(Debian 系:nfs-common)</td></tr>
+    <tr><td><code>hostPath path check failed ... not exist</code></td><td>宿主机目录不存在</td><td>提前 <code>mkdir -p</code>;或 hostPath type 用 <code>DirectoryOrCreate</code></td></tr>
+    <tr><td><code>Multi-Attach error for volume ... exclusively attached</code></td><td>RWO 卷还被旧 Pod(或残留 attachment)占着</td><td>删旧 Pod;<code>kubectl get volumeattachments</code> 查残留并删</td></tr>
+    <tr><td><code>subPath ... is not found</code></td><td>subPath 指向的文件/目录不存在</td><td>initContainer 先创建;<code>kubectl explain pod.spec.containers.volumeMounts.subPath</code></td></tr>
+    <tr><td>ConfigMap 改了 Pod 里不生效</td><td><b>subPath 挂载不会热更新</b>(设计如此)</td><td>重启 Pod;或改用目录挂载(自动更新,延迟 ~1 分钟)</td></tr>
+  </table>
+
+  <pre><code># NFS 服务端标准配置(/etc/exports)示例
+/data/nfs/mysql  *(rw,sync,no_subtree_check,no_root_squash)
+
+# 服务端生效 + 客户端验证(节点上先手工 mount 一次,能通 K8S 里才能通)
+exportfs -rv
+mount -t nfs 192.168.10.10:/data/nfs/mysql /mnt &amp;&amp; ls /mnt &amp;&amp; umount /mnt</code></pre>
+
+  <div class="tip"><b>💡 经验:</b>凡是挂载报错,先在<b>Pod 所在节点</b>上用同样的参数手工 mount 一次 —— 手工能挂上说明是 K8S 配置问题;手工也挂不上就是 NFS/存储端问题,思路立刻清晰。</div>
+</section>
+
+<nav class="nav">
+  <a href="issue-02-disk.html">← 上一篇:02 磁盘问题</a>
+  <a href="issue-04-rbac.html">下一篇:04 权限问题 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 03 挂载问题 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

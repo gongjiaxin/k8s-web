@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通用排障三板斧 + 状态速查表 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 附 · 通用排障三板斧</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--purple)">附</span> 🧭 通用排障三板斧 + 状态速查表
+    <small>不管什么问题先跑三条命令,80% 的答案就在输出里;Pod 状态对号入座</small>
+  </h1>
+</header>
+
+<section>
+  <p>不管什么问题,先跑这三条,80% 的答案就在输出里:</p>
+  <pre><code>kubectl describe pod &lt;pod&gt; -n &lt;ns&gt;                    # Events 区 = 病历本
+kubectl logs &lt;pod&gt; -n &lt;ns&gt; --tail=100 --previous   # 应用自己的报错(--previous 看上一次崩溃)
+kubectl get events -A --sort-by=.lastTimestamp | tail -20   # 全集群最近发生了什么</code></pre>
+
+  <table>
+    <tr><th>Pod 状态</th><th>大概率方向</th><th>跳转</th></tr>
+    <tr><td><code>ImagePullBackOff / ErrImagePull</code></td><td>镜像拉取失败</td><td><a href="issue-05-image.html">05 拉不下镜像</a></td></tr>
+    <tr><td><code>ContainerCreating</code> 卡住</td><td>挂载失败 / 拉镜像慢</td><td><a href="issue-03-mount.html">03 挂载问题</a> / <a href="issue-05-image.html">05</a></td></tr>
+    <tr><td><code>CrashLoopBackOff</code></td><td>权限 / 配置 / 应用启动报错</td><td><a href="issue-04-rbac.html">04 权限问题</a> + logs</td></tr>
+    <tr><td><code>Evicted</code></td><td>磁盘 / 内存压力驱逐</td><td><a href="issue-02-disk.html">02 磁盘问题</a></td></tr>
+    <tr><td><code>Pending</code></td><td>资源不足 / PVC 没绑定 / 节点选择器不匹配</td><td><a href="issue-03-mount.html">03 挂载问题</a></td></tr>
+    <tr><td><code>CreateContainerConfigError</code></td><td>secret/configmap/subPath 不存在</td><td><a href="issue-03-mount.html">03 挂载问题</a></td></tr>
+  </table>
+
+  <div class="tip"><b>💡 更多命令细节</b>(查看全家桶、exec、rollout、jsonpath)见 <a href="k8s-cmd.html">kubectl 常用命令速查</a>;Harbor Pending 23h / webhook 断链两大实录见 <a href="harbor.html">Harbor 安装与使用</a>;日志集中查询见 <a href="elk.html">ELK 日志栈</a>。</div>
+</section>
+
+<nav class="nav">
+  <a href="k8s-issues.html">← 返回问题总汇</a>
+  <a href="k8s-cmd.html">相关:kubectl 命令速查 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 附 · 通用排障三板斧 + 状态速查表</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>

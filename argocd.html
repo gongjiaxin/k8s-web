@@ -90,6 +90,12 @@
     <li style="list-style:none;margin-top:10px"><b style="color:var(--green)">⬇ 实战:第一个 GitOps 应用 qingfeng-test-web(2026-11-11 全链路打通)</b></li>
     <li><a href="#a15">qingfeng-test-web:Jenkins+Harbor+ArgoCD+Nginx 全链路实战</a></li>
     <li><a href="#a16">命令对账 kubectl vs ArgoCD · 发布回滚速查 · 多用户 RBAC</a></li>
+    <li style="list-style:none;margin-top:10px"><b style="color:var(--orange)">⬇ 生产部署仓 new-argocd-deploy(2026-11-18 正式落地)</b></li>
+    <li><a href="#a17">从实验到生产:为什么再建一个部署仓(new-argocd-deploy)</a></li>
+    <li><a href="#a18">仓库创建与目录结构(argocd-apps + app/base + environments)</a></li>
+    <li><a href="#a19">platform-website 清单拆解(base 红线 / overlay 发版 / 手动 Sync)</a></li>
+    <li><a href="#a20">接入实操:Deploy Key → repo add → 注册 App → 首同步验证</a></li>
+    <li><a href="#a21">日常维护:发版 / digest 获取 / 回滚 / 漂移检查 / 加新 App</a></li>
   </ol>
 </nav>
 
@@ -776,8 +782,187 @@ argocd account can-i sync applications default/&lt;新App&gt; --account dev1   #
   <div class="tip"><b>💡 一句话总结 ArgoCD 的存在意义:</b>把"集群现在长什么样"从一次性命令和人脑记忆,变成 Git 里一份可版本化、可 review、可回滚、可审计的文件 —— 集群只是这份文件的投影,歪了就拉回。kubectl 是<b>遥控器</b>(谁拿到都能按,按完不留痕);ArgoCD 是<b>自动驾驶 + 行车记录仪</b>(路线=Git,偏航自动回正,全程录像,每个乘客只能按自己车门上的按钮)。</div>
 </section>
 
+<!-- ================= 17. 生产部署仓定位 ================= -->
+<section id="a17">
+  <h2><span class="no">17</span>从实验到生产:为什么再建一个部署仓(new-argocd-deploy)</h2>
+  <p>15 节的 <code>qingfeng-test-web-deploy</code> 是<b>单应用实验仓</b>:一个 app 一个仓,YAML 平铺在 <code>/k8s</code> 一个目录里,验证了链路可行性。应用多了以后问题暴露:每接一个应用就要新建一个仓 + 重复配一遍 Deploy Key + repo add,仓库存越滚越散。生产方案反过来 —— <b>一个部署仓装所有应用</b>:</p>
+  <table>
+    <tr><th>维度</th><th>qingfeng-test-web-deploy(实验)</th><th>new-argocd-deploy(生产)</th></tr>
+    <tr><td>GitLab 归属</td><td><code>gongjx/</code> 个人空间</td><td><code>devops/</code> 运维组空间</td></tr>
+    <tr><td>承载应用</td><td>1 个,目录平铺 <code>/k8s</code></td><td>多应用,一应用一目录,<code>platform-website</code> 是第一个</td></tr>
+    <tr><td>清单结构</td><td>无环境分层</td><td><code>base + environments/&lt;env&gt;</code>(Kustomize 分层)</td></tr>
+    <tr><td>App 注册</td><td><code>argocd app create</code> CLI 建,注册不进 git</td><td><code>argocd-apps/*.yaml</code> 放仓里,注册本身也 GitOps 化</td></tr>
+    <tr><td>镜像版本</td><td>Jenkins 自动改 tag 写回部署仓</td><td>人改 overlay 的 <code>digest</code>(发布权在人,见 19 节)</td></tr>
+    <tr><td>同步策略</td><td>Manual</td><td>Manual(刻意选择,见 19 节)</td></tr>
+  </table>
+  <h3>🔐 为什么镜像版本是"人改 digest"而不是 Jenkins 自动写</h3>
+  <p>platform-website 是<b>唯一生产门户</b>(源环境已停机,无第二副本)。发布权收回到人手里:Jenkins 只构建推镜像到 Harbor,<b>上线哪一版由人在部署仓里写 digest 决定</b> —— 构建与发布解耦,谁在什么时候上了什么版本,Git 提交记录一目了然。digest(内容哈希)比 tag 更硬:tag 可被覆盖重推,digest 永远唯一对应一份镜像内容。</p>
+  <div class="tip"><b>💡 与既有 Jenkins 流水线的关系:</b>platform-portal 迁移期间的 Jenkins 发布(set image + rollout restart)在新集群<b>退役</b>,被本仓 GitOps 流取代。Jenkins 保留构建推镜像职责,发布动作全部走 ArgoCD。</div>
+</section>
+
+<!-- ================= 18. 仓库创建与目录结构 ================= -->
+<section id="a18">
+  <h2><span class="no">18</span>仓库创建与目录结构(argocd-apps + app/base + environments)</h2>
+  <h3>🏗️ 全景结构</h3>
+  <pre><code>new-argocd-deploy/
+├── argocd-apps/                  ← Application CR 注册处("户口本")
+│   └── platform-website.yaml     ←   一个应用一个 yaml,apply 到 ArgoCD 所在集群
+├── platform-website/             ← 门户网站(第一个应用)
+│   ├── base/                     ← 该应用多环境共享的公共部分(红线固定在此)
+│   │   ├── deployment.yaml       ←   replicas/策略/探针/安全上下文/卷挂载
+│   │   ├── service.yaml          ←   NodePort 30808 入口
+│   │   └── kustomization.yaml    ←   本目录资源清单(新文件必须在此登记)
+│   └── environments/
+│       └── prod/                 ← 生产 overlay(ArgoCD App 指向这里)
+│           └── kustomization.yaml ←  只有环境差异:namespace + 镜像 digest
+└── README.md                     ← 结构/发版流程/红线/接入步骤</pre></code>
+  <h3>📁 base 是什么(常见误解澄清)</h3>
+  <p><code>base</code> <b>不是全仓库共用</b>,是<b>同一个 app 内部多环境共享的公共部分</b>。每个 app 是平级目录,各带各的 base,内容互不相干 —— 以后接入的应用想用 StatefulSet/ConfigMap/Job、想有 ingress、几个容器都随意,和 <code>platform-website/base</code> 毫无关系。全仓库唯一的共享约定只有<b>目录形状</b>(base + environments),这是给人看的一致性。环境差异的分界:</p>
+  <table>
+    <tr><th>放 base</th><th>放 environments/&lt;env&gt;</th></tr>
+    <tr><td>Deployment/Service 全量定义、replicas、滚动策略、探针、资源限额、卷挂载</td><td>namespace(overlay 的 <code>namespace:</code> 字段统一注入)、镜像版本(<code>images:</code> 段)、域名/密码等环境专属 patch</td></tr>
+    <tr><td>原则:所有环境都一样的</td><td>原则:环境之间不一样的("环境差异只写 overlay,base 勿随手改")</td></tr>
+  </table>
+  <h3>🔗 Kustomize 渲染链(ArgoCD 实际读的路径)</h3>
+  <pre><code>ArgoCD App(source.path = platform-website/environments/prod)
+    │ 读 prod/kustomization.yaml
+    │   namespace: platform-portal        ← 注入到所有资源
+    │   images: digest: sha256:xxxx       ← 替换 base 占位镜像
+    │   resources: ../../base             ← 递归拉入
+    ▼
+base/kustomization.yaml → deployment.yaml + service.yaml
+    ▼
+渲染出 2 个带 ns、带真镜像的清单 → 与集群 live 对比 → diff → Sync</pre></code>
+  <p>base 的 deployment.yaml 里镜像是<b>占位</b>(<code>:SET-BY-KUSTOMIZE-OVERLAY</code>),真版本由 overlay 的 <code>digest</code> 替换 —— 所以发版永远只动 overlay 一个文件的一行。</p>
+  <div class="tip"><b>💡 前置资源不进仓:</b>namespace、PVC(portal-data)、secret(harbor-pull / portal-database-url / portal-ldap)、PG StatefulSet 都不在清单里 —— 清单只<b>引用</b>不<b>创建</b>。好处:ArgoCD 不会试图创建/改动这些敏感或既有资源(避免 apply 冲突、明文密码进 git);删应用(prune)也不会误伤它们。每接入一个 app,先在集群上备好前置资源并在 README 登记。</div>
+</section>
+
+<!-- ================= 19. platform-website 清单拆解 ================= -->
+<section id="a19">
+  <h2><span class="no">19</span>platform-website 清单拆解(base 红线 / overlay 发版 / 手动 Sync)</h2>
+  <h3>🧱 base/deployment.yaml 的红线(完整运维背景见 axiom-portal-k8s-ops.md)</h3>
+  <table>
+    <tr><th>项</th><th>值</th><th>为什么</th></tr>
+    <tr><td><code>replicas</code></td><td><b>1</b></td><td>/data 是 Longhorn RWO 卷,同一时刻只能单节点 attach;2 副本时第二 pod 必卡 ContainerCreating 抢卷,且无水平扩展收益</td></tr>
+    <tr><td><code>strategy</code></td><td><b>maxUnavailable=1 / maxSurge=1</b></td><td>RWO 单副本唯一能滚动成功的形态:先退旧卷让位,新 pod 才 attach 得上;默认值会"旧等新、新等卷"死锁</td></tr>
+    <tr><td><code>portal-data</code> 卷</td><td>必须挂 <code>/data</code></td><td>master.key + local-state(含 bootstrap/publicOrigin),缺失=启动校验第 1 步失败 CrashLoop</td></tr>
+    <tr><td><code>fsGroup</code></td><td><b>1000</b></td><td>卷内文件组归属 node(1000),应用 runAsUser=1000 才能读写;存储层校验强制</td></tr>
+    <tr><td><code>automountServiceAccountToken</code></td><td>false</td><td>应用不访问 K8S API;且 SA token 默认挂载点与 secret 卷冲突会导致容器起不来</td></tr>
+    <tr><td>三个 secret 卷 + downwardAPI</td><td>/run/secrets、/run/secrets/ldap、/etc/axiom-deployment</td><td>数据库 DSN、LDAP 配置、/about 页部署登记(均只读,分目录挂载勿混)</td></tr>
+  </table>
+  <h3>📦 environments/prod/kustomization.yaml(发版就改这一个文件)</h3>
+  <pre><code>apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform-portal          # ← 注入到下面所有资源
+resources:
+  - ../../base                       # ← 拉入公共部分
+images:
+  - name: docker.ergesanbaishou.com/fourier_axiom_esp/axiom-platform-portal
+    digest: sha256:b413bc7e0e2503a1e...   # ← ★发版只改这一行(当前线上运行版)</pre></code>
+  <p><code>digest</code> 也可换成 <code>newTag: &lt;tag&gt;</code>(二选一,别同时留)。推荐 digest:tag 可被覆盖重推(同名不同物),digest 永远唯一对应一份镜像内容 —— 发的是什么就是什么。</p>
+  <h3>📋 argocd-apps/platform-website.yaml(手动同步模式)</h3>
+  <pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-website
+  namespace: argocd                  # ← Application 资源本身在 ArgoCD 的 ns
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@gitlab.ergesanbaishou.com:devops/new-argocd-deploy.git
+    targetRevision: main
+    path: platform-website/environments/prod   # ← 指向 overlay,不是 base
+  destination:
+    server: https://kubernetes.default.svc     # ← ArgoCD 自己所在的集群
+    namespace: platform-portal
+  syncPolicy:
+    # 手动同步:没有 automated 段 → 改 digest push 后 ArgoCD 只标记
+    # OutOfSync(黄),不点 Sync 不动集群,发布权完全在人
+    # (代价:无 selfHeal,有人 kubectl scale 不会被自动拉回,靠 diff 巡检)
+    syncOptions:
+      - CreateNamespace=false        # ns/secret/PVC 均为前置已建资源
+    retry:
+      limit: 3
+      backoff: {duration: 30s, factor: 2, maxDuration: 2m}</pre></code>
+  <div class="warn"><b>⚠️ automated vs Manual 的取舍:</b>automated + selfHeal 能自动纠偏(手工 scale 到 2 被拉回 1)但"push 即发布";Manual 发布权在人但失去自愈。生产门户选了 Manual —— 要两者兼得可保留 automated 并用 GitLab MR 审批流卡住 main 直推。两种模式随时可换:增删 <code>syncPolicy.automated</code> 段后重新 apply。</div>
+</section>
+
+<!-- ================= 20. 接入实操 ================= -->
+<section id="a20">
+  <h2><span class="no">20</span>接入实操:Deploy Key → repo add → 注册 App → 首同步验证</h2>
+  <h3>第①步:生成专用部署密钥(在 new-k8s-fke-m1 上)</h3>
+  <pre><code>ssh-keygen -t ed25519 -f ~/.ssh/argocd_newdeploy -N "" -C "argocd-new-argocd-deploy"</pre></code>
+  <h3>第②步:公钥注册到 GitLab(只读)</h3>
+  <p>GitLab 网页:<code>devops/new-argocd-deploy</code> → <b>Settings → Repository → Deploy keys → 添加新的部署密钥</b> → 粘贴 <code>~/.ssh/argocd_newdeploy.pub</code> 整行(含 <code>ssh-ed25519</code> 开头和结尾注释) → Title 随意 → <b>不勾"授予写权限"</b>(ArgoCD 只需要拉代码) → 保存。<b>私钥(无 .pub 后缀那个)永远不上传 GitLab</b>,它只给下一步 CLI 用。</p>
+  <h3>第③步:ArgoCD 注册仓库凭据</h3>
+  <pre><code>argocd login &lt;ArgoCD地址&gt; --username admin --insecure --grpc-web   # 先登录(地址=UI 地址)
+argocd repo add git@gitlab.ergesanbaishou.com:devops/new-argocd-deploy.git \
+  --ssh-private-key-path ~/.ssh/argocd_newdeploy \
+  --insecure-skip-server-verification
+argocd repo list                    # 该行 STATUS = Successful ✓ 才算通</pre></code>
+  <div class="warn"><b>⚠️ 坑:token is expired。</b>argocd CLI 登录会话有时效,过期后任何命令都报 <code>invalid session: token is expired</code> —— 和仓库密钥无关,<b>重新 argocd login 再重跑</b>即可。不想依赖 CLI 登录,可用 kubectl 直建凭据:<code>kubectl -n argocd create secret generic &lt;名&gt; --from-file=sshPrivateKey=~/.ssh/argocd_newdeploy --from-literal=type='git' --from-literal=url='git@...'</code> 再 <code>kubectl -n argocd label secret &lt;名&gt; argocd.argoproj.io/secret-type=repository</code>(label 是关键,ArgoCD 靠它识别仓库凭据,建完自动拾取)。两条路二选一,别都建;CLI 方式不会生成以你起的名字命名的 secret,<code>kubectl get secret</code> 查不到属正常,以 <code>repo list</code> 为准。</div>
+  <h3>第④步:注册 App(户口本进集群)</h3>
+  <pre><code>cd /root/k8s-install
+# 用部署私钥 clone(只读权限正好够,以后 m1 上留一份方便改 digest)
+GIT_SSH_COMMAND='ssh -i ~/.ssh/argocd_newdeploy -o StrictHostKeyChecking=no' \
+  git clone git@gitlab.ergesanbaishou.com:devops/new-argocd-deploy.git
+cd new-argocd-deploy
+kubectl apply -f argocd-apps/platform-website.yaml</pre></code>
+  <h3>第⑤步:首同步验证(★ 最关键的一步)</h3>
+  <pre><code>argocd app get platform-website     # 出现,Status=OutOfSync/Unknown
+argocd app diff platform-website    # ★预期≈空(清单按 2026-11-18 线上现状逐项对齐)
+argocd app sync platform-website    # 手动点这一次
+argocd app wait platform-website --health --timeout 300</pre></code>
+  <table>
+    <tr><th>现象</th><th>含义 / 动作</th></tr>
+    <tr><td><code>Synced</code> + <code>Healthy</code>,pod 没重启</td><td>✅ 完美:Git 清单=线上现状,ArgoCD 正式接管,零感知切换</td></tr>
+    <tr><td>diff 显示 replicas=2 / 策略不同</td><td>⚠️ 集群被人手工改过,先核对差异来源再决定,<b>别急着 sync</b></td></tr>
+    <tr><td>卡 Progressing</td><td>多为镜像拉取失败:<code>kubectl -n platform-portal describe pod</code> 看事件(harbor-pull 凭据/tag/digest 错)</td></tr>
+  </table>
+  <div class="tip"><b>💡 现有 App 参考:</b>new-k8s 的 ArgoCD 上已有 <code>qingfeng-test-web</code>(Manual,gongjx/qingfeng-test-web-deploy,path=k8s),是 CLI 建的、注册不进 git;新仓的所有 App 注册都走 <code>argocd-apps/*.yaml</code>,仓库即真相。首同步用 <code>kubectl kustomize</code> 在本地先验渲染也能提前排错:<code>kubectl kustomize platform-website/environments/prod | grep "image:"</code>。</div>
+</section>
+
+<!-- ================= 21. 日常维护 ================= -->
+<section id="a21">
+  <h2><span class="no">21</span>日常维护:发版 / digest 获取 / 回滚 / 漂移检查 / 加新 App</h2>
+  <h3>🚀 发版(固定四步,改一个文件的一行)</h3>
+  <pre><code># ① 开发构建出新镜像(Jenkins 推 Harbor),拿到 digest
+# ② 改 platform-website/environments/prod/kustomization.yaml 的 digest 行
+cd /root/k8s-install/new-argocd-deploy &amp;&amp; git pull
+vim platform-website/environments/prod/kustomization.yaml
+# ③ 提交推送(这条 commit 就是发布记录)
+git add -A &amp;&amp; git commit -m "release: platform-website &lt;版本/说明&gt;" &amp;&amp; git push
+# ④ ArgoCD UI 找 platform-website → 点 SYNC(Manual 模式,不点不发布)
+argocd app sync platform-website &amp;&amp; argocd app wait platform-website --health --timeout 300</pre></code>
+  <p>push 后 ArgoCD 只标记 <b>OutOfSync(黄)</b>,UI 上 SYNC 按钮亮起 —— 不点 Sync 就不动集群。</p>
+  <h3>🔑 digest 从哪拿(三种,人不需要"生成"它)</h3>
+  <table>
+    <tr><th>来源</th><th>位置</th></tr>
+    <tr><td>Jenkins 构建控制台</td><td>日志末尾 <code>The push refers to ... digest: sha256:xxxx</code></td></tr>
+    <tr><td>Harbor 网页</td><td>项目 → <code>axiom-platform-portal</code> → 对应版本 <b>Digest</b> 列,点复制图标</td></tr>
+    <tr><td>命令行</td><td><code>docker manifest inspect docker.ergesanbaishou.com/fourier_axiom_esp/axiom-platform-portal:&lt;tag&gt;</code></td></tr>
+  </table>
+  <p>digest 与 tag 的区别:tag(如 <code>main-1027</code>)可被覆盖重推 —— 同名不同物;digest 是镜像内容的 SHA-256 指纹,推送时由 Harbor 自动计算,<b>永远唯一对应一份镜像内容</b>。发布认 digest,防"同名镜像悄悄变了"。</p>
+  <h3>⏪ 回滚</h3>
+  <ul>
+    <li><b>标准方式:</b>把 overlay 的 digest 改回旧值 → commit → push → 点 Sync(同样留发布记录)。</li>
+    <li><b>紧急方式:</b><code>argocd app rollback platform-website</code> 或 UI History → Rollback(秒级),但 Git 仍是新的 —— 回稳后必须把 digest 回改,否则 diff 永远 OutOfSync。</li>
+  </ul>
+  <h3>🔍 漂移巡检(Manual 模式没有 selfHeal,靠人)</h3>
+  <pre><code>argocd app diff platform-website    # 空输出=集群与 Git 一致;有输出=有人绕过 Git 改了集群</pre></code>
+  <p>发现漂移(如 replicas 被手工 scale 成 2):先核对是不是误操作 → 点 Sync 拉回 Git 声明的值;若是合理变更(如临时扩容),应该反过来<b>改 Git 再 Sync</b>,让变更留下记录 —— 集群状态的唯一写入口是 Git。</p>
+  <h3>➕ 加新 App(两步,平台扩展不动老应用)</h3>
+  <pre><code># ① 建目录:&lt;app&gt;/base + &lt;app&gt;/environments/&lt;env&gt;(照 platform-website 的形状,内容随意:
+#    StatefulSet/ConfigMap/ingress 都行,各 app 的 base 互不相干)
+# ② 注册:复制 argocd-apps/platform-website.yaml 改 name/repoURL(如不同仓)/path
+#    → kubectl apply;Deploy Key 是仓库级的,新 App 目录无需再配任何凭据</pre></code>
+  <div class="tip"><b>💡 RBAC 衔接(16 节):</b>给开发开权限 = 在 argocd-rbac-cm 的 <code>role:app-dev</code> 加一行 <code>p, role:app-dev, applications, sync, default/&lt;新App&gt;, allow</code> + restart server。开发的自助闭环:UI 登录 → 看 OutOfSync → 点 Sync → History 回滚,全程无需运维代劳。发布审批如需加强,GitLab 侧给 main 分支开 MR 审批即可。</div>
+</section>
+
 <footer>
-  <p>清风 · K8S Web 学习中心 —— ArgoCD 部署档案篇(fke 线上档案 + new-k8s 离线安装实操 + 第一个 GitOps 应用全链路)· 2026-11 · <a href="index.html">返回首页</a></p>
+  <p>清风 · K8S Web 学习中心 —— ArgoCD 部署档案篇(fke 线上档案 + new-k8s 离线安装实操 + 第一个 GitOps 应用 + 生产部署仓 new-argocd-deploy)· 2026-11 · <a href="index.html">返回首页</a></p>
 </footer>
 </div>
 

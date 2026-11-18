@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 集群安装失败 · kubeadm 高频报错 · K8S 使用问题总汇</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
+    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600;margin-right:14px}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:28px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  section{padding:20px 0}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  a{color:var(--cyan)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin:30px 0 0;font-size:14px}
+  .nav a{color:var(--cyan);text-decoration:none;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px 14px}
+  .nav a:hover{border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <span>
+      <a class="home" href="k8s-issues.html">← 问题总汇</a>
+      <a class="home" href="index.html">← 首页</a>
+    </span>
+    <span class="crumb">K8S Web / K8S 使用问题总汇 / 01 集群安装失败</span>
+  </div>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1><span style="color:var(--blue)">01</span> 🧱 集群安装失败 —— kubeadm 高频报错
+    <small>90% 的安装失败卡在 kubeadm init 预检(preflight)阶段,报错会直接告诉你原因,逐条修复即可</small>
+  </h1>
+</header>
+
+<section>
+  <h3>高频报错对照表</h3>
+  <table>
+    <tr><th>报错关键词</th><th>根因</th><th>解决方案</th></tr>
+    <tr><td><code>[ERROR Swap]: running with swap on</code></td><td>没关 swap,kubelet 起不来</td><td><code>swapoff -a</code> + 注释 <code>/etc/fstab</code> swap 行</td></tr>
+    <tr><td><code>[ERROR DirAvailable-/var/lib/etcd]: is not empty</code></td><td>上次 init 失败的数据残留</td><td><code>kubeadm reset -f</code> 后清空 <code>/var/lib/etcd/*</code></td></tr>
+    <tr><td><code>[ERROR Port-10250]: already in use</code></td><td>端口被老 kubelet/别的进程占用</td><td><code>ss -lntp | grep 10250</code> 找到并停掉</td></tr>
+    <tr><td><code>failed to pull image ... no space left on device</code></td><td>磁盘满,组件镜像拉不下来</td><td>按 <a href="issue-02-disk.html">02 磁盘问题</a> 清磁盘,再重跑 init</td></tr>
+    <tr><td><code>container runtime is not running</code></td><td>containerd 没起 / sock 路径配错</td><td><code>systemctl enable --now containerd</code>,用 <code>crictl ps</code> 验证</td></tr>
+    <tr><td><code>connect: connection refused (6443)</code></td><td>apiserver 没起来</td><td><code>journalctl -u kubelet -n 100</code> 看真实原因</td></tr>
+  </table>
+
+  <h3>标准修复流程(命令可直接复制)</h3>
+  <pre><code># 1. 关闭 swap(新手第一大坑,处理完重启也不会复活)
+swapoff -a
+sed -ri 's@^(/.*\sswap\s.*)@#\1@' /etc/fstab
+free -h                        # Swap 一行必须全是 0
+
+# 2. 容器运行时自检
+systemctl enable --now containerd
+crictl ps                      # 能正常执行(哪怕空列表)说明 runtime OK
+
+# 3. 上次失败后的"彻底重来"(试错阶段最常用)
+kubeadm reset -f
+rm -rf /var/lib/etcd/* /etc/cni/net.d/* $HOME/.kube/config
+iptables -F &amp;&amp; ipvsadm -C 2&gt;/dev/null
+
+# 4. 重新 init(image-repository 建议直接给国内源,避免 05 拉不下镜像的坑)
+kubeadm init \
+  --image-repository=registry.aliyuncs.com/google_containers \
+  --pod-network-cidr=10.244.0.0/16 \
+  --service-cidr=10.96.0.0/12
+
+# 5. init 成功后按提示三连(否则 kubectl 连不上)
+mkdir -p $HOME/.kube &amp;&amp; cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+kubectl get nodes              # 能打印节点表即成功</code></pre>
+
+  <div class="warn"><b>⚠️ 注意:</b><code>kubeadm reset</code> 只回滚集群组件,<b>不会</b>删除 PVC 数据、NFS 目录和手动装的 CNI 二进制;重装前请单独确认。</div>
+
+  <div class="tip"><b>💡 相关:</b>镜像拉不下来 → <a href="issue-05-image.html">05 拉不下镜像</a>;磁盘满 → <a href="issue-02-disk.html">02 磁盘问题</a>;装好了但 Pod 起不来 → <a href="issue-tips.html">通用排障三板斧</a>。</div>
+</section>
+
+<nav class="nav">
+  <a href="k8s-issues.html">← 返回问题总汇</a>
+  <a href="issue-02-disk.html">下一篇:02 磁盘问题 →</a>
+</nav>
+
+<footer>
+  <p>🧯 K8S 使用问题总汇 · 01 集群安装失败 · 现象 → 原因 → 解决方案</p>
+  <p>K8S Web · 部署清单见 <a href="k8s/deploy.yaml">k8s/deploy.yaml</a> · <code>kubectl apply -f k8s/</code> 一键部署</p>
+</footer>
+</div>
+</body>
+</html>
