@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S Helm 部署 PostgreSQL · K8S Web</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--muted:#8b949e;--blue:#326ce5;--cyan:#4fd1c5;--green:#48bb78;--orange:#f6ad55;--purple:#b794f4;--code:#161b22;--red:#fc8181}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / Helm 部署 PostgreSQL</span></div></div>
+<header class="doc wrap">
+  <h1>Helm 部署 PostgreSQL<small>Bitnami Chart · 单机/主从选型 · bitnamilegacy 镜像坑 · pg_dump 备份恢复 · 日常运维命令速查(适配 new-k8s 离线环境)</small></h1>
+</header>
+<div class="wrap">
+<nav class="toc"><b>目录</b><ol>
+  <li><a href="#p1">认识与选型:单机 or 1主1备</a></li>
+  <li><a href="#p2">版本锚定与离线准备(★bitnamilegacy 坑)</a></li>
+  <li><a href="#p3">values 配置全文</a></li>
+  <li><a href="#p4">安装与验证(psql/复制状态)</a></li>
+  <li><a href="#p5">日常运维命令速查</a></li>
+  <li><a href="#p6">备份与恢复(pg_dump 全流程)</a></li>
+  <li><a href="#p7">排障速查</a></li>
+</ol></nav>
+
+<section id="p1">
+  <h2><span class="no">P1</span>认识与选型:单机 or 1主1备</h2>
+  <p>Bitnami PostgreSQL Chart 同样一个开关切形态(<code>replication.enabled</code>):</p>
+  <table>
+    <tr><th>形态</th><th>架构</th><th>自动切换</th><th>适用</th></tr>
+    <tr><td>★ 单机(默认,<code>replication.enabled=false</code>)</td><td>1 实例 + PVC</td><td>—(Pod 挂了原样拉起,数据不丢)</td><td>绝大多数内网应用;PVC + 定期 pg_dump 已够</td></tr>
+    <tr><td>1主1备(<code>replication.enabled=true</code>,本文演示)</td><td>primary + read 副本,流复制</td><td><b>无</b>(主挂需人工提升副本)</td><td>读写分离 + 热备</td></tr>
+    <tr><td>Patroni/CloudNativePG Operator</td><td>3 节点自动选主</td><td>有</td><td>要求 RPO≈0 的核心库</td></tr>
+  </table>
+  <div class="tip"><b>💡 选型口诀:</b><b>"重要数据 + 能接受分钟级人工恢复" = 单机 + 好备份</b>,比"半吊子主从"更稳 —— 主从不自动切换的形态,故障时反而多一步"确认该不该提升副本"。要全自动高可用请直接上 CloudNativePG,别在中间形态纠结。</div>
+</section>
+<section id="p2">
+  <h2><span class="no">P2</span>版本锚定与离线准备(★bitnamilegacy 坑)</h2>
+  <pre><code># 开发机:
+helm repo add bitnami https://charts.bitnami.com/bitnami && helm repo update
+helm search repo bitnami/postgresql --versions | grep -E 'CHART|16\.' | head -6
+# 选 APP VERSION = 16.x(PG 大版本升级必须 dump/restore,不能 chart 直接跳 —— 锁死 16)
+helm pull bitnami/postgresql --version 16.4.5           # 得 postgresql-16.4.5.tgz
+
+# ★Bitnami 2025-08 迁移坑(同 MySQL/Redis 篇):
+#   docker.io/bitnami/* 免费镜像已清空归档到 bitnamilegacy —— image.repository 必须改!
+curl -s 'https://hub.docker.com/v2/repositories/bitnamilegacy/postgresql/tags/?name=16&amp;page_size=10' \
+  | grep -o '"name":"[^"]*"' | head -3
+
+# 镜像清单 + 离线四连:
+helm template pg ./postgresql-16.4.5.tgz -n pgsql -f values-pgsql.yaml \
+  | grep -oP 'image:\s*\K\S+' | tr -d '"' | sort -u
+docker save -o pgsql-images.tar bitnamilegacy/postgresql:16.4-r0 ...
+scp postgresql-16.4.5.tgz pgsql-images.tar root@10.18.51.120:/root/k8s-install/pca/
+ctr -n k8s.io images import pgsql-images.tar
+helm install pg ./postgresql-16.4.5.tgz -n pgsql --create-namespace -f values-pgsql.yaml</code></pre>
+  <div class="warn"><b>⚠️ 大版本红线:</b>PostgreSQL 16 → 17 属于<b>不兼容升级</b>(内部数据格式变化),chart 直接升 = 起不来。升级路径 = pg_dumpall → 新版本恢复(见 P6)。所以选型时就锁死团队应用支持的版本。</div>
+</section>
+
+<section id="p3">
+  <h2><span class="no">P3</span>values 配置全文(单机 + 可选 1主1备)</h2>
+  <pre><code>cat &gt; values-pgsql.yaml &lt;&lt;'EOF'
+auth:
+  username: app
+  password: "Pg-Proda-2026"          # 生产走 existingSecret
+  database: appdb
+primary:
+  persistence:
+    enabled: true
+    storageClass: longhorn           # ★本集群存储类
+    size: 20Gi
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits:   {memory: 2Gi}
+  extendedConfiguration: |
+    max_connections = 200            # 按应用连接池规划
+# ---- 只读热备(默认注释掉 = 纯单机;要 1主1备再放开)----
+# replication:
+#   enabled: true
+#   singlePrimary: true
+# readReplicas:
+#   replicaCount: 1
+#   persistence:
+#     enabled: true
+#     storageClass: longhorn
+#     size: 20Gi
+image:
+  repository: bitnamilegacy/postgresql   # ★迁移坑
+  tag: 16.4.0-debian-12-r0              # 以 P2 查到的精确 tag 为准
+metrics:
+  enabled: true                          # exporter 接 07 章监控
+EOF</code></pre>
+  <div class="tip"><b>💡 密码变更的唯一正路:</b>装完后想改密码,<b>不能只改 values 里的 <code>auth.password</code></b> —— chart 只在首次安装生成 Secret,后续 upgrade 不会回写数据库内密码(见 P7 排障)。改密要 <code>ALTER USER</code> + 同步 Secret 两步走。</div>
+</section>
+
+<section id="p4">
+  <h2><span class="no">P4</span>安装与验证(psql / 复制状态)</h2>
+  <pre><code>kubectl -n pgsql get pods -w                # pg-postgresql-0(+ 开复制时再加 pg-read-0)
+
+# 连通 + 建库验证
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U app -d appdb -c '\l'
+kubectl -n pgsql exec pg-postgresql-0 -- pg_isready -U app
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U app -d appdb -c 'CREATE TABLE t1(id int); INSERT INTO t1 VALUES (1); SELECT * FROM t1;'
+
+# 开了 1主1备时:主上查复制(一行 streaming = 打通)
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U postgres \
+  -c "SELECT application_name, state, sync_state FROM pg_stat_replication;"
+
+# 应用连接串(集群内)
+kubectl -n pgsql get svc
+#   pg-postgresql:5432(读写主)/ pg-postgresql-read:5432(开复制后的只读入口)
+# 集群内应用:postgresql://app:密码@pg-postgresql.pgsql.svc:5432/appdb</code></pre>
+</section>
+
+<section id="p5">
+  <h2><span class="no">P5</span>日常运维命令速查</h2>
+  <pre><code># ── 应用上线标配:建用户授权 ──
+kubectl -n pgsql exec -it pg-postgresql-0 -- psql -U app -d appdb \
+  -c "CREATE USER svc_app WITH PASSWORD 'S3cret!';"
+kubectl -n pgsql exec -it pg-postgresql-0 -- psql -U app -d appdb \
+  -c "GRANT ALL PRIVILEGES ON DATABASE appdb TO svc_app;"
+
+# ── 日常体检 ──
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U app -d appdb -c '\dt'
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U app -d appdb \
+  -c "SELECT pg_size_pretty(pg_database_size('appdb'));"
+kubectl -n pgsql exec pg-postgresql-0 -- psql -U app -d appdb \
+  -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"    # 活动连接
+
+# ── 在线扩容 PVC(longhorn 支持)──
+kubectl -n pgsql patch pvc data-pg-postgresql-0 \
+  --patch '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+# ── 滚动重启 ──
+kubectl -n pgsql rollout restart sts pg-postgresql</code></pre>
+</section>
+
+<section id="p6">
+  <h2><span class="no">P6</span>备份与恢复(pg_dump 全流程)</h2>
+  <pre><code># ── 单库逻辑备份(应用数据)──
+kubectl -n pgsql exec pg-postgresql-0 -- pg_dump -U app appdb &gt; appdb_$(date +%F).sql
+# ── 全实例(含角色/库定义 —— 大版本升级也靠它)──
+kubectl -n pgsql exec pg-postgresql-0 -- pg_dumpall -U postgres &gt; all_$(date +%F).sql
+
+# ── 恢复(单库)──
+kubectl -n pgsql exec -i pg-postgresql-0 -- psql -U app -d appdb &lt; appdb_2026-11-24.sql
+
+# ── 定时备份:CronJob 思路(每日 2 点 dump 到 PVC → kubectl cp / S3 取回)──
+#  kubectl create cronjob pg-bak --schedule="0 18 * * *" --image=bitnamilegacy/postgresql:16.4 -- pg_dump …
+
+# ── 大版本升级正路(16 → 17):新 namespace 装 17 → pg_dumpall 导入 → 切连接串 ──</code></pre>
+  <div class="tip"><b>💡 备份验证清单:</b>每月挑一份备份在临时 namespace 恢复一遍(<code>helm install pg-restore … → psql &lt; dump</code>)——<b>没验证过的备份等于没有备份</b>;并把 PVC 用量、备份成功率接进 7.13 的钉钉告警。</div>
+</section>
+
+<section id="p7">
+  <h2><span class="no">P7</span>排障速查</h2>
+  <table>
+    <tr><th>症状</th><th>真因</th><th>处置</th></tr>
+    <tr><td>password authentication failed</td><td>改了 values 但库里密码没变(chart 不回写)</td><td>两步走:<code>ALTER USER app WITH PASSWORD '…';</code> + 同步更新 Secret</td></tr>
+    <tr><td>PVC Pending</td><td>storageClass 拼错</td><td><code>kubectl get sc</code> 核对(new-k8s = longhorn)</td></tr>
+    <tr><td>too many connections</td><td>应用连接池过大/泄漏</td><td>调 max_connections(P3)或治理连接池</td></tr>
+    <tr><td>复制延迟大</td><td>从库 IO/CPU 瓶颈</td><td><code>pg_stat_replication</code> 看 lag;扩从库资源</td></tr>
+    <tr><td>ImagePullBackOff</td><td>忘了改 bitnamilegacy</td><td>P2 迁移坑,改 image.repository</td></tr>
+  </table>
+</section>
+</div>
+<footer>K8S Web · PostgreSQL on Kubernetes · 配套:<a href="k8s-mysql.html">MySQL</a> · <a href="k8s-redis.html">Redis</a> · <a href="k8s-monitor.html">监控三件套</a></footer>
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · Prometheus 监控栈离线安装(pca) · K8S Web</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#161b22; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  .rel{margin:26px 0 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:14px}
+  .rel b{color:var(--cyan)}
+  .rel a{color:var(--txt);text-decoration:none;border-bottom:1px dashed var(--line)}
+  .rel a:hover{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">&larr; 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / Prometheus 监控栈离线安装(pca)</span>
+  </div>
+</div>
+<div class="wrap">
+<header class="doc">
+  <h1>&#128229; Prometheus 监控栈离线安装手册(pca &middot; new-k8s)
+    <small>版本对齐线上 fke(chart kube-prometheus-stack-48.2.0 / operator v0.66.0) &middot; 开发机(qingfeng)下载 &rarr; docker save 打包(307M) &rarr; scp 分发 6 节点 &rarr; ctr 批量导入 &rarr; Helm 本地 tgz 离线安装 —— &#10004; 下载/分发/导入已完成(2026-11-23),真实输出已回填,待执行:Helm 安装</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>&#128218; 目录</b>
+  <ol>
+    <li><a href="#a1">线上安装方式与版本锚点(fke,怎么查的)</a></li>
+    <li><a href="#a2">开发机下载:Chart 包 + 镜像清单(&#9733; 动态提取法,含真实输出)</a></li>
+    <li><a href="#a3">打包保存与校验(docker save &rarr; 307M 实测)</a></li>
+    <li><a href="#a4">传输:scp for 循环分发 6 节点(真实输出)</a></li>
+    <li><a href="#a5">镜像导入:ctr 全节点导入 + crictl 验证(&#9888; DaemonSet 坑)</a></li>
+    <li><a href="#a6">Helm 离线安装(values 裁剪 + kubeVersion 大坑)</a></li>
+    <li><a href="#a7">验收三关(Pod / UI / Targets)</a></li>
+    <li><a href="#a8">维护手册(巡检 / 离线升级 / 卸载 / 报错速查)</a></li>
+  </ol>
+</nav>
+
+<section id="a1">
+  <h2><span class="no">01</span>线上安装方式与版本锚点(fke,怎么查的)</h2>
+  <p>离线安装第一步不是下载,而是<b>确认线上装的是什么、什么版本</b>——新环境与线上对齐,经验才能迁移。两条命令搞定:</p>
+  <pre><code># 是不是 Helm 装的?release 叫什么?在哪个 ns?
+sudo helm list -A | grep -iE "prometheus|monitoring|kube-prom"
+
+# 本机配置过哪些仓库源
+sudo helm repo list</code></pre>
+  <p>线上真实输出(2025-11-23 于 fke-m1 执行):</p>
+  <pre><code>fourier@fke-m1:~$ sudo helm list -A | grep -iE "prometheus|monitoring|kube-prom"
+prometheus                  fke-monitor         6        2025-09-22 10:10:33.421976192 +0800 CST    deployed    kube-prometheus-stack-48.2.0    v0.66.0
+
+fourier@fke-m1:~$ sudo helm repo list
+Error: no repositories to show</code></pre>
+  <table>
+    <tr><th>字段</th><th>值</th><th>含义</th></tr>
+    <tr><td>release 名</td><td><code>prometheus</code></td><td>新环境保持同名,命令习惯一致</td></tr>
+    <tr><td>namespace</td><td><code>fke-monitor</code></td><td>监控栈专用 ns</td></tr>
+    <tr><td>revision</td><td>6</td><td>已升级过 6 次,最新一次 2025-09-22</td></tr>
+    <tr><td>chart</td><td><b><code>kube-prometheus-stack-48.2.0</code></b></td><td>&#9733; 离线下载就锁这个版本</td></tr>
+    <tr><td>app version</td><td><code>v0.66.0</code></td><td>Prometheus Operator 版本</td></tr>
+  </table>
+  <div class="tip"><b>repo list 为空怎么解读:</b>说明当初安装那台机器没配(或后来清掉了)helm 仓库源,不影响判断——release 信息本身就证明了是 Helm 装的。新环境照常 <code>helm repo add</code> 即可。</div>
+</section>
+
+<section id="a2">
+  <h2><span class="no">02</span>开发机下载:Chart 包 + 镜像清单(&#9733; 动态提取法)</h2>
+  <p>在<b>能上外网的开发机</b>(本次为 qingfeng,工作目录 <code>~/k8s-install/pca</code>)上完成三件事:下 Chart、列镜像、拉镜像。</p>
+
+  <h3>2.1 下载 Chart 包(1 个 tgz 含全部子依赖)</h3>
+  <pre><code>helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# 锁定线上同版本 &rarr; 得到 kube-prometheus-stack-48.2.0.tgz
+helm pull prometheus-community/kube-prometheus-stack --version 48.2.0
+
+# 验证:charts/ 子依赖应已内置 grafana / kube-state-metrics / prometheus-node-exporter
+tar -tzf kube-prometheus-stack-48.2.0.tgz | head -20</code></pre>
+  <div class="tip"><b>自包含:</b><code>helm pull</code> 下来的 tgz 已把 3 个子 chart 打包在内,新集群离线安装时<b>直接用这一个文件</b>,无需再联网拉依赖。实测仅 <b>468K</b>。</div>
+
+  <h3>2.2 镜像清单:不要手写,用渲染提取(★ 本页最值钱的方法)</h3>
+  <pre><code># 用本地 chart 渲染出真实镜像清单 &rarr; images.txt
+helm template prometheus kube-prometheus-stack-48.2.0.tgz -n fke-monitor \
+  | grep 'image:' | sed 's/.*image: *//' | tr -d '"' | sort -u &gt; images.txt
+
+cat images.txt</code></pre>
+  <div class="warn"><b>为什么必须动态提取:</b>本页实测就踩到了——chart 48.2.0 实际渲染出的 tag 与网上资料差异不小(grafana 是 <code>10.0.2</code>、prometheus 是 <code>v2.45.0</code>、kube-state-metrics 是 <code>v2.9.2</code>)。手抄清单必漏必错,<code>helm template</code> 渲染是唯一事实源;改了 values 就重跑一遍。</div>
+  <p>本次实际清单(共 <b>6 个镜像</b>,大小来自导入后 <code>crictl images</code>):</p>
+  <table>
+    <tr><th>组件</th><th>镜像</th><th>版本</th><th>大小</th><th>分布</th></tr>
+    <tr><td>Grafana</td><td><code>docker.io/grafana/grafana</code></td><td>10.0.2</td><td>93.7MB</td><td>1 副本</td></tr>
+    <tr><td>Prometheus 本体</td><td><code>quay.io/prometheus/prometheus</code></td><td>v2.45.0</td><td>93.7MB</td><td>StatefulSet</td></tr>
+    <tr><td>Alertmanager</td><td><code>quay.io/prometheus/alertmanager</code></td><td>v0.25.0</td><td>30.8MB</td><td>StatefulSet</td></tr>
+    <tr><td>Operator</td><td><code>quay.io/prometheus-operator/prometheus-operator</code></td><td>v0.66.0</td><td>16.3MB</td><td>1 副本</td></tr>
+    <tr><td>kube-state-metrics</td><td><code>registry.k8s.io/kube-state-metrics/kube-state-metrics</code></td><td>v2.9.2</td><td>13.3MB</td><td>1 副本</td></tr>
+    <tr><td>node-exporter</td><td><code>quay.io/prometheus/node-exporter</code></td><td>v1.6.0</td><td>11.7MB</td><td><b>DaemonSet,每节点</b></td></tr>
+  </table>
+
+  <h3>2.3 拉取镜像(逐个 or 一键)</h3>
+  <pre><code># 一键:按清单逐个拉(推荐)
+while read img; do docker pull "$img"; done &lt; images.txt
+
+# 逐个(清单短时直接敲)
+docker pull quay.io/prometheus/prometheus:v2.45.0
+docker pull quay.io/prometheus/alertmanager:v0.25.0
+docker pull quay.io/prometheus/node-exporter:v1.6.0
+...</code></pre>
+  <p>真实输出(最后一个,含 digest):</p>
+  <pre><code>Digest: sha256:5ac2e67a862cd3baa0eb4fd7683d54928fd76ea3a61cde50508922c956901d8c
+Status: Downloaded newer image for registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.9.2
+registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.9.2</code></pre>
+</section>
+
+<section id="a3">
+  <h2><span class="no">03</span>打包保存与校验(docker save &rarr; 307M 实测)</h2>
+  <pre><code># 把 images.txt 里所有镜像打进一个 tar
+docker save -o prom-images.tar $(tr '\n' ' ' &lt; images.txt)
+
+ls -lh prom-images.tar
+du -sh *</code></pre>
+  <p>qingfeng 上的真实结果:</p>
+  <pre><code>root@qingfeng:~/k8s-install/pca# ls
+images.txt  kube-prometheus-stack-48.2.0.tgz
+root@qingfeng:~/k8s-install/pca# docker save -o prom-images.tar $(tr '\n' ' ' &lt; images.txt)
+root@qingfeng:~/k8s-install/pca# ls -lh prom-images.tar
+-rw------- 1 root root 307M 11月 23 10:21 prom-images.tar
+root@qingfeng:~/k8s-install/pca# du -sh *
+4.0K    images.txt
+468K    kube-prometheus-stack-48.2.0.tgz
+307M    prom-images.tar</code></pre>
+  <div class="tip"><b>三个交付物齐了:</b><code>images.txt</code>(4.0K,清单留档)+ <code>kube-prometheus-stack-48.2.0.tgz</code>(468K,安装包)+ <code>prom-images.tar</code>(307M,镜像包)。后续只带这三样去新集群。</div>
+</section>
+
+<section id="a4">
+  <h2><span class="no">04</span>传输:scp for 循环分发 6 节点</h2>
+  <p>new-k8s 拓扑:<b>m1(master,本机)+ 10.18.51.121~125(5 worker)</b>。镜像 tar 要人手一份:</p>
+  <pre><code># 在 new-k8s-fke-m1 上:循环 scp 到 121~125(master 本机不用传给自己)
+for i in `seq 121 125`; do echo 10.18.51.$i; scp /tmp/prom-images.tar root@10.18.51.$i:/tmp/; done</code></pre>
+  <p>真实输出(内网万兆,单个 3 秒左右):</p>
+  <pre><code>10.18.51.121
+prom-images.tar    100%  306MB  109.3MB/s   00:02
+10.18.51.122
+prom-images.tar    100%  306MB   84.7MB/s   00:03
+10.18.51.123
+prom-images.tar    100%  306MB   86.2MB/s   00:03
+10.18.51.124
+prom-images.tar    100%  306MB   74.7MB/s   00:04
+10.18.51.125
+prom-images.tar    100%  306MB   ...</code></pre>
+  <div class="warn"><b>别漏了 Chart 包:</b>镜像之外,<code>kube-prometheus-stack-48.2.0.tgz</code> 和 <code>images.txt</code> 也要从开发机传到 master:<br>
+  <code>scp ~/k8s-install/pca/kube-prometheus-stack-48.2.0.tgz ~/k8s-install/pca/images.txt root@new-k8s-fke-m1:~/</code></div>
+  <p>跨机房/大文件可用 <code>rsync -avP</code> 断点续传替代 scp。</p>
+</section>
+
+<section id="a5">
+  <h2><span class="no">05</span>镜像导入:ctr 全节点导入 + crictl 验证</h2>
+
+  <h3>5.1 导入(先本机,再循环)</h3>
+  <pre><code># ① master 本机(文件就在本机 /tmp,不用 ssh)
+ctr -n k8s.io images import /tmp/prom-images.tar
+
+# ② 121~125 循环导入(与 scp 同款写法)
+for i in `seq 121 125`; do echo 10.18.51.$i; ssh root@10.18.51.$i "ctr -n k8s.io images import /tmp/prom-images.tar"; done</code></pre>
+  <p>真实输出(manifest list 逐条落库,21.9 秒):</p>
+  <pre><code>application/vnd.docker.distribution.manifest.list.v2+json sha256:fd4d9a3d...80e98
+application/vnd.docker.distribution.manifest.list.v2+json sha256:d2e48098...4f98
+application/vnd.docker.distribution.manifest.list.v2+json sha256:9c55b697...1222
+application/vnd.docker.distribution.manifest.list.v2+json sha256:9309deb7...a237
+application/vnd.docker.distribution.manifest.list.v2+json sha256:4d99688e...f6b5
+application/vnd.docker.distribution.manifest.list.v2+json sha256:5ac2e67a...1d8c
+Importing  elapsed: 21.9s  total:   0.0 B  (0.0 B/s)</code></pre>
+
+  <h3>5.2 验证(master 看清单,循环数台数)</h3>
+  <pre><code># master 本机:应看到 6 个镜像
+crictl images | grep -E "prometheus|alertmanager|grafana|exporter|kube-state|rbac"
+
+# 循环验证 5 节点:预期每个都是 6
+for i in `seq 121 125`; do echo "=== 10.18.51.$i ==="; ssh root@10.18.51.$i "crictl images | grep -cE 'prometheus|alertmanager|grafana|exporter|kube-state|rbac'"; done</code></pre>
+  <p>真实输出(6 镜像 × 6 节点,全部对齐):</p>
+  <pre><code>root@new-k8s-fke-m1:~# crictl images | grep -E "prometheus|alertmanager|grafana|exporter|kube-state|rbac"
+docker.io/grafana/grafana                          10.0.2     d4cdde7ce77b0    93.7MB
+quay.io/prometheus-operator/prometheus-operator    v0.66.0    c3e56913c47a4    16.3MB
+quay.io/prometheus/alertmanager                    v0.25.0    c8568f914cd25    30.8MB
+quay.io/prometheus/node-exporter                   v1.6.0     173d3570a5af2    11.7MB
+quay.io/prometheus/prometheus                      v2.45.0    e1fbd49323c62    93.7MB
+registry.k8s.io/kube-state-metrics/kube-state-metrics v2.9.2  8465800dbe52d   13.3MB
+
+=== 10.18.51.121 === 6
+=== 10.18.51.122 === 6
+=== 10.18.51.123 === 6
+=== 10.18.51.124 === 6
+=== 10.18.51.125 === 6</code></pre>
+
+  <div class="warn"><b>两个必踩坑:</b><br>
+  1) <code>-n k8s.io</code> 不能省——不带就导进 <code>default</code> ns,kubelet 看不到,照样 ImagePullBackOff;<br>
+  2) <b>每台都要导</b>——node-exporter 是 DaemonSet(6 节点每台一个),Prometheus/Grafana 调度到哪台不受控。</div>
+
+  <h3>5.3 (可选)清理节点上的临时 tar</h3>
+  <pre><code>for i in `seq 121 125`; do echo 10.18.51.$i; ssh root@10.18.51.$i "rm -f /tmp/prom-images.tar"; done</code></pre>
+</section>
+
+<section id="a6">
+  <h2><span class="no">06</span>Helm 离线安装(values 裁剪 + kubeVersion 大坑)</h2>
+
+  <h3>6.1 先过兼容性检查(kubeVersion 大坑)</h3>
+  <pre><code>kubectl version</code></pre>
+  <div class="warn"><b>chart 48.2.0 声明了 kubeVersion 上限</b>(2023 年的 chart,当时上限 &lt;1.28)。若 new-k8s 版本较新,helm install 会直接报 <code>Chart requires kubeVersion ... which is incompatible</code>。解法(解开包删掉限制再装):
+  <pre><code>tar -xzf kube-prometheus-stack-48.2.0.tgz
+# 编辑 kube-prometheus-stack/Chart.yaml,删除或放宽 kubeVersion: 一行
+helm install prometheus ./kube-prometheus-stack -n fke-monitor --create-namespace</code></pre></div>
+
+  <h3>6.2 values 裁剪(离线/最小可用)</h3>
+  <pre><code># 检查新集群 StorageClass(Prometheus/Alertmanager/Grafana 持久化要用)
+kubectl get sc</code></pre>
+  <pre><code># prom-values-offline.yaml(按需裁剪,未列出的用 chart 默认)
+grafana:
+  adminPassword: "admin123"          # 改掉默认 admin/admin
+  defaultDashboardsEnabled: true
+
+prometheus:
+  prometheusSpec:
+    retention: 7d                     # 与线上策略对齐
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: &lt;新集群的SC名&gt;   # kubectl get sc 查到什么填什么
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: &lt;新集群的SC名&gt;
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi</code></pre>
+
+  <h3>6.3 先演练再正式装</h3>
+  <pre><code># dry-run:本地渲染验证,不落集群(能提前暴露 kubeVersion / 模板错误)
+helm install prometheus ./kube-prometheus-stack-48.2.0.tgz \
+  -n fke-monitor --create-namespace \
+  -f prom-values-offline.yaml --dry-run &gt; dry-run.yaml
+
+# 正式安装(本地 tgz,全程无外网)
+helm install prometheus ./kube-prometheus-stack-48.2.0.tgz \
+  -n fke-monitor --create-namespace \
+  -f prom-values-offline.yaml
+
+helm list -n fke-monitor</code></pre>
+  <div class="tip"><b>镜像已就位就不怕:</b>chart 默认 imagePullPolicy 为 IfNotPresent,ctr 导入后 kubelet 直接本地命中,不会去外网拉镜像。</div>
+</section>
+
+<section id="a7">
+  <h2><span class="no">07</span>验收三关</h2>
+  <table>
+    <tr><th>关</th><th>命令</th><th>预期</th></tr>
+    <tr><td>① Pod 全 Running</td><td><code>kubectl get pods -n fke-monitor -w</code></td><td>operator / grafana / kube-state-metrics 各 1,<code>prometheus-*</code> 与 <code>alertmanager-*</code> StatefulSet 就绪,<code>node-exporter-*</code> <b>每节点 1 个共 6 个</b></td></tr>
+    <tr><td>② UI 打得开</td><td><code>kubectl -n fke-monitor port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090</code><br><code>kubectl -n fke-monitor port-forward svc/prometheus-grafana 3000:80</code></td><td>浏览器 localhost:9090 出 Prometheus UI;localhost:3000 出 Grafana(admin + values 里的密码)</td></tr>
+    <tr><td>③ Targets 全 UP</td><td>UI &rarr; Status &rarr; Targets</td><td>node/etcd/apiserver/kube-state-metrics 等 target 状态全 UP;Grafana 自带 Prometheus 数据源,dashboard 直接有数</td></tr>
+  </table>
+  <div class="tip"><b>对外暴露(可选):</b>参照 <a href="new-k8s.html" style="color:var(--cyan)">new-k8s 集群文档</a> 的 NodePort + NGINX 反代 + basic auth 套路,别裸奔 NodePort。</div>
+</section>
+
+<section id="a8">
+  <h2><span class="no">08</span>维护手册(巡检 / 离线升级 / 卸载 / 报错速查)</h2>
+
+  <h3>8.1 日常巡检</h3>
+  <pre><code>kubectl get pods -n fke-monitor                       # Pod 健康
+kubectl top pods -n fke-monitor                       # 资源
+kubectl get pvc -n fke-monitor                        # 存储绑定
+crictl images | grep -cE 'prometheus|grafana'          # 本机镜像还在
+helm list -n fke-monitor                              # release 状态</code></pre>
+
+  <h3>8.2 离线升级(4 步循环)</h3>
+  <pre><code># ① 开发机:拉新版 chart + 动态提取新镜像并 save
+helm pull prometheus-community/kube-prometheus-stack --version &lt;新版本&gt;
+helm template ... | grep 'image:' | ... &gt; images-new.txt
+docker save -o prom-images-new.tar $(tr '\n' ' ' &lt; images-new.txt)
+# ② scp 分发 + ctr 导入(本文 04/05 章同款 for 循环)
+# ③ master:helm upgrade(本地 tgz)
+helm upgrade prometheus ./kube-prometheus-stack-&lt;新版本&gt;.tgz -n fke-monitor -f prom-values-offline.yaml
+# ④ 回退
+helm rollback prometheus &lt;revision&gt; -n fke-monitor</code></pre>
+
+  <h3>8.3 卸载</h3>
+  <pre><code>helm uninstall prometheus -n fke-monitor
+# PVC 不会随 release 删除,确认不要数据了再手动清:
+kubectl delete pvc --all -n fke-monitor</code></pre>
+
+  <h3>8.4 报错速查</h3>
+  <table>
+    <tr><th>症状</th><th>原因</th><th>解法</th></tr>
+    <tr><td>ImagePullBackOff</td><td>该节点漏导镜像 / 导入时没带 <code>-n k8s.io</code></td><td>补 <code>ctr -n k8s.io images import</code>,用 05 章 for 循环验证计数</td></tr>
+    <tr><td>Pending(PVC 绑不上)</td><td>storageClassName 在新集群不存在</td><td><code>kubectl get sc</code> 核对,改 values 里的 SC 名</td></tr>
+    <tr><td>helm install 直接报 kubeVersion 不兼容</td><td>chart 48.2.0 声明的 K8s 版本上限</td><td>06.1:解包删 Chart.yaml 的 kubeVersion 行再装</td></tr>
+    <tr><td>node-exporter 某台 CrashLoop</td><td>该节点镜像/权限差异</td><td><code>kubectl describe pod</code> 看事件,<code>crictl images</code> 核对该节点</td></tr>
+  </table>
+
+  <div class="rel"><b>&#128279; 相关阅读:</b>
+    <a href="k8s-monitor.html">K8S 监控三件套(Prometheus + AlertManager + Grafana)</a> &middot;
+    <a href="argoworkflows-install.html">Argo Workflows 离线安装(同款流程)</a> &middot;
+    <a href="elk.html">ELK 部署档案(含 new-k8s 离线安装)</a> &middot;
+    <a href="new-k8s.html">new-k8s 集群文档</a> &middot;
+    <a href="index.html">返回首页</a>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>K8S Web &middot; pca 离线安装手册 &middot; 版本锚点:kube-prometheus-stack-48.2.0 &middot; 真实输出回填于 2026-11-23</p>
+</footer>
+</div>
+</body>
+</html>

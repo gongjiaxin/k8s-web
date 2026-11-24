@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S Helm 部署 GitLab · K8S Web</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--muted:#8b949e;--blue:#326ce5;--cyan:#4fd1c5;--green:#48bb78;--orange:#f6ad55;--purple:#b794f4;--code:#161b22;--red:#fc8181}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / Helm 部署 GitLab</span></div></div>
+<header class="doc wrap">
+  <h1>Helm 部署 GitLab<small>官方 gitlab/gitlab Chart · 版本锚定 · 离线集群套路 · 日常运维命令速查(适配 new-k8s 离线环境)</small></h1>
+</header>
+<div class="wrap">
+<nav class="toc"><b>目录</b><ol>
+  <li><a href="#g1">认识与选型:装哪个 GitLab</a></li>
+  <li><a href="#g2">版本锚定与离线准备</a></li>
+  <li><a href="#g3">values 配置全文</a></li>
+  <li><a href="#g4">安装与初始化(root 密码)</a></li>
+  <li><a href="#g5">访问入口与首登加固</a></li>
+  <li><a href="#g6">日常运维命令速查</a></li>
+  <li><a href="#g7">排障速查</a></li>
+</ol></nav>
+
+<section id="g1">
+  <h2><span class="no">G1</span>认识与选型:装哪个 GitLab</h2>
+  <p>K8s 里跑 GitLab 有两条路,先对号入座:</p>
+  <table>
+    <tr><th>方案</th><th>形态</th><th>资源</th><th>适用</th></tr>
+    <tr><td>★ 官方 <code>gitlab/gitlab</code> Chart(本文)</td><td>Omnibus 全家桶:Rails + Gitaly + Registry + 内置 PG/Redis/MinIO,一条 Helm 命令全拉起</td><td>最低 4C8G,推荐 <b>8C16G</b></td><td>要完整 GitLab(代码+MR+CI+镜像仓库)</td></tr>
+    <tr><td>轻量自拼</td><td>Gitea / 仅 gitlab-runner 对接外部 GitLab</td><td>0.5C512M 起</td><td>只要代码托管,或公司已有中心 GitLab</td></tr>
+  </table>
+  <p>官方 Chart 装完会拉起这些组件(<code>kubectl -n gitlab get pods</code> 会看到的):</p>
+  <table>
+    <tr><th>Pod 前缀</th><th>角色</th><th>说明</th></tr>
+    <tr><td><code>migrations</code></td><td>数据库迁移 Job</td><td>每次升级都先跑它,失败则整体卡住</td></tr>
+    <tr><td><code>webservice</code></td><td>Web 主进程(Puma)</td><td>吃内存大户,UI/API 都走它</td></tr>
+    <tr><td><code>sidekiq</code></td><td>后台任务</td><td>邮件/CI 调度/Webhook</td></tr>
+    <tr><td><code>gitaly</code></td><td>Git 数据存储</td><td>★ 仓库数据在这,必须持久化</td></tr>
+    <tr><td><code>gitlab-shell</code></td><td>SSH/git 协议入口</td><td>git@ 克隆走它</td></tr>
+    <tr><td><code>registry</code></td><td>容器镜像仓库</td><td>CI 构建镜像可推这里(也可推 Harbor)</td></tr>
+    <tr><td><code>postgresql / redis / minio</code></td><td>内置依赖</td><td>生产建议外置(见 G3 注释)</td></tr>
+  </table>
+  <div class="warn"><b>⚠️ 资源红线:</b>内存 &lt; 8G 的集群别上全家桶 —— webservice/sidekiq 会反复 OOMKilled,<b>装之前先 <code>kubectl top nodes</code> 确认可用余量</b>;小集群请走轻量自拼方案。</div>
+</section>
+<section id="g2">
+  <h2><span class="no">G2</span>版本锚定与离线准备</h2>
+  <pre><code># 开发机(能上外网):加仓库、锁版本、下 tgz —— ★离线集群别用 helm install 直连远程
+helm repo add gitlab https://charts.gitlab.com/ && helm repo update
+helm search repo gitlab/gitlab --versions | head -6
+# 版本对照(装前查官方 upgrade path):chart 8.x ↔ GitLab 16.x;7.x ↔ 15.x —— 跟存量数据对齐,别追最新
+helm pull gitlab/gitlab --version 8.9.5                 # 得 gitlab-8.9.5.tgz
+
+# 提取镜像清单(★先写好 values 再 template,清单才准)
+helm template gitlab ./gitlab-8.9.5.tgz -n gitlab -f values-gitlab.yaml \
+  | grep -oP 'image:\s*\K\S+' | tr -d '"' | sort -u
+# 全家桶 ≈ 10+ 个镜像(rancher/webservice/sidekiq/gitaly/shell/registry/pg/redis/minio…),总计 ~3GB+
+
+# 离线四连(同 k8s-monitor.html 07 章实测套路):
+docker save -o gitlab-images.tar 镜像1 镜像2 ...        # 开发机打包
+scp gitlab-8.9.5.tgz gitlab-images.tar root@10.18.51.120:/root/k8s-install/pca/
+ctr -n k8s.io images import gitlab-images.tar           # master 导入(多节点记得每台都导或走 DaemonSet)
+helm install gitlab ./gitlab-8.9.5.tgz -n gitlab -f values-gitlab.yaml   # 本地 tgz 安装</code></pre>
+  <div class="tip"><b>💡 为什么 save 包这么大:</b>GitLab Chart 是"全家桶"形态,内置 PostgreSQL/Redis/MinIO 一并打包;<code>kubectl top nodes</code> 先确认每节点余量,内存紧张的节点会被调度器自动避开(配合 resources 设置)。</div>
+</section>
+
+<section id="g3">
+  <h2><span class="no">G3</span>values 配置全文(离线集群精简版)</h2>
+  <pre><code>cat &gt; values-gitlab.yaml &lt;&lt;'EOF'
+global:
+  edition: ce                          # 社区版
+  hosts:
+    domain: fftaicorp.com              # 自动生成 gitlab.fftaicorp.com / registry. 前缀域名
+    https: true
+  ingress:
+    configureCertmanager: false        # ★离线禁 cert-manager 自动签发
+    class: nginx                       # ★复用集群已有 ingress-nginx
+    tls:
+      secretName: gitlab-tls           # 自备证书 secret(见 G4)
+certmanager:
+  install: false
+nginx-ingress:
+  enabled: false                       # 不装 chart 自带 ingress 控制器
+prometheus:
+  install: false                       # 复用 07 章 kube-prometheus-stack
+gitlab-runner:
+  install: false                       # 主体先稳,runner 单独规划
+gitlab:
+  gitaly:
+    persistence:
+      size: 50Gi
+      storageClass: longhorn           # ★Git 仓库数据全在 gitaly
+  toolbox:
+    backups:
+      objectStorage:
+        backend: local                 # 备份先落 PVC(异机取回见 G6)
+postgresql:
+  primary:
+    persistence:
+      size: 20Gi
+      storageClass: longhorn
+redis:
+  master:
+    persistence:
+      size: 10Gi
+      storageClass: longhorn
+minio:
+  persistence:
+    size: 20Gi
+    storageClass: longhorn
+EOF</code></pre>
+  <div class="warn"><b>⚠️ 两个生产提醒:</b>① 内置 PG/Redis/MinIO 只适合中小规模,数据量大或要求独立升级时<b>外置</b>(global.psql / global.redis 指向外部实例),内网已有 <a href="k8s-mysql.html">MySQL</a>/外部 PG 的可以直接复用;② <code>storageClass</code> 按本集群实际填(new-k8s 为 <code>longhorn</code>),填错 PVC 永远 Pending。</div>
+</section>
+
+<section id="g4">
+  <h2><span class="no">G4</span>安装与初始化(root 密码)</h2>
+  <pre><code>kubectl create namespace gitlab
+# 域名证书(参考 k8s-cert.html;泛域名证书一张可覆盖 gitlab./registry./minio. 全套)
+kubectl -n gitlab create secret tls gitlab-tls \
+  --cert=_.fftaicorp.com.pem --key=_.fftaicorp.com.key
+
+helm install gitlab ./gitlab-8.9.5.tgz -n gitlab -f values-gitlab.yaml
+kubectl -n gitlab get pods -w
+# 起来顺序:migrations(Job)→ postgresql/redis/minio → sidekiq → webservice(最慢,数分钟)
+
+# ★初始 root 密码 —— 装完立刻取!(secret 24 小时后自动删除)
+kubectl -n gitlab get secret gitlab-gitlab-initial-root-password \
+  -o jsonpath='{.data.password}' | base64 -d; echo
+
+# 健康检查(webservice 就绪才算好)
+kubectl -n gitlab get ingress
+curl -k https://gitlab.fftaicorp.com/-/health     # 经反代后 GitLab OK</code></pre>
+  <div class="warn"><b>⚠️ 24 小时红线:</b><code>gitlab-gitlab-initial-root-password</code> 这个 secret <b>首次成功登录(或 24h)后自动删除</b> —— 装完第一时间用 root 登录改密,别等第二天。</div>
+</section>
+
+<section id="g5">
+  <h2><span class="no">G5</span>访问入口与首登加固</h2>
+  <p>本环境套路 = <b>外层 NGINX 反代 → ingress-nginx NodePort → GitLab Ingress</b>(同 <a href="new-k8s.html">new-k8s</a>/<a href="harbor.html">Harbor</a> 篇):</p>
+  <pre><code># /etc/nginx/conf.d/gitlab.fftaicorp.com.conf(办公网入口机)
+upstream gitlab_fke { server 10.18.51.120:32588; }     # ingress-nginx 的 NodePort
+server {
+    listen 443 ssl;
+    server_name gitlab.fftaicorp.com;
+    ssl_certificate     /etc/nginx/ssl/_.fftaicorp.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/_.fftaicorp.com.key;
+    client_max_body_size 0;                 # ★大仓库 push 不限
+    location / {
+        proxy_pass http://gitlab_fke;
+        proxy_set_header Host $host;        # ★灵魂行
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 300s;
+    }
+}</code></pre>
+  <ul>
+    <li>浏览器开 <code>https://gitlab.fftaicorp.com</code> → root + 初始密码登录 → <b>立即改密</b>。</li>
+    <li><b>首登必做:关闭公开注册</b> —— Admin Area → Settings → General → Sign-up restrictions → 取消 <code>Sign-up enabled</code>(否则内网任何人可自助注册账号)。</li>
+  </ul>
+</section>
+
+<section id="g6">
+  <h2><span class="no">G6</span>日常运维命令速查</h2>
+  <pre><code># ── 升级(同大版本内;跨大版本查官方 upgrade path 逐级走,先备份!)──
+helm upgrade gitlab ./gitlab-8.9.5.tgz -n gitlab -f values-gitlab.yaml
+kubectl -n gitlab get jobs | grep migration        # 每次升级先跑 migrations Job,成功才继续
+
+# ── 组件状态/日志 ──
+kubectl -n gitlab get pods -o wide
+kubectl -n gitlab logs deploy/gitlab-webservice-default --tail=100
+kubectl -n gitlab exec deploy/gitlab-toolbox -- gitlab-ctl status
+
+# ── 备份(仓库+DB → PVC 内 /var/opt/gitlab/backups)──
+kubectl -n gitlab exec deploy/gitlab-toolbox -- backup-utility
+# 最新备份文件异机取回:
+kubectl -n gitlab cp $(kubectl -n gitlab get pod -l app=toolbox -o name | cut -d/ -f2):/var/opt/gitlab/backups ./gitlab-bak -c toolbox
+# ★secrets 必须单独备(CI 变量/2FA 的解密钥匙,不在 backup-utility 里!)
+kubectl -n gitlab get secret gitlab-gitlab-rails-secret -o yaml &gt; gitlab-rails-secret.yaml
+
+# ── root 密码重置(初始 secret 过期/遗忘)──
+kubectl -n gitlab exec -it deploy/gitlab-toolbox -- gitlab-rake "gitlab:password:reset[root]"
+
+# ── 资源观察(谁在吃内存)──
+kubectl top pods -n gitlab | sort -k3 -h | tail -5</code></pre>
+</section>
+
+<section id="g7">
+  <h2><span class="no">G7</span>排障速查</h2>
+  <table>
+    <tr><th>症状</th><th>真因</th><th>处置</th></tr>
+    <tr><td>webservice 反复 OOMKilled</td><td>节点内存不足</td><td><code>kubectl top nodes</code> 看余量;调 resources 或加节点</td></tr>
+    <tr><td>访问 502</td><td>webservice/Puma 未就绪</td><td>看 Pod 日志等就绪;持续 502 查内置 PG 是否 Running</td></tr>
+    <tr><td>migrations Job 失败</td><td>内置 PG 未起/上次升级中断</td><td><code>kubectl -n gitlab logs job/…-migrations-1</code>;删 Job 重跑</td></tr>
+    <tr><td>PVC 一直 Pending</td><td>storageClass 名拼错</td><td><code>kubectl get sc</code> 核对(new-k8s = longhorn)</td></tr>
+    <tr><td>ImagePullBackOff</td><td>离线漏导镜像</td><td>按 Pod 事件里镜像名 <code>ctr -n k8s.io images import</code> 补导</td></tr>
+    <tr><td>登录报 422/CSRF</td><td>访问域名与 global.hosts.domain 不一致</td><td>核对 values 域名与实际访问入口一致</td></tr>
+  </table>
+</section>
+</div>
+<footer>K8S Web · GitLab on Kubernetes · 配套:<a href="k8s-monitor.html">监控三件套</a> · <a href="harbor.html">Harbor</a> · <a href="k8s-jenkins.html">Jenkins</a></footer>
+</body>
+</html>

@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · Argo Workflows 离线安装与维护 · K8S Web</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#161b22; --red:#fc8181;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;
+    overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+  .rel{margin:26px 0 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:14px}
+  .rel b{color:var(--cyan)}
+  .rel a{color:var(--txt);text-decoration:none;border-bottom:1px dashed var(--line)}
+  .rel a:hover{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <a class="home" href="index.html">← 返回首页</a>
+    <span class="crumb">K8S Web / 文档 / Argo Workflows 离线安装与维护</span>
+  </div>
+</div>
+<div class="wrap">
+<header class="doc">
+  <h1>📦 Argo Workflows 离线安装与维护手册(new-k8s)
+    <small>单点(standalone)部署 · 版本对齐线上 v3.7.9(chart 0.45.28 + images.tag 钉死)· 开发机下载 → ctr 导入 → Helm 本地包安装 —— ✅ 已实操上线(2026-11):两组件 Running,真实输出已回填</small>
+  </h1>
+</header>
+
+<nav class="toc">
+  <b>📑 目录</b>
+  <ol>
+    <li><a href="#a1">先对比:Argo Workflows 和 ArgoCD / Argo 家族的区别</a></li>
+    <li><a href="#a2">线上架构参照(fke)与 new-k8s 单点安装定位</a></li>
+    <li><a href="#a3">开发机下载清单(★ Chart + 镜像 + CLI)</a></li>
+    <li><a href="#a4">传输与导入(scp + ctr images import)</a></li>
+    <li><a href="#a5">Helm 单点安装(values 全文 + 两个必踩坑)</a></li>
+    <li><a href="#a6">验收三关(Pod / CLI / 离线 hello-world)</a></li>
+    <li><a href="#a7">维护手册(巡检 / 升级 / 卸载 / 报错速查)</a></li>
+    <li><a href="#a8">对外访问:NodePort + nginx 域名反代(80→301→443)</a></li>
+  </ol>
+</nav>
+
+<section id="a1">
+  <h2><span class="no">01</span>先对比:Argo Workflows 和 ArgoCD / Argo 家族的区别</h2>
+  <p>动手装之前先把"Argo"这个词理清楚——它是一整个家族,平时说的"装 Argo"十有八九指的是装错了东西:</p>
+  <table>
+    <tr><th>项目</th><th>一句话定位</th><th>操作对象</th><th>典型使用者</th></tr>
+    <tr><td><b>Argo CD</b></td><td>GitOps 持续<b>部署</b>:把 Git 仓库里的 YAML 同步到集群</td><td>应用(Application / 部署清单)</td><td>发布 / 运维</td></tr>
+    <tr><td><b>Argo Workflows</b> <span style="color:var(--orange)">← 本页</span></td><td>K8S 原生工作流引擎:把任务编排成一串容器<b>跑批</b></td><td>Workflow / CronWorkflow</td><td>数据处理 / 定时任务</td></tr>
+    <tr><td>Argo Rollouts</td><td>渐进式发布(金丝雀 / 蓝绿)</td><td>Rollout 资源</td><td>发布策略</td></tr>
+    <tr><td>Argo Events</td><td>事件驱动(触发 Workflows 等)</td><td>EventSource / Sensor</td><td>自动化联动</td></tr>
+  </table>
+  <div class="tip"><b>一句话记忆:</b>ArgoCD 管"代码 → 集群"的<b>部署</b>,Argo Workflows 管"在集群里<b>跑任务</b>"。线上 fke 集群两套都装了、互不依赖;new-k8s 单点这次只装 Workflows。</div>
+  <p>更完整的对照(含两套系统在 fke 上的部署形态、端口、CRD 对比)见 <a href="argoworkflows.html" style="color:var(--cyan)">线上 Argo Workflows 部署档案 §01</a> 与 <a href="argocd.html" style="color:var(--cyan)">ArgoCD 档案</a>。</p>
+</section>
+
+<section id="a2">
+  <h2><span class="no">02</span>线上架构参照(fke)与 new-k8s 单点安装定位</h2>
+  <p>new-k8s 这次安装<b>对齐线上 fke 的版本(v3.7.9)和组件形态</b>,但部署方式完全不同:</p>
+  <table>
+    <tr><th>维度</th><th>线上 fke(参照)</th><th>new-k8s(本次目标)</th></tr>
+    <tr><td>版本</td><td>v3.7.9(workflow-controller + argo-server)</td><td><b>同 v3.7.9</b>,与线上保持一致,便于经验迁移</td></tr>
+    <tr><td>安装方式</td><td>Helm 在线装,release 名 <code>fke</code>,资源前缀 <code>fke-argo-workflows-</code></td><td>开发机下好 Chart 包 + 镜像 → <code>ctr</code> 导入 → <b>Helm 本地 tgz 离线装</b>,release 名 <code>argo</code></td></tr>
+    <tr><td>拓扑</td><td>controller / server 各 1 副本(实际就是单点形态)</td><td>单点:默认即非 HA、无外部 DB、无 MinIO,<b>chart 默认值就是单点</b>,无需任何额外配置</td></tr>
+    <tr><td>命名空间</td><td><code>argo</code>(工作流也在 argo ns 跑)</td><td>同样装到 <code>argo</code> ns,提交流程与线上一致</td></tr>
+    <tr><td>artifacts</td><td>未验证(待查 controller configmap)</td><td>首装<b>不配置</b>(chart 不依赖 MinIO/DB);后续要产物存储再加</td></tr>
+    <tr><td>网络</td><td>内网 registry <code>docker.fftaicorp.com/kube-public/</code></td><td>完全离线:镜像以 <code>ctr images import</code> 落到节点本机</td></tr>
+  </table>
+  <div class="tip"><b>为什么"单点"反而省事:</b>Argo Workflows 官方 chart 默认安装的就是非 HA 版(controller、server 各 1 副本,SQLite 级元数据、不接外部数据库)——线上 fke 的形态恰好就是它。所以 new-k8s 不需要写任何 HA / DB values,<b>默认值即目标形态</b>。</div>
+</section>
+
+<section id="a3">
+  <h2><span class="no">03</span>开发机下载清单(★ Chart + 镜像 + CLI)</h2>
+  <div class="warn"><b>先说结论 —— 版本怎么选(已核实,别下错):</b>
+    官方 chart <b>从来没有打包过 v3.7.5~v3.7.9</b>:3.7 线最后一个 chart 是 <code>argo-workflows-0.45.28</code>(内置 appVersion <code>v3.7.4</code>),之后直接跳到 1.0.0(v4.0.2)。所以<b>不要</b> <code>helm pull</code> 最新版(那是给 v4 + 新增 crdinstaller 镜像用的)。正确做法:<b>chart 用 0.45.28,镜像钉死 v3.7.9</b>,通过 <code>images.tag</code> 一个参数全局生效。</div>
+  <table>
+    <tr><th>#</th><th>文件</th><th>来源</th><th>用途 / 说明</th></tr>
+    <tr><td>1</td><td><code>argo-workflows-0.45.28.tgz</code></td><td><code>helm pull argo/argo-workflows --version 0.45.28</code></td><td>Helm Chart 本地包,含 CRD 模板,<b>必装</b></td></tr>
+    <tr><td>2</td><td><code>quay.io/argoproj/workflow-controller:v3.7.9</code></td><td>quay.io/argoproj</td><td>workflow-controller 镜像;<b>emissary executor 复用同一镜像</b>(不用单独下 argoexec),<b>必装</b></td></tr>
+    <tr><td>3</td><td><code>quay.io/argoproj/argocli:v3.7.9</code></td><td>quay.io/argoproj</td><td>argo-server(UI/API)镜像,<b>必装</b></td></tr>
+    <tr><td>4</td><td><code>argo-linux-amd64.gz</code>(v3.7.9)</td><td>GitHub Releases</td><td>argo CLI,提交/查询工作流用,建议装</td></tr>
+    <tr><td>5</td><td><code>busybox:1.36</code></td><td>docker hub</td><td>验收用测试镜像——离线环境跑不了官方示例的 <code>whalesay</code>(要外网),用 busybox echo 代替,建议带上</td></tr>
+    <tr><td>6</td><td>MinIO + mc(可选)</td><td>quay.io / docker hub</td><td>仅当后续要启用 artifacts(产物存储)才需要,<b>首装不装</b></td></tr>
+  </table>
+  <p>开发机上一次性执行(有外网的机器):</p>
+  <pre><code>mkdir -p argo-offline && cd argo-offline
+
+# ① Chart 本地包(对齐线上版本线的最后一个 chart)
+helm repo add argo https://argoproj.github.io/argo-helm
+helm pull argo/argo-workflows --version 0.45.28      # → argo-workflows-0.45.28.tgz
+
+# ② 两个运行镜像(controller 兼任 executor)
+docker pull quay.io/argoproj/workflow-controller:v3.7.9
+docker pull quay.io/argoproj/argocli:v3.7.9
+docker pull busybox:1.36                             # 验收测试用
+
+# ③ 导出镜像 tar
+docker save quay.io/argoproj/workflow-controller:v3.7.9 -o wf-controller-v3.7.9.tar
+docker save quay.io/argoproj/argocli:v3.7.9          -o argocli-v3.7.9.tar
+docker save busybox:1.36                             -o busybox-1.36.tar
+
+# ④ argo CLI(与线上同版本)
+curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.7.9/argo-linux-amd64.gz</code></pre>
+  <div class="tip"><b>✅ 开发机实测记录(2026-11,目录 <code>~/k8s-install/argocdwork</code>,<code>du -sh *</code> 原始输出):</b>
+    <table>
+      <tr><th>文件</th><th>实测大小</th><th>核对结论</th></tr>
+      <tr><td><code>wf-controller-v3.7.9.tar</code></td><td>44M</td><td>正常。workflow-controller 是极简镜像(裸二进制,无发行版底座),本来就小,不是下错了</td></tr>
+      <tr><td><code>argocli-v3.7.9.tar</code></td><td>69M</td><td>正常(server 镜像内含 argo CLI 二进制)</td></tr>
+      <tr><td><code>argo-linux-amd64.gz</code></td><td>68M</td><td>正常(压缩包,解压后二进制约 150M+,装到 <code>/usr/local/bin</code> 前留意磁盘空间)</td></tr>
+      <tr><td><code>argo-workflows-0.45.28.tgz</code></td><td>36K</td><td>正常(chart 本地包,纯模板)</td></tr>
+      <tr><td><code>busybox-1.36.tar</code></td><td>2.2M</td><td>正常(验收测试镜像)</td></tr>
+    </table>
+    5 件全部到位,可进入传输阶段(§04)。</div>
+</section>
+
+<section id="a4">
+  <h2><span class="no">04</span>传输与导入(scp + ctr images import)</h2>
+  <p>把 4 个文件传到 new-k8s 节点,再用 containerd 导入(<code>-n k8s.io</code> 命名空间必须带上,k8s 只认这个空间里的镜像):</p>
+  <pre><code># 开发机 → new-k8s 节点(单点就传一台;多节点要么每台导,要么推公司 harbor)
+scp wf-controller-v3.7.9.tar argocli-v3.7.9.tar busybox-1.36.tar \
+    argo-workflows-0.45.28.tgz argo-linux-amd64.gz  用户@new-k8s节点:/opt/argo-install/
+
+# 登录 new-k8s 节点,导入镜像(每个 tar 一次)
+cd /opt/argo-install
+sudo ctr -n k8s.io images import wf-controller-v3.7.9.tar
+sudo ctr -n k8s.io images import argocli-v3.7.9.tar
+sudo ctr -n k8s.io images import busybox-1.36.tar
+
+# 验证导入结果(确认 quay.io/argoproj/... 两个镜像在列)
+sudo ctr -n k8s.io images list | grep -E 'argoproj|busybox'
+
+# argo CLI 解压安装到 /usr/local/bin
+sudo sh -c 'gunzip -c argo-linux-amd64.gz > /usr/local/bin/argo && chmod +x /usr/local/bin/argo'
+argo version   # 应显示 argo v3.7.9</code></pre>
+  <div class="tip"><b>✅ CLI 实测(new-k8s-fke-m1,2026-11):</b><code>argo version</code> 实际输出 <code>argo: v3.7.9 / GitTag: v3.7.9 / BuildDate: 2026-01-28T14:53:27Z / Platform: linux/amd64</code> —— 与线上 fke 的 v3.7.9 同一构建,<b>版本对齐目标达成</b>。CLI 目前只装在 fke-m1,其余节点如需就地操作重跑同一条命令即可。</div>
+  <div class="tip"><b>镜像名不用改:</b>导入后镜像名保持 <code>quay.io/argoproj/...</code> 原样,配合 values 里 <code>pullPolicy: IfNotPresent</code>(见 §05),kubelet 发现本机已有就直接用,不会去外网拉。</div>
+  <div class="warn"><b>✅ 实测记录:5 节点批量分发与导入(2026-11)——含一个已抓到的坑</b>
+    <p>new-k8s 实际拓扑:5 节点(10.18.51.121~125),文件统一放 <code>/tmp/argoworkflows/</code>。批量姿势(scp 循环分发 + ssh 循环导入):</p>
+    <pre><code>for i in `seq 121 125`; do echo $i; scp * root@10.18.51.$i:/tmp/argoworkflows/; done
+
+for i in `seq 121 125`; do echo $i; ssh root@10.18.51.$i "cd /tmp/argoworkflows/ &amp;&amp; ctr -n k8s.io images import wf-controller-v3.7.9.tar"; done
+for i in `seq 121 125`; do echo $i; ssh root@10.18.51.$i "cd /tmp/argoworkflows/ &amp;&amp; ctr -n k8s.io images import argocli-v3.7.9.tar"; done
+for i in `seq 121 125`; do echo $i; ssh root@10.18.51.$i "cd /tmp/argoworkflows/ &amp;&amp; ctr -n k8s.io images import busybox-1.36.tar"; done</code></pre>
+    <p>导入成功后 <code>ctr -n k8s.io images list</code> 实测:workflow-controller:v3.7.9 <b>43.4 MiB</b>、argocli:v3.7.9 <b>68.8 MiB</b>、busybox:1.36 <b>2.1 MiB</b>(与开发机 docker save 的 tar 大小对得上)。</p>
+    <p><b>⚠️ 已抓到的坑:</b>循环跑完后在 <code>new-k8s-fke-m1</code> 手动复核,发现 <code>argocli:v3.7.9</code> <b>缺失</b>(workflow-controller、busybox 都在)——history 里第 1991 条循环用了中文弯引号实际没生效,靠 1992 重跑才救回来。教训:<b>循环 import ≠ 每台都成功,必须逐台复核</b>。缺哪台补哪台(文件在 <code>/tmp/argoworkflows/</code> 就地补导):<code>ctr -n k8s.io images import /tmp/argoworkflows/argocli-v3.7.9.tar</code></p>
+    <p><b>逐台复核(补导后实测 2026-11):</b>121~125 五台全部输出 <b>4</b> = 3 个目标镜像 + 1 个节点预存的 <code>docker.1ms.run/library/busybox:1.36.1</code>(grep 子串误命中:<code>busybox:1.36.1</code> 包含 <code>busybox:1.36</code> 字样)。五台一致即全就绪 ✅。只数目标三件的精确版(应得 3):</p>
+    <pre><code>for i in `seq 121 125`; do echo "== 10.18.51.$i =="; ssh root@10.18.51.$i "ctr -n k8s.io images list | grep -E 'argoproj/(argocli|workflow-controller):v3.7.9|busybox:1.36' | wc -l"; done
+
+# 精确版:锚定完整镜像名,排除 1ms.run 预存 tag 的干扰
+ctr -n k8s.io images list | grep -cE 'quay\.io/argoproj/(argocli|workflow-controller):v3\.7\.9|docker\.io/library/busybox:1\.36 '</code></pre>
+    <p>顺带观察:fke-m1 上还留有历史镜像 <code>quay.io/argoproj/argocd:v3.6.1</code>(218 MiB,与本次无关)和加速站拉的 <code>docker.1ms.run/library/busybox:1.36.1</code>(与导入的 <code>docker.io/library/busybox:1.36</code> 同 sha256,同一镜像两个 tag),互不冲突。<b>状态:✅ 5 节点镜像全部就绪(2026-11 实测),fke-m1 补导完成。</b></p>
+  </div>
+</section>
+
+<section id="a5">
+  <h2><span class="no">05</span>Helm 单点安装(values 全文 + 两个必踩坑)</h2>
+  <h3>① values-offline.yaml(单点最小配置,全文)</h3>
+  <pre><code># ===== Argo Workflows 离线单点安装 values(new-k8s)=====
+# 单点 = chart 默认形态:非 HA、无外部 DB、无 MinIO,以下只写必须覆盖的四处
+images:
+  tag: v3.7.9               # ★坑1:不写则取 chart 内置 appVersion v3.7.4!必须钉死 v3.7.9 对齐线上
+  pullPolicy: IfNotPresent  # ★坑2:chart 默认 Always,离线环境会去 quay.io 拉镜像 → ImagePullBackOff 卡死
+
+# 资源名固定为 argo-*(不加则是 argo-argo-workflows-*,又臭又长)
+fullnameOverride: argo
+
+# ★坑3:UI 认证模式(chart 与官方清单的隐蔽差异)。官方 quickstart 显式带 --auth-mode=server,
+# helm chart 默认不传 → argo-server 落到上游默认 client 模式 → 浏览器没 token,
+# UI 调接口必报 code 16 "token not valid"。改 server 模式后浏览器免 token 直接用;
+# 代价 = "能打开页面 = 全权操作",网关 nginx 必须加 basic auth!
+server:
+  authModes:
+    - server
+  # ★坑4:对外 NodePort 必须写进 values!kubectl patch 改的 NodePort 是带外改动,
+  # helm upgrade 会按 chart 默认(ClusterIP、无 nodePort)把它冲掉 → 网关 nginx 直接 502(2026-11 实测)
+  serviceType: NodePort
+  serviceNodePort: 30274
+
+# 以下全部走默认,即单点目标形态:
+#   crds.install: true        → 首次 install 自动装 workflows.argoproj.io 全套 CRD
+#   controller.replicas: 1 / server.replicas: 1 → 各 1 副本
+#   不配 persistence/postgres → 不需要数据库
+#   不配 artifactRepository   → 暂不启用 artifacts(后续要存储再加,可选 MinIO)</code></pre>
+  <h3>② 安装命令</h3>
+  <pre><code># 建 ns(chart README 也建议部署在 argo ns,工作流默认也在这个 ns 跑)
+sudo kubectl create namespace argo
+
+# 用本地 tgz 安装,release 名 argo
+sudo helm install argo ./argo-workflows-0.45.28.tgz -n argo -f values-offline.yaml
+
+# 观察启动
+sudo kubectl get pods -n argo -w</code></pre>
+  <div class="warn"><b>两个必踩坑(都是查官方 values.yaml 原文核实的):</b>
+    ① <code>images.tag</code> 默认空 → 回落 chart 内置的 <code>v3.7.4</code>,装出来版本就和线上 3.7.9 对不上;
+    ② <code>images.pullPolicy</code> 默认 <code>Always</code> → 离线集群每次调度都尝试连 quay.io,Pod 永远 <code>ImagePullBackOff</code>。这两个不写,装完必翻车。</div>
+  <div class="warn"><b>实测坑③(2026-11,fke-m1 真实发生):终端粘贴多行 heredoc 被截断。</b>
+    整块粘贴 <code>cat &gt; xx.yaml &lt;&lt;'EOF' ... EOF</code> 时命令与回显交错,heredoc 没闭合 → <code>values-offline.yaml</code> 根本没生成,后续 <code>helm install</code> 也没执行,而 <code>kubectl create ns</code> 却成功了——结果就是 ns 空空如也不知道为啥。防坑三招:<b>①</b> 多行配置用 printf 单行版替代 heredoc(<code>printf 'images:\n  tag: v3.7.9\n  pullPolicy: IfNotPresent\nfullnameOverride: argo\n' &gt; values-offline.yaml</code>);<b>②</b> 写完必 <code>cat</code> 验文件;<b>③</b> 粘贴长命令块时一条一条来。另注:new-k8s 的 root 直接 <code>kubectl/helm</code> 即可(fke 的 kubeconfig 是 root-only 必须 sudo,环境差异勿混淆)。</div>
+  <div class="tip"><b>✅ 实测记录(2026-11,fke-m1 操作;new-k8s 的 root 直接跑 kubectl/helm,无需 sudo):</b><br>
+    <code>kubectl create namespace argo</code> → Active;<code>helm install argo ./argo-workflows-0.45.28.tgz -n argo -f values-offline.yaml</code> → deployed;两组件 <b>1/1 Running</b>(同落 <code>new-k8s-fke-n3</code> 节点,五节点都导了镜像所以调度无忧);<code>kubectl -n argo get svc</code> 只有 <code>argo-server</code>(ClusterIP 10.107.6.73,2746/TCP)。</div>
+  <p>装完的资源名(配了 <code>fullnameOverride: argo</code>):<code>argo-workflow-controller</code> + <code>argo-server</code> 各 1 副本,Service 为 <code>argo-server</code>(:2746,UI/API)。注意:chart 默认<b>不创建</b> controller 的 metrics Service(<code>metricsConfig.enabled=false</code>),线上 fke 若有 metrics svc 属于额外开启,两边对照时别误判。UI 临时访问:<code>kubectl -n argo port-forward svc/argo-server 2746:2746</code>,对外域名反代见 <a href="#a8" style="color:var(--cyan)">§08</a>。</p>
+</section>
+
+<section id="a6">
+  <h2><span class="no">06</span>验收三关(Pod / CLI / 离线 hello-world)</h2>
+  <h3>第一关:两个 Pod 都 Running</h3>
+  <pre><code>sudo kubectl get pods -n argo -o wide
+# 预期:argo-workflow-controller 1/1 Running
+#       argo-server               1/1 Running</code></pre>
+  <h3>第二关:CLI 能连上 server</h3>
+  <pre><code>argo version
+argo list -n argo          # 空列表正常,报 RBAC 错则检查 kubeconfig / auth mode</code></pre>
+  <h3>第三关:跑通离线 hello-world(别用官方 whalesay 示例!)</h3>
+  <pre><code>cat &gt; hello-world.yaml &lt;&lt;'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: hello-world-
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      container:
+        image: busybox:1.36        # 离线已导入的镜像;官方示例的 whalesay 需要外网,离线跑不了
+        command: [echo]
+        args: ["hello argo workflows"]
+EOF
+
+argo submit -n argo hello-world.yaml --watch
+kubectl get wf -n argo                  # 预期 Completed
+argo logs @latest -n argo               # 或 kubectl logs -n argo pod/hello-world-xxxxx -c main,看 echo 输出</code></pre>
+  <div class="tip"><b>工作流提交到 argo ns:</b>与线上 fke 的用法一致;如果想提交到其他 ns,需要在 values 里给 <code>controller.workflowNamespaces</code> 加白名单并为该 ns 配 workflow 专用 ServiceAccount,单点学习阶段没必要。</div>
+  <h3>进阶:仿线上 collecte-batch 的多步流水线(单点复刻版)</h3>
+  <p>线上真实业务的运转方式:<b>外部系统</b>(Jenkins/GitLab/数据平台)提交带批次参数的 Workflow → controller 把每个 step 拆成独立 Pod 调度 → 步骤间靠 artifact 仓库传文件 / 参数传小数据 → 完成后归档 + TTL 清理(无 cronwf,不是定时驱动)。下面用<b>参数传递</b>串一条五步流水线(collect → convert → annotate×3 并行 → qc → downstream),复刻线上形态:</p>
+  <pre><code>cat &gt; mini-pipeline.yaml &lt;&lt;'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: mini-collecte-
+spec:
+  entrypoint: pipeline
+  arguments:
+    parameters:
+    - name: batch-id
+      value: batch-001
+  templates:
+  - name: pipeline
+    steps:
+    - - name: collect
+        template: collect
+    - - name: convert
+        template: convert
+        arguments:
+          parameters:
+          - name: raw
+            value: "{{steps.collect.outputs.parameters.raw-count}}"
+    - - name: annotate
+        template: annotate
+        withSequence:
+          count: "3"
+        arguments:
+          parameters:
+          - name: valid
+            value: "{{steps.convert.outputs.parameters.valid-count}}"
+    - - name: qc
+        template: qc
+        arguments:
+          parameters:
+          - name: annotated
+            value: "{{steps.convert.outputs.parameters.valid-count}}"
+    - - name: downstream
+        template: downstream
+        arguments:
+          parameters:
+          - name: passed
+            value: "{{steps.qc.outputs.parameters.pass-count}}"
+  - name: collect
+    container:
+      image: busybox:1.36
+      command: [sh, -c]
+      args: ["echo [collect] batch={{workflow.parameters.batch-id}} fetched 100; echo 100 &gt; /tmp/out"]
+    outputs:
+      parameters:
+      - name: raw-count
+        valueFrom:
+          path: /tmp/out
+  - name: convert
+    inputs:
+      parameters:
+      - name: raw
+    container:
+      image: busybox:1.36
+      command: [sh, -c]
+      args: ["echo [convert] got {{inputs.parameters.raw}} raw, 95 valid; echo 95 &gt; /tmp/out"]
+    outputs:
+      parameters:
+      - name: valid-count
+        valueFrom:
+          path: /tmp/out
+  - name: annotate
+    inputs:
+      parameters:
+      - name: valid
+    container:
+      image: busybox:1.36
+      command: [sh, -c]
+      args: ["echo [annotate] worker on {{inputs.parameters.valid}} records, done"]
+  - name: qc
+    inputs:
+      parameters:
+      - name: annotated
+    container:
+      image: busybox:1.36
+      command: [sh, -c]
+      args: ["echo [qc] reviewed, 93 pass; echo 93 &gt; /tmp/out"]
+    outputs:
+      parameters:
+      - name: pass-count
+        valueFrom:
+          path: /tmp/out
+  - name: downstream
+    inputs:
+      parameters:
+      - name: passed
+    container:
+      image: busybox:1.36
+      command: [sh, -c]
+      args: ["echo [downstream] stored {{inputs.parameters.passed}} records, batch {{workflow.parameters.batch-id}} done"]
+EOF
+argo submit -n argo mini-pipeline.yaml --watch     # 预期 7 个节点全绿,annotate×3 并行
+argo logs @latest -n argo | grep '^\['             # 看数据接力:100 → 95 → 93</code></pre>
+  <div class="tip"><b>与线上差距对照:</b>① 线上步骤间传<b>文件</b>靠 artifact 仓库(S3/MinIO + persistence),单点要传真实文件需先架 MinIO 或用 <code>volumeClaimTemplates</code> 挂 PVC(workflow 级 emptyDir 每个 Pod 独立,不共享!);② 线上用 WorkflowTemplate 沉淀流水线定义、提交时只传参数(13node/12node 就是同模板不同参数),单点学习阶段内联即可;③ <b>坑(2026-11-19 首跑实测):</b>executor 的 init 容器用的是 <b>argoexec</b> 镜像(chart 默认 <code>quay.io/argoproj/argoexec:v3.7.9</code>),与 argocli 是两个东西——离线清单漏了它,首个 Workflow 必卡 <code>Init:ErrImagePull</code>;修复见 §07 报错表新增行。</div>
+  <div class="warn"><b>验收进度(2026-11):</b>关一 ✅ 两组件 1/1 Running(§05 实测);关二、关三(CLI 连通 + 离线 hello-world)待执行——hello-world 的测试 Pod 会随机调度到任意节点,五台镜像都已导入,不用怕。</div>
+</section>
+
+<section id="a7">
+  <h2><span class="no">07</span>维护手册(巡检 / 升级 / 卸载 / 报错速查)</h2>
+  <h3>日常巡检(与线上 fke 同一套,可直接照 <a href="argoworkflows.html#al" style="color:var(--cyan)">线上档案 §05</a> 执行,ns 都是 argo)</h3>
+  <ul>
+    <li><code>sudo helm list -n argo</code> / <code>sudo helm get values argo -n argo</code> — 确认 release 与 values</li>
+    <li><code>sudo kubectl get deploy,pods -n argo</code> — 两组件副本状态</li>
+    <li><code>argo list -n argo</code> / <code>argo get &lt;wf名&gt; -n argo</code> — 工作流状态</li>
+    <li><code>sudo kubectl get wf,cronwf -n argo</code> — CR 级排查(CronWorkflow 提交批任务时)</li>
+    <li>摸底"这套 Argo 在整个集群里跑什么":<code>kubectl get wf,cronwf -A</code>(哪些 ns 在用、跑过什么)、<code>kubectl get wftmpl -A</code> + <code>kubectl get cwftmpl</code>(模板库 = 任务类型清单,模板名通常自解释如 backup-xxx/build-xxx);深挖单个:<code>argo describe/logs &lt;wf名&gt; -n &lt;ns&gt;</code> 或 <code>kubectl get wf &lt;wf名&gt; -n &lt;ns&gt; -o yaml</code></li>
+  </ul>
+  <h3>升级流程(如后续要动版本)</h3>
+  <ol>
+    <li>开发机下载新版 chart(3.7 线内选 0.45.x 对应版本;跨到 v4 是大版本迁移,<b>不要</b>随手升)与新镜像 tar;</li>
+    <li>节点 <code>ctr -n k8s.io images import</code> 导入新镜像;</li>
+    <li>改 <code>values-offline.yaml</code> 的 <code>images.tag</code> → <code>sudo helm upgrade argo ./argo-workflows-0.4x.y.tgz -n argo -f values-offline.yaml</code>;</li>
+    <li>观察 Pod 滚动重启,跑一遍 §06 验收。</li>
+  </ol>
+  <h3>卸载(测坏了重来)</h3>
+  <pre><code>sudo helm uninstall argo -n argo
+# CRD 默认保留(crds.keep=true);要彻底清场再手动:
+sudo kubectl delete crd workflows.argoproj.io cronworkflows.argoproj.io ...   # 按实际列表
+sudo kubectl delete ns argo</code></pre>
+  <h3>报错速查</h3>
+  <table>
+    <tr><th>现象</th><th>原因</th><th>处理</th></tr>
+    <tr><td>Workflow Pod 卡 <code>Init:ErrImagePull</code></td><td>执行器镜像 <code>argoexec</code> 不在节点上——离线导入清单只有 controller + argocli,而 chart executor 默认 <code>quay.io/argoproj/argoexec:v3.7.9</code>,首个 Workflow 跑到一半才暴露(2026-11-19 mini-pipeline 首跑实测)</td><td>确认 init 要的名字:<code>kubectl get pod &lt;pod&gt; -n argo -o jsonpath='{range .spec.initContainers[*]}{.image}{\"\\n\"}{end}'</code> → 开发机下载 argoexec(出不了 quay 可用 docker.1ms.run 中转后 <code>docker tag</code> 改回原名)→ 五台节点 <code>sudo ctr -n k8s.io images import</code> → 删掉卡住的 wf 重提</td></tr>
+    <tr><td>Pod <code>ImagePullBackOff</code></td><td>pullPolicy 还是默认 <code>Always</code>,在连 quay.io</td><td>values 改 <code>IfNotPresent</code> 后 <code>helm upgrade</code>;并 <code>ctr -n k8s.io images list</code> 确认镜像真的导进去了</td></tr>
+    <tr><td>装出来版本是 <code>v3.7.4</code></td><td>没写 <code>images.tag</code>,回落 chart 内置 appVersion</td><td><code>images.tag: v3.7.9</code> 钉死后 upgrade</td></tr>
+    <tr><td>UI 报 <code>{"code":16,"message":"token not valid"}</code></td><td>chart 默认不传 <code>--auth-mode</code>,上游默认 <code>client</code> 模式,浏览器没 token(官方清单默认 server 模式所以没这问题)</td><td>values 加 <code>server.authModes: [server]</code> 后 <code>helm upgrade</code>,浏览器强刷;server 模式=免登录全权限,网关 nginx 务必开 basic auth</td></tr>
+    <tr><td>helm upgrade 后旧 Pod 显示 <code>Terminating → Error</code></td><td>滚动更新正常收尾:新 Pod Ready 后旧 Pod 收 SIGTERM 退出,非零码退出被标 Error,随即对象删除</td><td>不是故障;确认新 ReplicaSet 的 Pod <code>1/1 Running</code> 即可,几秒后旧 Pod 自动消失</td></tr>
+    <tr><td>upgrade 后网关 <code>502 Bad Gateway</code>,域名打不开</td><td>helm upgrade 按 chart 默认把 kubectl patch 的 NodePort 冲回 ClusterIP,30274 没了</td><td><code>kubectl -n argo get svc argo-server</code> 确认;values 声明 <code>serviceType/serviceNodePort</code> 后再 upgrade(详见 §08 告警框)</td></tr>
+    <tr><td>提交的 Workflow 一直 <code>Pending</code></td><td>节点资源不足 / selector 不匹配</td><td><code>describe pod</code> 看事件;单点节点注意预留资源</td></tr>
+    <tr><td>Workflow 卡 <code>Running</code> 不结束</td><td>经典坑:容器主进程退了但 <code>wait</code> 边车(或被注入的 sidecar)不退出</td><td>确认 workflow 是否被注入额外 sidecar,必要时加 <code>sidecar.istio.io/inject: "false"</code> 类注解后验证</td></tr>
+    <tr><td>UI 打不开(localhost:8080)</td><td>连错端口:<code>:8080</code> 是 controller 的 metrics,不是 API</td><td>UI/API 走 <code>argo-server:2746</code>,见 <a href="argoworkflows.html" style="color:var(--cyan)">线上档案 §03 端口陷阱</a></td></tr>
+  </table>
+</section>
+
+<section id="a8">
+  <h2><span class="no">08</span>对外访问:NodePort + nginx 域名反代(80→301→443)</h2>
+  <p>照 new-k8s Longhorn 的老套路:svc patch 成<b>命名 NodePort</b> → 网关 nginx(new-k8s-nginx-1)80 转 301、443 反代五节点。目标域名:<code>new-argoworkflows.fftaicorp.com</code>(网关实机证书为 <code>_.fftaicorp.com</code> 泛域名,域名匹配直接绿锁)</p>
+  <h3>① argo-server svc 开 NodePort(命名端口 30274)</h3>
+  <pre><code>kubectl patch svc argo-server -n argo \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"web","port":2746,"targetPort":2746,"nodePort":30274,"protocol":"TCP"}]}}'
+
+kubectl get svc argo-server -n argo    # 2746:30274/TCP 即成功
+curl -I http://10.18.51.121:30274/     # 任一节点返回 HTTP 200/302 即通</code></pre>
+  <div class="warn"><b>⚠️ 实测坑(2026-11):NodePort 千万别只靠 kubectl patch!</b>patch 是带外改动,下一次 <code>helm upgrade</code> 会按 chart 默认把它冲回 ClusterIP(30274 消失),网关立刻 502、域名打不开。正确姿势:values 里声明 <code>server.serviceType: NodePort</code> + <code>server.serviceNodePort: 30274</code>,让 helm 自己管。排查口诀:<b>502 先看 <code>kubectl -n argo get svc argo-server</code> 里 30274 还在不在。</b></div>
+  <div class="tip"><b>✅ 实测(2026-11):</b>patch 一次成功,<code>2746:30274/TCP</code>;首次 curl 偶发 <code>connection refused</code>,1 秒后重试即 200——patch 后 kube-proxy 的 iptables 规则同步有秒级延迟,不是故障。HTTP 200 直出也顺带证实了 <code>--secure=false</code>(argo-server 内部就是纯 HTTP,nginx 可放心写 <code>proxy_pass http://</code>)。</div>
+  <h3>② 先验内部 TLS 模式(决定 nginx upstream 用 http 还是 https)</h3>
+  <pre><code>kubectl get deploy argo-server -n argo -o yaml | grep -- '--secure'
+# chart 默认 --secure=false → argo-server 内部走纯 HTTP,nginx 直接 proxy_pass http://
+# 若是 --secure=true(自签 HTTPS)→ upstream 改 https:// 并加 proxy_ssl_verify off;</code></pre>
+  <h3>③ 网关 nginx 配置(/etc/nginx/conf.d/new-argoworkflows.fftaicorp.com.conf,已实测部署)</h3>
+  <pre><code>upstream argoworkflows_ui {
+    server 10.18.51.121:30274 max_fails=2 fail_timeout=10s;
+    server 10.18.51.122:30274 max_fails=2 fail_timeout=10s;
+    server 10.18.51.123:30274 max_fails=2 fail_timeout=10s;
+    server 10.18.51.124:30274 max_fails=2 fail_timeout=10s;
+    server 10.18.51.125:30274 max_fails=2 fail_timeout=10s;
+}
+server {
+    listen 80;
+    server_name new-argoworkflows.fftaicorp.com;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl http2;    # 语法坑:nginx < 1.25.1 不认独立的 "http2 on;" 指令(new-k8s-nginx-1 实测报 unknown directive)
+    server_name new-argoworkflows.fftaicorp.com;
+
+    ssl_certificate     /etc/nginx/ssl/_.fftaicorp.com.pem;    # 网关实机泛域名证书,域名匹配直接绿锁
+    ssl_certificate_key /etc/nginx/ssl/_.fftaicorp.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # 建议开启:argo-server 默认 auth-mode=server,UI 本身不登录,
+    # 外层 basic auth 就是唯一门锁(照 Longhorn 惯例)
+    #auth_basic "argo workflows";
+    #auth_basic_user_file /etc/nginx/htpasswd/argoworkflows;
+
+    location / {
+        proxy_pass http://argoworkflows_ui;
+        proxy_set_header Host            $host;
+        proxy_set_header X-Real-IP       $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_http_version 1.1;                      # 日志流 / WebSocket 必须带
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        client_max_body_size 0;
+    }
+}</code></pre>
+  <pre><code>nginx -t &amp;&amp; nginx -s reload</code></pre>
+  <div class="tip"><b>upstream 为什么写全部 5 台(含 121/122 两台 master)而不是只写 worker?</b>NodePort 是 kube-proxy 层的东西:<b>每台节点的 30274 都在监听</b>,流量从任一节点进来,kube-proxy 都会转给 Service 背后的 Pod——实测就是证据:Pod 只在 n3,从 m1(121)的 30274 进,照样 200。master 的污点(NoSchedule)只挡"调度 Pod",不挡"转发流量"。<b>两种写法都合法:</b>写 5 台 = 入口池最大、任一节点维护时入口不断、与 Longhorn 站点配置同构好排查;只写 123/124/125 三台 worker 也完全能跑(master 不承载业务入口、省 master 的 conntrack/带宽、防火墙少开两个口),按团队规范选即可,小集群实际差异微乎其微。</div>
+  <h3>④ DNS 与安全</h3>
+  <ul>
+    <li>内网 DNS 加 A 记录:<code>new-argoworkflows.fftaicorp.com</code> → nginx 网关 IP(与 Longhorn 同套路);</li>
+    <li>浏览器验收:<code>https://new-argoworkflows.fftaicorp.com</code> → Argo Workflows UI,绿锁(网关证书 <code>_.fftaicorp.com</code> 泛域名匹配);</li>
+    <li><b>安全红线:</b>30274 只对网关 IP 放行(防火墙堵旁路),别全网段裸奔——fke 上 30010 裸奔 447 天的教训就在档案里。</li>
+  </ul>
+  <div class="tip"><b>为什么走 NodePort 直连而不是 ingress-nginx:</b>ingress-nginx(30080/30443)建 Ingress 转发当然也行,但 NodePort 直连与 Longhorn 运维套路一致、链路少一层、排查简单;Argo UI 的 WebSocket 日志流在两层代理里都得带 Upgrade 头,链路越短越不容易踩坑。</div>
+</section>
+
+<div class="rel">
+  <b>📌 相关文档:</b>
+  <a href="argoworkflows.html">线上 Argo Workflows 部署档案(fke,本页安装的参照系)</a> ·
+  <a href="argocd.html">线上 ArgoCD 部署档案(一字之差排坑实录)</a> ·
+  <a href="index.html">← 返回首页</a>
+</div>
+
+<footer>
+  <p>Argo Workflows 离线安装与维护手册 · 版本 v3.7.9 / chart 0.45.28 · new-k8s 单点部署</p>
+  <p>清风 K8S 运维知识库 · <a href="index.html">返回首页</a></p>
+</footer>
+</div>
+</body>
+</html>

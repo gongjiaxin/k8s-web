@@ -6,16 +6,16 @@
 <title>清风 · 线上 ArgoCD 部署档案 · K8S Web</title>
 <style>
   :root{
-    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
-    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
-    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#161b22; --red:#fc8181;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
   .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
   section{scroll-margin-top:72px}
-  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
     border-bottom:1px solid var(--line);padding:12px 0}
   .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
   .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
@@ -117,7 +117,7 @@
     <tr><td>状态指标</td><td>SYNC STATUS(Synced/OutOfSync)+ HEALTH STATUS(Healthy/Degraded/Missing)</td><td>只有工作流状态(Running/Succeeded/Failed)</td></tr>
     <tr><td>条目内容</td><td>Git 仓库、Target Revision、Path、Destination、Last Sync</td><td>步骤图、耗时、日志</td></tr>
   </table>
-  <div class="tip"><b>💡 两者冲突吗?可以同时共存吗?</b>完全不冲突 —— 它们是两个独立开源项目,组件名(argocd-* / argo-*)、CRD(Applications / Workflows)、数据库与配置互不相干,装在不同(甚至相同)namespace 互不影响。本集群就是共存实证:<code>kube-infra</code> 里 ArgoCD 管交付,<code>argo</code> ns 里 Workflows 管数据流水线。业界常见的"Argo 全家桶"(ArgoCD + Workflows + Rollouts + Events)也全部这样共存,需要时还能联动:ArgoCD 把 WorkflowTemplate 纳入 GitOps 管理、Argo Events 事件触发 Workflows 跑批。唯一要注意的就是别把名字搞混(见 01 节开头)。</div>
+  <div class="tip"><b>💡 两者冲突吗?可以同时共存吗?</b>完全不冲突 —— 它们是两个独立开源项目,组件名(argocd-* / argo-*)、CRD(Applications / Workflows)、数据库与配置互不相干,装在不同(甚至相同)namespace 互不影响。本集群就是共存实证:<code>kube-infra</code> 里 ArgoCD 管交付,<code>argo</code> ns 里 Workflows 管数据流水线。业界常见的"Argo 全家桶"(ArgoCD + Workflows + Rollouts + Events)也全部这样共存,需要时还能联动:ArgoCD 把 WorkflowTemplate 纳入 GitOps 管理、Argo Events 事件触发 Workflows 跑批。唯一要注意的就是别把名字搞混(见 01 节开头);Workflows 侧的线上档案已独立成篇 → <a href="argoworkflows.html">线上 Argo Workflows 部署档案(fke)</a>。</div>
 </section>
 <!-- ================= 2. 部署形态总览 ================= -->
 <section id="a2">

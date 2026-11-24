@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S Helm 部署 Rancher · K8S Web</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--muted:#8b949e;--blue:#326ce5;--cyan:#4fd1c5;--green:#48bb78;--orange:#f6ad55;--purple:#b794f4;--code:#161b22;--red:#fc8181}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / Helm 部署 Rancher</span></div></div>
+<header class="doc wrap">
+  <h1>Helm 部署 Rancher<small>stable 渠道 Chart · 域名+TLS 必配 · 离线镜像量大 · 日常运维命令速查(适配 new-k8s 离线环境)</small></h1>
+</header>
+<div class="wrap">
+<nav class="toc"><b>目录</b><ol>
+  <li><a href="#r1">认识:Rancher 是什么、要多少资源</a></li>
+  <li><a href="#r2">版本锚定与离线准备</a></li>
+  <li><a href="#r3">values 配置全文</a></li>
+  <li><a href="#r4">安装与 bootstrap 密码</a></li>
+  <li><a href="#r5">访问入口与首登</a></li>
+  <li><a href="#r6">日常运维命令速查</a></li>
+  <li><a href="#r7">排障速查</a></li>
+</ol></nav>
+
+<section id="r1">
+  <h2><span class="no">R1</span>认识:Rancher 是什么、要多少资源</h2>
+  <p>Rancher = <b>多集群 K8s 统一管理面板</b>:网页上点选管多个集群的应用部署、RBAC、监控告警;本机所在集群装完后,下挂集群(agent)也由它纳管。<b>它不替代 kubectl,是"驾驶舱"层。</b></p>
+  <table>
+    <tr><th>项</th><th>要求/说明</th></tr>
+    <tr><td>Chart</td><td><code>rancher-stable/rancher</code>(生产一律 stable 渠道,latest 别碰)</td></tr>
+    <tr><td>命名空间</td><td>固定 <code>cattle-system</code>(组件全在这,名字不能改)</td></tr>
+    <tr><td>资源</td><td>最低 2C4G,推荐 <b>4C8G</b>;装完还会拉起 fleet/rancher-webhook 等一串组件</td></tr>
+    <tr><td>前置依赖</td><td>① 集群已有 <b>ingress-nginx</b>;② 一个能解析到集群的<b>域名</b>(必填,不支持裸 IP)</td></tr>
+    <tr><td>数据</td><td>自身无状态(数据在 K8s 对象里),备份用 rancher-backup Operator</td></tr>
+  </table>
+  <div class="warn"><b>⚠️ 想清楚再装:</b>Rancher 会往集群里装一堆 cattle-* 组件(fleet、webhook、impersonation 等 20+ 资源),<b>卸载残留极难清干净</b>;若只是要"一个 Dashboard 看板",K8s 自带 Dashboard 或 Lens 更轻。要多集群纳管/团队权限分发,Rancher 才值回票价。</div>
+</section>
+<section id="r2">
+  <h2><span class="no">R2</span>版本锚定与离线准备</h2>
+  <pre><code># 开发机:stable 渠道(★生产禁 latest)
+helm repo add rancher-stable https://releases.rancher.com/server-charts/stable
+helm search repo rancher-stable/rancher --versions | head -5
+helm pull rancher-stable/rancher --version 2.9.3        # 得 rancher-2.9.3.tgz
+
+# 镜像清单(rancher/rancher 主镜像 + 首启还会拉 fleet/webhook/system-agent 一串)
+helm template rancher ./rancher-2.9.3.tgz -n cattle-system -f values-rancher.yaml \
+  | grep -oP 'image:\s*\K\S+' | tr -d '"' | sort -u
+
+# 离线四连(同 07 章套路):save → scp → ctr -n k8s.io import → 本地 tgz 安装
+# ★注意:除 chart 模板里的镜像,Rancher 首次启动还会动态拉 fleet-*、rancher-webhook 等系统组件镜像,
+#   离线环境导不全会表现为部分 Pod ImagePullBackOff,按报错逐个补导即可(k8s-monitor 07 章同款盲区)</code></pre>
+</section>
+
+<section id="r3">
+  <h2><span class="no">R3</span>values 配置全文</h2>
+  <pre><code>cat &gt; values-rancher.yaml &lt;&lt;'EOF'
+hostname: rancher.fftaicorp.com      # ★必填,不支持裸 IP
+replicas: 1                          # 离线单点;HA 需 3 副本+外部 LB
+ingress:
+  tls:
+    source: secret                   # ★自备证书(默认 source: rancher 为自签,浏览器告警)
+bootstrapPassword: "Rancher-Init-2026"   # 首登引导密码(不设则随机,R4 有取法)
+auditLog:
+  level: 1                           # 审计元数据级
+features: multi-cluster-management=true
+EOF</code></pre>
+  <div class="warn"><b>⚠️ 证书是 Rancher 的命门:</b>默认自签证书一年有效,过期后整个控制台 502/证书告警;<code>source: secret</code> 用公司统一证书(见 <a href="k8s-cert.html">证书管理</a>),secret 名固定 <code>tls-rancher-ingress</code>,续期流程见 R6。</div>
+</section>
+
+<section id="r4">
+  <h2><span class="no">R4</span>安装与 bootstrap 密码</h2>
+  <pre><code>kubectl create namespace cattle-system
+# 证书 secret(名字必须叫 tls-rancher-ingress,chart 引用写死)
+kubectl -n cattle-system create secret tls tls-rancher-ingress \
+  --cert=rancher.fftaicorp.com.pem --key=rancher.fftaicorp.com.key
+
+helm install rancher ./rancher-2.9.3.tgz -n cattle-system -f values-rancher.yaml
+kubectl -n cattle-system rollout status deploy/rancher       # waiting → successfully rolled out
+
+# bootstrap 引导密码(values 没设时):
+kubectl -n cattle-system get secret bootstrap-secret \
+  -o jsonpath='{.data.bootstrapPassword}' | base64 -d; echo
+
+# 首启拉起的系统组件(耐心等全绿;离线缺镜像时在这里暴露)
+kubectl -n cattle-system get pods -w
+kubectl -n cattle-fleet-system get pods 2&gt;/dev/null
+kubectl -n cattle-fleet-local-system get pods 2&gt;/dev/null</code></pre>
+  <div class="tip"><b>💡 bootstrap 密码一次性:</b>首次登录设置新 admin 密码后,bootstrap-secret 即失效 —— 和 GitLab 的 24h 初始密码同一设计哲学:临时凭证必须尽快消费掉。</div>
+</section>
+
+<section id="r5">
+  <h2><span class="no">R5</span>访问入口与首登</h2>
+  <pre><code># 域名解析 → 外层 nginx 反代 → rancher ingress(套路同 GitLab G5):
+#   upstream 指向 ingress-nginx NodePort,server_name rancher.fftaicorp.com,
+#   websocket 必加( Rancher UI 长连接 ):
+#     proxy_set_header Upgrade $http_upgrade;
+#     proxy_set_header Connection "upgrade";
+#     proxy_read_timeout 3600s;
+
+# 浏览器打开 https://rancher.fftaicorp.com
+#   → 输 bootstrap 密码(R4)→ 设置新 admin 密码 → 勾选接受条款 → 进控制台</code></pre>
+</section>
+
+<section id="r6">
+  <h2><span class="no">R6</span>日常运维命令速查</h2>
+  <pre><code># ── 版本升级(stable 渠道内;大版本先看官方支持矩阵)──
+helm upgrade rancher ./rancher-2.9.3.tgz -n cattle-system -f values-rancher.yaml
+kubectl -n cattle-system rollout status deploy/rancher
+
+# ── 证书续期(公司证书更换时三步)──
+kubectl -n cattle-system create secret tls tls-rancher-ingress \
+  --cert=new.pem --key=new.key --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n cattle-system rollout restart deploy/rancher      # 让 ingress 重读
+
+# ── 备份:rancher-backup Operator(独立 chart,按 CR 定期备份到 S3/PVC)──
+helm install rancher-backup rancher-backup/rancher-backup -n cattle-resources-system --create-namespace
+
+# ── 纳管新集群 ──
+#   UI: Add Cluster → Import → 得到一条 kubectl apply 注册命令 → 去目标集群执行 → Approve
+kubectl -n cattle-system get pods -o wide | grep -E "rancher-|webhook"
+
+# ── 观察系统组件健康 ──
+kubectl get pods -A | grep -E "cattle|rancher|fleet" | grep -v Running</code></pre>
+</section>
+
+<section id="r7">
+  <h2><span class="no">R7</span>排障速查</h2>
+  <table>
+    <tr><th>症状</th><th>真因</th><th>处置</th></tr>
+    <tr><td>控制台整体 502/证书告警</td><td>自签证书一年到期</td><td>换 <code>tls-rancher-ingress</code> secret(R6 续期三步)</td></tr>
+    <tr><td><code>kubectl apply</code> 全被拒(webhook)</td><td>rancher-webhook Pod 异常</td><td>看 webhook Pod 日志;极端时临时删 validatingwebhookconfiguration(恢复后自动重建)</td></tr>
+    <tr><td>下挂集群 agent 不健康</td><td>目标集群连不上 rancher 域名</td><td>目标集群内 curl rancher 域名;cattle-cluster-agent 日志</td></tr>
+    <tr><td>fleet/webhook Pod ImagePullBackOff</td><td>离线漏导系统组件镜像</td><td>按 events 镜像名逐个 ctr 补导(07 章同款盲区)</td></tr>
+    <tr><td>升级卡 Rolling</td><td>replicas&gt;1 无 LB / 前一版本未就绪</td><td>单点集群固定 replicas: 1</td></tr>
+  </table>
+</section>
+</div>
+<footer>K8S Web · Rancher on Kubernetes · 配套:<a href="k8s-monitor.html">监控三件套</a> · <a href="ingress.html">Ingress</a> · <a href="k8s-cert.html">证书管理</a></footer>
+</body>
+</html>

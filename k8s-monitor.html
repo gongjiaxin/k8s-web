@@ -6,16 +6,16 @@
 <title>清风 · K8S 监控三件套 · K8S Web</title>
 <style>
   :root{
-    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
-    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
-    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526; --red:#fc8181;
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#161b22; --red:#fc8181;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
   .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
   section,h2[id],h3[id]{scroll-margin-top:72px;}
-  .topbar{position:sticky;top:0;z-index:9;background:rgba(11,18,32,.92);backdrop-filter:blur(6px);
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
     border-bottom:1px solid var(--line);padding:12px 0}
   .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
   .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
@@ -34,6 +34,7 @@
   h2{font-size:22px;margin-bottom:14px}
   h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
   h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px;color:var(--txt)}
   p{margin:8px 0}
   ul,ol{margin:8px 0 8px 22px}
   li{margin:4px 0}
@@ -82,20 +83,20 @@
 <div class="wrap">
 <header class="doc">
   <h1>📊 K8S 监控三件套:Prometheus + AlertManager + Grafana
-    <small>动手装之前,先用一张图确认三者关系与依赖 —— 结论:① Prometheus(核心:采集+TSDB 存储+告警规则评估)→ ② AlertManager(被动收告警,去重分组发通知)→ ③ Grafana(接数据源画图,随时可装);第 04 章 Prometheus Helm 实战已上线(装→验→Ingress 全开放),05~07 章持续补充</small>
+    <small>动手装之前,先用一张图确认三者关系与依赖 —— 结论:① Prometheus(核心:采集+TSDB 存储+告警规则评估)→ ② AlertManager(被动收告警,去重分组发通知)→ ③ Grafana(接数据源画图,随时可装);第 04 章 Prometheus Helm 实战(装→验→Ingress 全开放)、第 07 章 kube-prometheus-stack 离线安装实战(new-k8s·pca:开发机下载→docker save 307M→scp 分发 6 节点→ctr 导入→Helm 本地包安装,真实输出已回填)均上线;05~06 章补充中</small>
   </h1>
 </header>
 
 <nav class="toc">
   <b>📑 目录(大纲)</b>
   <ol>
-    <li><a href="#c1">一图看懂:三者关系与依赖 ⭐</a></li>
+    <li><a href="#c1">一图看懂:组件清单 · 依赖关系 · 全链路流程(访问→采集→监控→报警) ⭐</a></li>
     <li><a href="#c2">先装哪一个?结论与理由</a></li>
     <li><a href="#c3">依赖矩阵与易混淆点(数据流 ≠ 依赖方向)</a></li>
     <li><a href="#c4">Prometheus 部署实战(Helm·已上线)⭐</a></li>
     <li><a href="#c5">AlertManager 部署与对接(大纲·补充中)</a></li>
     <li><a href="#c6">Grafana 部署与看板(大纲·补充中)</a></li>
-    <li><a href="#c7">生产建议:kube-prometheus-stack(大纲·补充中)</a></li>
+    <li><a href="#c7">kube-prometheus-stack 离线安装实战(new-k8s·pca)⭐</a></li>
   </ol>
 </nav>
 
@@ -173,6 +174,95 @@
     </div>
   </div>
   <p class="arch-cap">图:监控三件套数据流与依赖全景 —— ①②③ = 推荐安装顺序;箭头 = 数据流向;蓝框 = 核心(一切的依赖根)</p>
+
+  <h3>📦 组件清单总表 —— "三件套"到底包含哪些东西</h3>
+  <p>先说口径:<b>严格意义的"三件套"就是下面 3 个核心成员</b>;采集层的 exporter 们是被监控对象(不属于三件套),但没有它们 Prometheus 只能抓到自己,实战永远一起装:</p>
+  <table>
+    <tr><th>组件</th><th>一句话职责</th><th>端口</th><th>K8s 部署形态</th><th>依赖谁</th></tr>
+    <tr><td colspan="5" style="background:rgba(50,108,229,.14)"><b>✅ 核心三件套(严格成员,共 3 个)</b></td></tr>
+    <tr><td><b>Prometheus Server</b></td><td>采集(Pull)+ TSDB 时序存储 + PromQL 查询 + 告警规则评估,自带简易 UI</td><td><code>9090</code></td><td>StatefulSet + PVC(指标数据必须持久化)</td><td>零依赖</td></tr>
+    <tr><td><b>AlertManager</b></td><td>被动收告警 → 去重/分组/静默/路由 → 发通知</td><td><code>9093</code></td><td>StatefulSet(多副本间 gossip 组网,不依赖数据库)</td><td>功能上依赖 Prometheus 推送</td></tr>
+    <tr><td><b>Grafana</b></td><td>配数据源 + Dashboard 画图(纯展示,不存监控数据)</td><td><code>3000</code></td><td>Deployment + PVC(存 dashboard/账号 db)</td><td>依赖 Prometheus 当数据源</td></tr>
+    <tr><td colspan="5" style="background:rgba(79,209,197,.10)"><b>➕ 配套采集层(不属于三件套,但没有它们就没有数据)</b></td></tr>
+    <tr><td><b>node-exporter</b></td><td>节点层指标:CPU/内存/磁盘/网络/文件系统</td><td><code>9100</code></td><td>DaemonSet(每节点 1 个)</td><td>被动被抓,零依赖</td></tr>
+    <tr><td><b>kube-state-metrics</b></td><td>K8s 对象状态:副本数/Pod 重启次数/非 Running 计数</td><td><code>8080</code></td><td>Deployment(1 副本)</td><td>被动被抓,零依赖</td></tr>
+    <tr><td><b>kubelet + cAdvisor</b></td><td>容器运行时指标:每容器 CPU/内存/网络</td><td><code>10250</code></td><td>每节点内置,<b>无需安装</b></td><td>被动被抓,零依赖</td></tr>
+    <tr><td><b>blackbox-exporter</b>(可选)</td><td>黑盒探测:HTTP/TCP/ICMP 存活与延迟</td><td><code>9115</code></td><td>Deployment</td><td>被动被抓,零依赖</td></tr>
+    <tr><td><b>业务应用</b></td><td>自暴露 <code>/metrics</code>(Spring Actuator / client_golang)</td><td>自定</td><td>应用自身</td><td>自暴露即可被抓</td></tr>
+  </table>
+
+  <h3>🔗 依赖关系逐条明确(方向 + 动作 + 断链后果)</h3>
+  <table>
+    <tr><th>#</th><th>方向</th><th>动作 / 协议</th><th>这条线断了会怎样</th></tr>
+    <tr><td>1</td><td>Prometheus → 各 Target(exporter/应用)</td><td>HTTP GET <code>/metrics</code>,15~30s 周期 <b>Pull</b></td><td>该 Target <code>up==0</code>:图缺数,告警规则按 up 触发</td></tr>
+    <tr><td>2</td><td>Prometheus → AlertManager</td><td>HTTP POST <code>/api/v2/alerts</code>(<b>Push</b>,firing/resolved)</td><td>告警发不出去:Prometheus 日志报 <code>connection refused</code>,但采集/存储/画图全不受影响</td></tr>
+    <tr><td>3</td><td>Grafana → Prometheus</td><td>HTTP <code>/api/v1/query</code>(PromQL 取数)</td><td>Dashboard 变空/报数据源错误;Prometheus 本身无感</td></tr>
+    <tr><td>4</td><td>AlertManager → 钉钉/邮件/Slack</td><td>webhook / smtp</td><td>页面上看得到告警,人收不到 —— OOM 156 天无人知的教训就在这环</td></tr>
+    <tr><td>5</td><td>浏览器 → 三者 UI</td><td>HTTP:9090 / 9093 / 3000</td><td>只是看不了页面,后台照常运转</td></tr>
+  </table>
+  <div class="tip"><b>💡 与第 07 章 kube-prometheus-stack 的关系:</b>那个 chart = 上表全部打包(三件套 3 个 + 采集层 node-exporter/kube-state-metrics + <b>Prometheus Operator</b>),装完就是 7.2 节实测的 <b>6 个镜像 / 6 类 Pod</b> —— Operator 是 stack 特有的"管家"(watch Prometheus/Alertmanager CRD → 自动生成抓取与告警配置),<b>不属于三件套本体</b>。第 04 章单独装的 Prometheus 则只有本体,采集层与 AlertManager 都要自己另配。</div>
+
+  <h3>🕰️ 全链路流程图:从"用户访问"到"报警送达"再回到用户(事件流视角)</h3>
+  <p>上面那张是<b>静态结构</b>(谁连谁);这张换成<b>时间线</b> —— 以一次业务故障当剧本,四幕走完监控闭环。对应用户口中的四个词:<b>用户访问 = 第 0 幕,采集 = 第 1 幕,监控 = 第 2 幕,报警 = 第 3 幕</b>(第 4 幕是闭环):</p>
+
+  <div class="arch">
+    <div class="box">
+      <h4>👤 第 0 幕 · 用户访问业务 —— 一切的起点,也是一切监控的意义</h4>
+      <ul>
+        <li>用户/浏览器 → Ingress/NodePort → 业务 Pod(Spring/Go/…)</li>
+        <li>正常时<b>无人知晓</b>;出事时<b>用户最先感知</b>(变慢/5xx/白屏)</li>
+        <li>用户的体验不会自动告诉运维 —— <b>必须让数据说话</b>,于是有了下面三幕</li>
+      </ul>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>业务 Pod 与节点指标一直在产生,等监控来取</div>
+
+    <div class="box">
+      <h4>📡 第 1 幕 · 采集(全自动,无人工参与,15~30s 一轮)</h4>
+      <ul>
+        <li><b>四路指标源</b>:node-exporter(节点 CPU/内存/磁盘) · kube-state-metrics(对象状态/重启次数) · kubelet+cAdvisor(容器运行时) · 业务自暴露 /metrics</li>
+        <li><b>Prometheus 主动 Pull</b> 各 Target 的 <code>/metrics</code> → TSDB 落本地盘(保留 15~30d)</li>
+        <li>Target 挂了指标 <code>up==0</code> —— 数据断流本身就是一条告警</li>
+      </ul>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>数据已入库,两条使用路径并行:左边"人主动看"(监控),右边"机器自动喊"(报警)</div>
+
+    <div class="cols">
+      <div>
+        <div class="arrow"><span class="tri">▲</span>人主动查(Grafana → Prometheus)</div>
+        <div class="box">
+          <h4>📊 第 2 幕 · 监控 —— 人主动看(巡检/容量/趋势)</h4>
+          <ul>
+            <li>运维浏览器 → <b>Grafana:3000</b> → 选 Dashboard(315 集群 / 8588 自身 / 1860 节点)</li>
+            <li>Grafana 拼 PromQL → Prometheus <code>/api/v1/query</code> 取数 → 出图</li>
+            <li>适合<b>白天主动巡检</b>;但人不可能 24h 盯屏 —— 半夜的事交给右边</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="arrow"><span class="tri">▼</span>机器自动评估(Prometheus → AlertManager)</div>
+        <div class="box core">
+          <h4>🚨 第 3 幕 · 报警 —— 机器自动喊(7×24 不眨眼)</h4>
+          <ul>
+            <li>Prometheus 周期评估规则(如 <code>container_memory_working_set_bytes &gt; limit×90%</code> 持续 5m):pending → <b>firing</b></li>
+            <li>Push <code>/api/v2/alerts</code> → <b>AlertManager</b>:去重/分组/静默/路由</li>
+            <li>webhook/smtp → <b>钉钉/企业微信/邮件 → 值班手机响</b></li>
+            <li>❗这条线断了的下场:线上 InfluxDB OOM 156 天/4256 次重启无人知(k8s-oom 档案)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="arrow"><span class="tri">▼</span>(报警路径)值班的人被叫醒,进入处置</div>
+
+    <div class="box">
+      <h4>🔧 第 4 幕 · 处置闭环 —— 回到第 0 幕的用户</h4>
+      <ul>
+        <li>收到告警 → <code>kubectl describe pod</code>(看 OOMKilled/重启计数,数据来自 kube-state-metrics)→ 定位修复(调 limit/扩容/重启)</li>
+        <li>指标回落 → Prometheus 推 <b>resolved</b> → AlertManager 再发一条"已恢复" —— 告警有始有终</li>
+        <li>用户访问恢复正常:<b>四幕闭环完成</b>;复盘沉淀(改阈值/加规则),监控越用越准</li>
+      </ul>
+    </div>
+  </div>
+  <p class="arch-cap">图:监控全链路事件流 —— 第 1 幕采集供数据,第 2 幕监控给人看,第 3 幕报警替人守,第 4 幕处置回到用户;蓝框 = 报警主链(Prometheus 评估 + AlertManager 分发)</p>
 
   <div class="tip"><b>💡 一句话记住:</b>Prometheus 是<b>心脏</b>(数据进、规则算、查询出),AlertManager 是<b>嘴</b>(替它喊话),Grafana 是<b>脸</b>(替它露面)—— 心脏不跳,嘴和脸都没意义,所以先装心脏。</div>
 </section>
@@ -659,17 +749,917 @@ kubectl delete pvc -n monitoring -l app.kubernetes.io/instance=prometheus</code>
   <div class="tip"><b>📝 大纲占位:</b>正文补充中。</div>
 </section>
 
-<!-- ================= 7. kube-prometheus-stack(大纲) ================= -->
+<!-- ================= 7. kube-prometheus-stack 离线安装实战 ================= -->
 <section id="c7">
-  <h2><span class="no">07</span>生产建议:kube-prometheus-stack 一键全家桶 <span style="color:var(--orange);font-size:14px">· 大纲 · 补充中</span></h2>
-  <p>生产环境更推荐 Helm 一个 Chart 装齐(三件套 + Operator + 采集端),本章将覆盖:</p>
-  <ol>
-    <li>helm repo / install 三条命令;<code>monitoring</code> 命名空间</li>
-    <li>为什么多了 Prometheus Operator:<b>ServiceMonitor / PodMonitor / PrometheusRule</b> 声明式管理,告别手改 prometheus.yml</li>
-    <li>values 定制:持久化与保留期、告警接收器、Ingress 域名、资源配额</li>
-    <li>与手动部署的取舍:学习原理用手动,稳定生产用 Stack</li>
-  </ol>
-  <div class="tip"><b>📝 大纲占位:</b>正文补充中。</div>
+  <h2><span class="no">07</span>kube-prometheus-stack 离线安装实战(new-k8s · pca) ⭐</h2>
+  <p>生产环境更推荐 Helm 一个 Chart 装齐(三件套 + Operator + 采集端):<b>ServiceMonitor / PodMonitor / PrometheusRule</b> 声明式管理,告别手改 prometheus.yml —— 学习原理用第 04 章手动部署,稳定生产用 Stack。本章实录 <b>new-k8s 集群(6 节点,m1 + 10.18.51.121~125,无外网)</b>的离线安装全过程(代号 <b>pca</b>):<b>版本对齐线上 fke(chart 48.2.0 / operator v0.66.0)</b>,路线 = 7.1 线上版本锚点 → 7.2 开发机下载(chart+镜像动态提取) → 7.3 docker save 打包(307M) → 7.4 scp 分发 6 节点 → 7.5 ctr 全节点导入 → 7.6 Helm 本地包离线安装 → 7.7 验收三关 → 7.8 维护速查。<b>真实命令输出全部回填(2026-11-23)</b>,下载/分发/导入已完成,待执行 Helm 安装。</p>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.1</span> 线上安装方式与版本锚点(fke,怎么查的)</h3>
+  <p>离线安装第一步不是下载,而是<b>确认线上装的是什么、什么版本</b>——新环境与线上对齐,经验才能迁移。两条命令搞定:</p>
+  <pre><code># 是不是 Helm 装的?release 叫什么?在哪个 ns?
+sudo helm list -A | grep -iE "prometheus|monitoring|kube-prom"
+
+# 本机配置过哪些仓库源
+sudo helm repo list</code></pre>
+  <p>线上真实输出(2025-11-23 于 fke-m1 执行):</p>
+  <pre><code>fourier@fke-m1:~$ sudo helm list -A | grep -iE "prometheus|monitoring|kube-prom"
+prometheus                  fke-monitor         6        2025-09-22 10:10:33.421976192 +0800 CST    deployed    kube-prometheus-stack-48.2.0    v0.66.0
+
+fourier@fke-m1:~$ sudo helm repo list
+Error: no repositories to show</code></pre>
+  <table>
+    <tr><th>字段</th><th>值</th><th>含义</th></tr>
+    <tr><td>release 名</td><td><code>prometheus</code></td><td>新环境保持同名,命令习惯一致</td></tr>
+    <tr><td>namespace</td><td><code>fke-monitor</code></td><td>监控栈专用 ns</td></tr>
+    <tr><td>revision</td><td>6</td><td>已升级过 6 次,最新一次 2025-09-22</td></tr>
+    <tr><td>chart</td><td><b><code>kube-prometheus-stack-48.2.0</code></b></td><td>&#9733; 离线下载就锁这个版本</td></tr>
+    <tr><td>app version</td><td><code>v0.66.0</code></td><td>Prometheus Operator 版本</td></tr>
+  </table>
+  <div class="tip"><b>repo list 为空怎么解读:</b>说明当初安装那台机器没配(或后来清掉了)helm 仓库源,不影响判断——release 信息本身就证明了是 Helm 装的。新环境照常 <code>helm repo add</code> 即可。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.2</span> 开发机下载:Chart 包 + 镜像清单(&#9733; 动态提取法)</h3>
+  <p>在<b>能上外网的开发机</b>(本次为 qingfeng,工作目录 <code>~/k8s-install/pca</code>)上完成三件事:下 Chart、列镜像、拉镜像。</p>
+
+  <h4>下载 Chart 包(1 个 tgz 含全部子依赖)</h4>
+  <pre><code>helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# 锁定线上同版本 &rarr; 得到 kube-prometheus-stack-48.2.0.tgz
+helm pull prometheus-community/kube-prometheus-stack --version 48.2.0
+
+# 验证:charts/ 子依赖应已内置 grafana / kube-state-metrics / prometheus-node-exporter
+tar -tzf kube-prometheus-stack-48.2.0.tgz | head -20</code></pre>
+  <div class="tip"><b>自包含:</b><code>helm pull</code> 下来的 tgz 已把 3 个子 chart 打包在内,新集群离线安装时<b>直接用这一个文件</b>,无需再联网拉依赖。实测仅 <b>468K</b>。</div>
+
+  <h4>镜像清单:不要手写,用渲染提取(★ 本页最值钱的方法)</h4>
+  <pre><code># 用本地 chart 渲染出真实镜像清单 &rarr; images.txt
+helm template prometheus kube-prometheus-stack-48.2.0.tgz -n prometheus \
+  | grep 'image:' | sed 's/.*image: *//' | tr -d '"' | sort -u &gt; images.txt
+
+cat images.txt</code></pre>
+  <div class="warn"><b>为什么必须动态提取:</b>本页实测就踩到了——chart 48.2.0 实际渲染出的 tag 与网上资料差异不小(grafana 是 <code>10.0.2</code>、prometheus 是 <code>v2.45.0</code>、kube-state-metrics 是 <code>v2.9.2</code>)。手抄清单必漏必错,<code>helm template</code> 渲染是唯一事实源;改了 values 就重跑一遍。</div>
+  <p>本次实际清单(镜像大小来自导入后 <code>crictl images</code>;实为 <b>7 个</b> —— 当年表格漏记了 grafana 内置 sidecar 一行,验证 grep 模式匹配不到 kiwigrid 被数漏):</p>
+  <table>
+    <tr><th>组件</th><th>镜像</th><th>版本</th><th>大小</th><th>分布</th></tr>
+    <tr><td>Grafana</td><td><code>docker.io/grafana/grafana</code></td><td>10.0.2</td><td>93.7MB</td><td>1 副本</td></tr>
+    <tr><td>Prometheus 本体</td><td><code>quay.io/prometheus/prometheus</code></td><td>v2.45.0</td><td>93.7MB</td><td>StatefulSet</td></tr>
+    <tr><td>Alertmanager</td><td><code>quay.io/prometheus/alertmanager</code></td><td>v0.25.0</td><td>30.8MB</td><td>StatefulSet</td></tr>
+    <tr><td>Operator</td><td><code>quay.io/prometheus-operator/prometheus-operator</code></td><td>v0.66.0</td><td>16.3MB</td><td>1 副本</td></tr>
+    <tr><td>kube-state-metrics</td><td><code>registry.k8s.io/kube-state-metrics/kube-state-metrics</code></td><td>v2.9.2</td><td>13.3MB</td><td>1 副本</td></tr>
+    <tr><td>node-exporter</td><td><code>quay.io/prometheus/node-exporter</code></td><td>v1.6.0</td><td>11.7MB</td><td><b>DaemonSet,每节点</b></td></tr>
+    <tr><td>grafana 内置 sidecar</td><td><code>quay.io/kiwigrid/k8s-sidecar</code></td><td>1.24.6</td><td>24.3MB</td><td>grafana Pod 内 2 个 sidecar(自动加载 ConfigMap 里的 dashboard/数据源)</td></tr>
+  </table>
+
+  <h4>这 6 个镜像各干什么?够拼出三件套吗(对照第 01 章组件清单)</h4>
+  <table>
+    <tr><th>镜像</th><th>三件套角色(↔ 01 章清单)</th><th>装完长成什么 Pod</th><th>缺了它会怎样</th></tr>
+    <tr><td><code>grafana/grafana:10.0.2</code></td><td>✅ ③ 展示层本体</td><td>Deployment <code>prometheus-grafana</code>(1 副本)</td><td>没有看板,只剩 Prometheus 自带简陋 UI</td></tr>
+    <tr><td><code>prometheus:v2.45.0</code></td><td>✅ ① 核心引擎本体(采集+TSDB+规则评估)</td><td>StatefulSet <code>prometheus-kube-prometheus-prometheus</code>(由 Operator 按 CR 生成)</td><td>整套监控不存在 —— 一切的依赖根</td></tr>
+    <tr><td><code>alertmanager:v0.25.0</code></td><td>✅ ② 告警出口本体</td><td>StatefulSet <code>alertmanager-prometheus-kube-prometheus-alertmanager</code></td><td>告警发不出去(connection refused,采集不受影响)</td></tr>
+    <tr><td><code>prometheus-operator:v0.66.0</code></td><td>➕ 管家(<b>非三件套成员</b>)</td><td>Deployment <code>prometheus-kube-prometheus-operator</code>(1 副本)</td><td>没人把 Prometheus/Alertmanager CR 翻译成 StatefulSet,核心起不来</td></tr>
+    <tr><td><code>kube-state-metrics:v2.9.2</code></td><td>➕ 采集层:K8s 对象状态(副本/重启/非 Running)</td><td>Deployment(1 副本)</td><td>Pod 重启次数这类"对象级"指标全缺</td></tr>
+    <tr><td><code>node-exporter:v1.6.0</code></td><td>➕ 采集层:节点 CPU/内存/磁盘</td><td>DaemonSet(每节点 1 个,6 节点共 6 Pod)</td><td>节点层面指标全缺 —— 这也是镜像必须 6 台全导的原因</td></tr>
+  </table>
+  <p><b>结论:6 个 = 三件套 3 本体 + 采集层 2 个 + Operator 1 个管家</b>(第 4 路 kubelet + cAdvisor 指标每节点内置,不占镜像)。装完在 ns 里应看到 <b>6 类工作负载</b>:1 Deployment(grafana)+ 1 StatefulSet(prometheus)+ 1 StatefulSet(alertmanager)+ 1 Deployment(operator)+ 1 Deployment(kube-state-metrics)+ 1 DaemonSet(node-exporter)。<b>但"无遗漏"被 new-k8s 实测打脸 —— 渲染清单有天生盲区,见下:</b></p>
+  <div class="warn"><b>⚠️ 实测踩坑(new-k8s · 2026-11-23):helm template 渲染清单有盲区 —— Operator 动态生成的 StatefulSet 里还有第 7 个镜像</b><br>
+  <code>quay.io/prometheus-operator/prometheus-config-reloader:v0.66.0</code> —— Prometheus/Alertmanager 两个 StatefulSet 是 Operator 运行时按 CR 现生成的,<b>helm template 渲染不出它们的 Pod 模板</b>:每个 Pod 带 <code>init-config-reloader</code> init 容器 + config-reloader sidecar,全用它。images.txt 里没有,6 镜像导完一装,两个 StatefulSet 必卡 <code>Init:ErrImagePull</code>(describe 实拍:先 <code>pod has unbound immediate PersistentVolumeClaims</code> 等 Longhorn 建卷约 10s 属正常,随后 init 容器拉 quay.io <code>i/o timeout</code>)。<b>补导</b>:开发机 pull+save &rarr; 传 master &rarr; 本机+5 worker 循环 <code>ctr -n k8s.io import</code>(7.5 同款)&rarr; 删两个卡住的 Pod 重建即绿。<br>
+  另:grafana Pod 实际是 <b>3 容器</b>(本体 + dashboard/datasource 两个 k8s-sidecar),crictl 验证 grep 模式(prometheus|alertmanager|grafana|exporter|kube-state|rbac)<b>匹配不到 kiwigrid/k8s-sidecar,会被数漏</b> —— 验证时补一条 <code>crictl images | grep -i kiwigrid</code>;若 sidecar 镜像不在,grafana 会卡在容器级 ErrImagePull(实测已 Running,说明当时 tar 内其实有它)。</div>
+  <div class="tip"><b>💡 别只看 master 一台:</b>master 的 6 个只是 1/6 —— node-exporter 是 DaemonSet 每节点必跑,Prometheus/Grafana 调度到哪台不受控,<b>漏一台,Pod 落过去就是 ImagePullBackOff</b>。121~125 五台 worker 用 7.5 节循环命令逐台确认,预期每台都是 6。</div>
+
+  <h4>拉取镜像(逐个 or 一键)</h4>
+  <pre><code># 一键:按清单逐个拉(推荐)
+while read img; do docker pull "$img"; done &lt; images.txt
+
+# 逐个(清单短时直接敲)
+docker pull quay.io/prometheus/prometheus:v2.45.0
+docker pull quay.io/prometheus/alertmanager:v0.25.0
+docker pull quay.io/prometheus/node-exporter:v1.6.0
+...</code></pre>
+  <p>真实输出(最后一个,含 digest):</p>
+  <pre><code>Digest: sha256:5ac2e67a862cd3baa0eb4fd7683d54928fd76ea3a61cde50508922c956901d8c
+Status: Downloaded newer image for registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.9.2
+registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.9.2</code></pre>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.3</span> 打包保存与校验(docker save &rarr; 307M 实测)</h3>
+  <pre><code># 把 images.txt 里所有镜像打进一个 tar
+docker save -o prom-images.tar $(tr '\n' ' ' &lt; images.txt)
+
+ls -lh prom-images.tar
+du -sh *</code></pre>
+  <p>qingfeng 上的真实结果:</p>
+  <pre><code>root@qingfeng:~/k8s-install/pca# ls
+images.txt  kube-prometheus-stack-48.2.0.tgz
+root@qingfeng:~/k8s-install/pca# docker save -o prom-images.tar $(tr '\n' ' ' &lt; images.txt)
+root@qingfeng:~/k8s-install/pca# ls -lh prom-images.tar
+-rw------- 1 root root 307M 11月 23 10:21 prom-images.tar
+root@qingfeng:~/k8s-install/pca# du -sh *
+4.0K    images.txt
+468K    kube-prometheus-stack-48.2.0.tgz
+307M    prom-images.tar</code></pre>
+  <div class="tip"><b>三个交付物齐了:</b><code>images.txt</code>(4.0K,清单留档)+ <code>kube-prometheus-stack-48.2.0.tgz</code>(468K,安装包)+ <code>prom-images.tar</code>(307M,镜像包)。后续只带这三样去新集群。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.4</span> 传输:scp for 循环分发 6 节点</h3>
+  <p>new-k8s 拓扑:<b>m1(master,本机)+ 10.18.51.121~125(5 worker)</b>。镜像 tar 要人手一份:</p>
+  <pre><code># 在 new-k8s-fke-m1 上:循环 scp 到 121~125(master 本机不用传给自己)
+for i in `seq 121 125`; do echo 10.18.51.$i; scp /tmp/prom-images.tar root@10.18.51.$i:/tmp/; done</code></pre>
+  <p>真实输出(内网万兆,单个 3 秒左右):</p>
+  <pre><code>10.18.51.121
+prom-images.tar    100%  306MB  109.3MB/s   00:02
+10.18.51.122
+prom-images.tar    100%  306MB   84.7MB/s   00:03
+10.18.51.123
+prom-images.tar    100%  306MB   86.2MB/s   00:03
+10.18.51.124
+prom-images.tar    100%  306MB   74.7MB/s   00:04
+10.18.51.125
+prom-images.tar    100%  306MB   ...</code></pre>
+  <div class="warn"><b>别漏了 Chart 包:</b>镜像之外,<code>kube-prometheus-stack-48.2.0.tgz</code> 和 <code>images.txt</code> 也要从开发机传到 master:<br>
+  <code>scp ~/k8s-install/pca/kube-prometheus-stack-48.2.0.tgz ~/k8s-install/pca/images.txt root@new-k8s-fke-m1:~/</code></div>
+  <div class="tip"><b>为什么每台都要有镜像:</b>node-exporter 是 <b>DaemonSet</b>(每节点必跑),Prometheus/Grafana StatefulSet 调度到哪台不受控——<b>漏一台,Pod 落过去就是 ImagePullBackOff</b>。跨机房/大文件可用 <code>rsync -avP</code> 断点续传替代 scp。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.5</span> 镜像导入:ctr 全节点导入 + crictl 验证</h3>
+  <h4>导入(先本机,再循环)</h4>
+  <pre><code># ① master 本机(文件就在本机 /tmp,不用 ssh)
+ctr -n k8s.io images import /tmp/prom-images.tar
+
+# ② 121~125 循环导入(与 scp 同款写法)
+for i in `seq 121 125`; do echo 10.18.51.$i; ssh root@10.18.51.$i "ctr -n k8s.io images import /tmp/prom-images.tar"; done</code></pre>
+  <p>真实输出(manifest list 逐条落库,21.9 秒):</p>
+  <pre><code>application/vnd.docker.distribution.manifest.list.v2+json sha256:fd4d9a3d...80e98
+application/vnd.docker.distribution.manifest.list.v2+json sha256:d2e48098...4f98
+application/vnd.docker.distribution.manifest.list.v2+json sha256:9c55b697...1222
+application/vnd.docker.distribution.manifest.list.v2+json sha256:9309deb7...a237
+application/vnd.docker.distribution.manifest.list.v2+json sha256:4d99688e...f6b5
+application/vnd.docker.distribution.manifest.list.v2+json sha256:5ac2e67a...1d8c
+Importing  elapsed: 21.9s  total:   0.0 B  (0.0 B/s)</code></pre>
+
+  <h4>验证(master 看清单,循环数台数)</h4>
+  <pre><code># master 本机:应看到 7 个镜像(grep 模式匹配不到 kiwigrid,补一条)
+crictl images | grep -E "prometheus|alertmanager|grafana|exporter|kube-state|rbac"
+crictl images | grep -i kiwigrid
+
+# 循环验证 5 节点:预期每个都是 7(6+kiwigrid;另有 config-reloader 盲区镜像见 7.6 实测坑)
+for i in `seq 121 125`; do echo "=== 10.18.51.$i ==="; ssh root@10.18.51.$i "crictl images | grep -cE 'prometheus|alertmanager|grafana|exporter|kube-state|rbac|kiwigrid'"; done</code></pre>
+  <p>真实输出(当年 grep 模式没含 kiwigrid,数成 6;镜像本身都导全了 × 6 节点对齐):</p>
+  <pre><code>root@new-k8s-fke-m1:~# crictl images | grep -E "prometheus|alertmanager|grafana|exporter|kube-state|rbac"
+docker.io/grafana/grafana                          10.0.2     d4cdde7ce77b0    93.7MB
+quay.io/prometheus-operator/prometheus-operator    v0.66.0    c3e56913c47a4    16.3MB
+quay.io/prometheus/alertmanager                    v0.25.0    c8568f914cd25    30.8MB
+quay.io/prometheus/node-exporter                   v1.6.0     173d3570a5af2    11.7MB
+quay.io/prometheus/prometheus                      v2.45.0    e1fbd49323c62    93.7MB
+registry.k8s.io/kube-state-metrics/kube-state-metrics v2.9.2  8465800dbe52d   13.3MB
+
+=== 10.18.51.121 === 6
+=== 10.18.51.122 === 6
+=== 10.18.51.123 === 6
+=== 10.18.51.124 === 6
+=== 10.18.51.125 === 6</code></pre>
+
+  <div class="warn"><b>两个必踩坑:</b><br>
+  1) <code>-n k8s.io</code> 不能省——不带就导进 <code>default</code> ns,kubelet 看不到,照样 ImagePullBackOff;<br>
+  2) <b>每台都要导</b>——node-exporter 是 DaemonSet(6 节点每台一个),Prometheus/Grafana 调度到哪台不受控。</div>
+
+  <h4>(可选)清理节点上的临时 tar</h4>
+  <pre><code>for i in `seq 121 125`; do echo 10.18.51.$i; ssh root@10.18.51.$i "rm -f /tmp/prom-images.tar"; done</code></pre>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.6</span> Helm 离线安装(values 裁剪 + kubeVersion 大坑) <span style="color:var(--cyan);font-size:14px">· 已执行 2026-11-23(关二三回填中)</span></h3>
+  <div class="tip"><b>💡 这一节没有"先装哪一个"的问题:</b>第 01~03 章的 ①Prometheus → ②AlertManager → ③Grafana 顺序是<b>手动分体部署</b>(如第 04 章单装 Prometheus)的排序;kube-prometheus-stack 是<b>一个 chart 打包全部 6 个组件</b>,一条 <code>helm install</code> 下去 Operator 先行拉起,再自动把 Prometheus/Alertmanager CR 翻译成 StatefulSet —— <b>顺序由 chart 内部解决</b>。ns 也不用手动建:命令里 <code>--create-namespace</code> 自动创建 <code>prometheus</code>(new-k8s 上监控栈专用 ns,<b>不沿用</b>线上 fke 的 fke-monitor 命名;想手动建也行:<code>kubectl create ns prometheus</code>)。</div>
+  <h4>先过兼容性检查(kubeVersion 大坑)</h4>
+  <pre><code>kubectl version</code></pre>
+  <div class="warn"><b>chart 48.2.0 声明了 kubeVersion 上限</b>(2023 年的 chart,当时上限 &lt;1.28)。若 new-k8s 版本较新,helm install 会直接报 <code>Chart requires kubeVersion ... which is incompatible</code>。解法(解开包删掉限制再装):
+  <pre><code>tar -xzf kube-prometheus-stack-48.2.0.tgz
+# 编辑 kube-prometheus-stack/Chart.yaml,删除或放宽 kubeVersion: 一行
+helm install prometheus ./kube-prometheus-stack -n prometheus --create-namespace</code></pre></div>
+
+  <h4>values 裁剪(离线/最小可用)</h4>
+  <pre><code># 检查新集群 StorageClass(Prometheus/Alertmanager/Grafana 持久化要用)
+kubectl get sc</code></pre>
+  <pre><code># prom-values-offline.yaml(按需裁剪,未列出的用 chart 默认;SC 实测 = longhorn)
+grafana:
+  adminPassword: "admin123"          # 改掉默认 admin/admin
+  defaultDashboardsEnabled: true
+
+prometheus:
+  prometheusSpec:
+    retention: 5d                     # 自动清理:超期数据块由 TSDB 自动删除(盘小,由 7d 缩为 5d)
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn  # kubectl get sc 实测:龙霍恩
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi           # 原计划 50Gi,节点盘小缩配(容量账见下)
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi            # AM 只存静默/通知状态,1Gi 绰绰有余(原 5Gi)</code></pre>
+  <div class="tip"><b>💡 这块盘是干嘛的(为什么原计划 50Gi):</b>它是 <b>Prometheus TSDB 本地时序库</b> —— 6 节点 node-exporter + kube-state-metrics + kubelet/cAdvisor + 自身指标,每 30s 一轮全部落在这里;Grafana 看的每张图、告警规则回溯的历史,读的都是它。<b>"自动清理"= retention</b>:超过 5d 的数据块由 TSDB 自动删除,无需人工或脚本。<b>容量账:</b>6 节点规模日增约 1~2Gi,5d ≈ 5~10Gi,10Gi 卷刚好够用;若满盘 TSDB 进 emergency(强制删最老块 + 短暂拒写,图表出现断档)—— 磁盘再紧张可降到 <code>retention: 3d</code>,将来盘宽裕了 Longhorn 卷支持在线扩容(改 values 的 storage 后 <code>helm upgrade</code>,SC 默认 allowVolumeExpansion=true)。</div>
+
+  <h4>先演练再正式装</h4>
+  <pre><code># dry-run:本地渲染验证,不落集群(能提前暴露 kubeVersion / 模板错误)
+helm install prometheus ./kube-prometheus-stack-48.2.0.tgz \
+  -n prometheus --create-namespace \
+  -f prom-values-offline.yaml --dry-run &gt; dry-run.yaml
+
+# 正式安装(本地 tgz,全程无外网)
+helm install prometheus ./kube-prometheus-stack-48.2.0.tgz \
+  -n prometheus --create-namespace \
+  -f prom-values-offline.yaml
+
+helm list -n prometheus</code></pre>
+  <div class="warn"><b>⚠️ dry-run 报一大屏 "no matches for kind ... ensure CRDs are installed first":</b>不是故障 —— chart 的 CRD(Prometheus/Alertmanager/ServiceMonitor/PrometheusRule)放在 <code>crds/</code> 特殊目录,<code>--dry-run</code>/template <b>不渲染该目录</b>,而新版 helm 的 dry-run 又要连 apiserver 校验资源映射,集群里还没这些 CRD 就报错。<b>解法:去掉 --dry-run 直接正式安装</b>,helm 会先自动 apply crds/ 再建其余资源;若正式装也偶发同款报错(CRD 注册竞态),手动补一刀再装:<code>tar -xzf kube-prometheus-stack-48.2.0.tgz &amp;&amp; kubectl apply -f kube-prometheus-stack/crds/</code>,等 <code>kubectl get crd | grep monitoring</code> 列出来后重跑 install。</div>
+  <h4>真实安装记录(new-k8s · 2026-11-23)</h4>
+  <pre><code>root@new-k8s-fke-m1:~/k8s-install/pca# helm install prometheus ./kube-prometheus-stack-48.2.0.tgz -n prometheus --create-namespace -f prom-values-offline.yaml
+# ↑ dry-run 先报一屏 no matches for kind(CRD 未装,见上 warn);去掉 --dry-run 正式装,一次成功
+root@new-k8s-fke-m1:~/k8s-install/pca# kubectl get crd | grep monitoring.coreos.com
+alertmanagerconfigs.monitoring.coreos.com              Namespaced   v1alpha1(storage)   2026-11-23T06:19:43Z
+alertmanagers.monitoring.coreos.com                    Namespaced   v1(storage)         2026-11-23T06:19:43Z
+podmonitors.monitoring.coreos.com                      Namespaced   v1(storage)         2026-11-23T06:19:44Z
+probes.monitoring.coreos.com                           Namespaced   v1(storage)         2026-11-23T06:19:44Z
+prometheusagents.monitoring.coreos.com                 Namespaced   v1alpha1(storage)   2026-11-23T06:19:44Z
+prometheuses.monitoring.coreos.com                     Namespaced   v1(storage)         2026-11-23T06:19:44Z
+prometheusrules.monitoring.coreos.com                  Namespaced   v1(storage)         2026-11-23T06:19:45Z
+scrapeconfigs.monitoring.coreos.com                    Namespaced   v1alpha1(storage)   2026-11-23T06:19:45Z
+servicemonitors.monitoring.coreos.com                  Namespaced   v1(storage)         2026-11-23T06:19:45Z
+thanosrulers.monitoring.coreos.com                     Namespaced   v1(storage)         2026-11-23T06:19:45Z
+root@new-k8s-fke-m1:~/k8s-install/pca# helm list -n prometheus
+NAME        NAMESPACE   REVISION  UPDATED                                  STATUS    CHART                         APP VERSION
+prometheus  prometheus  1         2026-11-23 06:19:46.335280842 +0000 UTC  deployed  kube-prometheus-stack-48.2.0  v0.66.0</code></pre>
+  <div class="tip"><b>💡 别把两个"包"搞混(高频疑问):</b>7.5 节用 ctr 导入的是 <code>prom-images.tar</code>(307M <b>镜像包</b>,进的是各节点 containerd,给 kubelet 起容器用);<code>kube-prometheus-stack-48.2.0.tgz</code>(468K)是 <b>Helm chart 包</b> —— <b>不需要"导入"任何地方</b>,它就是 master 上的一个普通文件,<code>helm install</code> 直接读它:照模板渲染出 Deployment/StatefulSet/DaemonSet 清单 &rarr; 提交给 apiserver &rarr; Pod 调度到哪台,kubelet 就从那台的 containerd 本地拿镜像(默认 imagePullPolicy=IfNotPresent,全程无外网)。一句话:<b>镜像是食材(已入各节点冰箱),chart 是菜谱(拿在 master 手里),helm install 照谱做菜</b>。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.7</span> 验收三关 <span style="color:var(--cyan);font-size:14px">· 关一二已过 2026-11-23,关三进行中</span></h3>
+  <table>
+    <tr><th>关</th><th>命令</th><th>预期</th></tr>
+    <tr><td>① Pod 全 Running</td><td><code>kubectl get pods -n prometheus -w</code></td><td>operator / grafana / kube-state-metrics 各 1,<code>prometheus-*</code> 与 <code>alertmanager-*</code> StatefulSet 就绪,<code>node-exporter-*</code> <b>每节点 1 个共 6 个</b></td></tr>
+    <tr><td>② UI 打得开</td><td>临时验证:<code>kubectl -n prometheus port-forward svc/prometheus-grafana 3000:80</code>(隧道随终端断);长期:7.9 节 NodePort+nginx</td><td>浏览器出 Grafana 登录页(admin/admin123)与 Prometheus UI(9090)</td></tr>
+    <tr><td>③ Targets 全 UP</td><td>UI &rarr; Status &rarr; Targets</td><td>node/etcd/apiserver/kube-state-metrics 等 target 状态全 UP;Grafana 自带 Prometheus 数据源,dashboard 直接有数</td></tr>
+  </table>
+
+  <h4>关一真实输出(new-k8s · 2026-11-23 · 补导 config-reloader 后 11/11 全绿)</h4>
+  <pre><code>NAME                                                     READY   STATUS    RESTARTS   AGE
+alertmanager-prometheus-kube-prometheus-alertmanager-0   2/2     Running   0          52m
+prometheus-grafana-5674b9998b-jbprq                      3/3     Running   0          52m
+prometheus-kube-prometheus-operator-5dd4b7f886-rrqvp     1/1     Running   0          52m
+prometheus-kube-state-metrics-6586b7b97-xnnxn            1/1     Running   0          52m
+prometheus-prometheus-kube-prometheus-prometheus-0       2/2     Running   0          52m
+prometheus-prometheus-node-exporter-*                    1/1     Running   0          52m   ← 共 6 个(每节点 1 个)</code></pre>
+  <div class="tip"><b>✅ 关一通过(11/11 全绿):</b>首装时两个 StatefulSet 卡 <code>Init:ErrImagePull</code>(Operator 动态生成的 init 容器 <code>prometheus-config-reloader:v0.66.0</code> 不在任何渲染清单,7.2 盲区坑)→ 补导 6 节点 + 删 Pod 重建即绿;grafana Pod 3 容器(本体 + 2×k8s-sidecar:1.24.6,当期 crictl 验证 grep 模式数漏 kiwigrid);alertmanager-0 首查 1/2 属 config-reloader/主容器就绪中,52 分钟后 2/2(日志实拍:两个容器各自 Starting,配置装载正常);PVC 由 Longhorn 动态建卷约 10s 后 attach 属正常。8 个 Service 一并就位(含 2 个 headless operated)。</div>
+  <div class="tip"><b>✅ 关二通过(2026-11-23):</b>values 固化 NodePort(30800/30801)+ <code>helm upgrade</code> + nginx 二级域反代部署后,<b>new-grafana / new-prometheus / new-alertmanager 三个二级域均已打开</b>(grafana 走 admin 登录,另两个 UI 可达)—— port-forward 使命结束。</div>
+  <div class="tip"><b>对外暴露(可选):</b>参照 <a href="new-k8s.html" style="color:var(--cyan)">new-k8s 集群文档</a> 的 NodePort + NGINX 反代 + basic auth 套路,别裸奔 NodePort。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.8</span> 维护手册(巡检 / 离线升级 / 卸载 / 报错速查)</h3>
+  <h4>日常巡检</h4>
+  <pre><code>kubectl get pods -n prometheus                       # Pod 健康
+kubectl top pods -n prometheus                       # 资源
+kubectl get pvc -n prometheus                        # 存储绑定
+crictl images | grep -cE 'prometheus|grafana'          # 本机镜像还在
+helm list -n prometheus                              # release 状态</code></pre>
+
+  <h4>离线升级(4 步循环)</h4>
+  <pre><code># ① 开发机:拉新版 chart + 动态提取新镜像并 save
+helm pull prometheus-community/kube-prometheus-stack --version &lt;新版本&gt;
+helm template ... | grep 'image:' | ... &gt; images-new.txt
+docker save -o prom-images-new.tar $(tr '\n' ' ' &lt; images-new.txt)
+# ② scp 分发 + ctr 导入(本页 7.4/7.5 小节同款 for 循环)
+# ③ master:helm upgrade(本地 tgz)
+helm upgrade prometheus ./kube-prometheus-stack-&lt;新版本&gt;.tgz -n prometheus -f prom-values-offline.yaml
+# ④ 回退
+helm rollback prometheus &lt;revision&gt; -n prometheus</code></pre>
+
+  <h4>卸载</h4>
+  <pre><code>helm uninstall prometheus -n prometheus
+# PVC 不会随 release 删除,确认不要数据了再手动清:
+kubectl delete pvc --all -n prometheus</code></pre>
+
+  <h4>报错速查</h4>
+  <table>
+    <tr><th>症状</th><th>原因</th><th>解法</th></tr>
+    <tr><td>dry-run 报 <code>no matches for kind "Prometheus/ServiceMonitor/..."</code>(ensure CRDs are installed first)</td><td>CRD 在 chart 的 <code>crds/</code> 目录,dry-run 不渲染且集群尚未注册</td><td>非故障:直接正式 install(helm 自动先装 CRD);仍报则 <code>kubectl apply -f kube-prometheus-stack/crds/</code> 后重装</td></tr>
+    <tr><td>ImagePullBackOff</td><td>该节点漏导镜像 / 导入时没带 <code>-n k8s.io</code>;<b>实测(new-k8s)</b>:StatefulSet init 容器的 <code>prometheus-config-reloader:v0.66.0</code> 不在任何渲染清单里,必漏</td><td>补 <code>ctr -n k8s.io images import</code>(本机+5 worker 循环),再 <code>kubectl delete pod</code> 重建;验证计数时 grep 模式记得含 <code>kiwigrid</code></td></tr>
+    <tr><td>Pending(PVC 绑不上)</td><td>storageClassName 在新集群不存在</td><td><code>kubectl get sc</code> 核对,改 values 里的 SC 名</td></tr>
+    <tr><td>helm install 直接报 kubeVersion 不兼容</td><td>chart 48.2.0 声明的 K8s 版本上限</td><td>7.6 节:解包删 Chart.yaml 的 kubeVersion 行再装</td></tr>
+    <tr><td>node-exporter 某台 CrashLoop</td><td>该节点镜像/权限差异</td><td><code>kubectl describe pod</code> 看事件,<code>crictl images</code> 核对该节点</td></tr>
+  </table>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.9</span> 对外暴露:NodePort + nginx 二级域名(new-grafana / new-prometheus / new-alertmanager.fftaicorp.com) <span style="color:var(--cyan);font-size:14px">· 三域全通 2026-11-23</span></h3>
+  <div class="tip"><b>💡 port-forward ≠ 长期入口:</b><code>kubectl port-forward</code> 是 kubectl 在你终端里开的<b>临时隧道进程</b>(本地端口 → apiserver → Pod),终端一断隧道就没了 —— 它是验证工具,不是服务。要"一直在线"得把 Service 从 ClusterIP 改成 <b>NodePort</b>(worker 常驻监听),再由 nginx 反代 + 二级域名对外 —— 与 argo 30274 / portal 30808 同套路。</div>
+  <h4>① NodePort 写进 values 固化(argo 30274 的教训:手动 patch 会被 upgrade 冲掉)</h4>
+  <div class="warn"><b>合并注意:</b>values 顶层 key(<code>grafana:</code>/<code>prometheus:</code>)<b>各只能出现一次</b> —— 把下面 service: 块合并进原有顶层 key 里,别复制成两个顶层段(helm 只读最后一份,前面全丢)。</div>
+  <pre><code># prom-values-offline.yaml 最终形态(在原有 grafana:/prometheus: 块里各加 service:)
+grafana:
+  adminPassword: "admin123"
+  defaultDashboardsEnabled: true
+  service:
+    type: NodePort
+    nodePort: 30800                  # new-grafana.fftaicorp.com
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30801                  # new-prometheus.fftaicorp.com
+  prometheusSpec:
+    retention: 5d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  service:                           # 7.9 对外暴露:nginx 反代入口
+    type: NodePort
+    nodePort: 30802                  # → new-alertmanager.fftaicorp.com
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi</code></pre>
+  <pre><code># 升级生效(NodePort 固化进 release,以后 upgrade 不丢)
+helm upgrade prometheus ./kube-prometheus-stack-48.2.0.tgz -n prometheus -f prom-values-offline.yaml
+
+# 验证:TYPE 变 NodePort、端口 30800/30801
+kubectl get svc -n prometheus | grep -E "grafana|prometheus-kube-prometheus-prometheus|alertmanager"
+curl -I http://10.18.51.123:30800     # 任一 worker,预期 302 → /login(grafana)
+curl -I http://10.18.51.123:30801     # 预期 302 → /graph(prometheus)
+curl -I http://10.18.51.123:30802     # 预期 200(alertmanager 前端页)</code></pre>
+  <h4>② nginx 反代(new-k8s-nginx-1:/etc/nginx/conf.d/monitoring-observability.conf)</h4>
+  <pre><code># ============================================================================
+# 监控栈 nginx 反代(k8s-monitor · kube-prometheus-stack)
+# 位置:new-k8s-nginx-1 /etc/nginx/conf.d/monitoring-observability.conf
+# 作用:HTTPS(443) → K8s NodePort 30800(grafana) / 30801(prometheus)(任一 worker)
+#       80 仅 301 跳 HTTPS;泛域名证书 _.fftaicorp.com 覆盖两个新二级域
+# DNS:内网加 A 记录 new-grafana / new-prometheus.fftaicorp.com → 本 nginx IP
+# 注意:
+#   1) grafana 的 live 日志流/大屏自动刷新走 WebSocket(/api/live/ws),
+#      顶部 map + proxy_set_header Upgrade/Connection 是它的命脉,勿删
+#   2) grafana 自带登录(admin);prometheus UI 无登录 —— NodePort 旁路务必
+#      防火墙只对 nginx 网关 IP 放行(与 30274/30808 同红线),别全网段裸奔
+#   3) 端口已固化进 values,helm upgrade 不会冲掉(argo 30274 同款坑的解法)
+# ============================================================================
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream new_grafana {
+    server 10.18.51.123:30800 max_fails=3 fail_timeout=10s;
+    server 10.18.51.124:30800 max_fails=3 fail_timeout=10s;
+    server 10.18.51.125:30800 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+
+upstream new_prometheus {
+    server 10.18.51.123:30801 max_fails=3 fail_timeout=10s;
+    server 10.18.51.124:30801 max_fails=3 fail_timeout=10s;
+    server 10.18.51.125:30801 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+
+upstream new_alertmanager {
+    server 10.18.51.123:30802 max_fails=3 fail_timeout=10s;
+    server 10.18.51.124:30802 max_fails=3 fail_timeout=10s;
+    server 10.18.51.125:30802 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+
+server {
+    listen 80;
+    server_name new-grafana.fftaicorp.com new-prometheus.fftaicorp.com new-alertmanager.fftaicorp.com;
+    return 301 https://$host$request_uri;    # 明文仅跳转
+}
+
+# —— Grafana(new-grafana.fftaicorp.com)——
+server {
+    listen 443 ssl http2;
+    server_name new-grafana.fftaicorp.com;
+
+    ssl_certificate     /etc/nginx/ssl/_.fftaicorp.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/_.fftaicorp.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://new_grafana;
+        proxy_http_version 1.1;
+
+        # —— WebSocket(live 流)关键头 ——
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;    # TLS 已在本机终止
+
+        proxy_read_timeout 3600s;    # 大屏长连接/大范围查询
+        proxy_send_timeout 3600s;
+    }
+}
+
+# —— Prometheus(new-prometheus.fftaicorp.com)——
+server {
+    listen 443 ssl http2;
+    server_name new-prometheus.fftaicorp.com;
+
+    ssl_certificate     /etc/nginx/ssl/_.fftaicorp.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/_.fftaicorp.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # 可选加固:prometheus UI 无登录,建议 basic auth
+    # (生成:htpasswd -c /etc/nginx/htpasswd-prom &lt;user&gt;,再取消下面两行注释)
+    # auth_basic "prometheus";
+    # auth_basic_user_file /etc/nginx/htpasswd-prom;
+
+    location / {
+        proxy_pass http://new_prometheus;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        proxy_read_timeout 300s;    # 大范围查询偏慢,放宽
+    }
+}
+
+# —— Alertmanager(new-alertmanager.fftaicorp.com)——
+server {
+    listen 443 ssl http2;
+    server_name new-alertmanager.fftaicorp.com;
+
+    ssl_certificate     /etc/nginx/ssl/_.fftaicorp.com.pem;
+    ssl_certificate_key /etc/nginx/ssl/_.fftaicorp.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # 可选加固:AM UI 无登录,建议 basic auth(htpasswd -c /etc/nginx/htpasswd-am &lt;user&gt;)
+    # auth_basic "alertmanager";
+    # auth_basic_user_file /etc/nginx/htpasswd-am;
+
+    location / {
+        proxy_pass http://new_alertmanager;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        proxy_read_timeout 120s;
+    }
+}
+
+# 部署:scp 本文件到 new-k8s-nginx-1:/etc/nginx/conf.d/monitoring-observability.conf
+#       nginx -t && systemctl reload nginx
+# 验证:curl -kI https://new-grafana.fftaicorp.com   (302 → /login)
+#       curl -kI https://new-prometheus.fftaicorp.com  (302 → /graph)
+#       curl -kI https://new-alertmanager.fftaicorp.com  (200,AM 前端)
+#       (DNS 未就绪先在办公机 hosts 顶一条: &lt;nginx-ip&gt; new-grafana.fftaicorp.com)</code></pre>
+  <div class="warn"><b>安全红线(与 argo 30274 同款):</b>防火墙 30800/30801/30802 <b>只对 nginx 网关 IP 放行</b>,别全网段裸奔 —— prometheus/AM UI 无登录,grafana 是弱口令 admin123。fke 上 30010 裸奔 447 天的教训就在 k8s-issues。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.10</span> 关三之后:都能监控什么 &amp; 查询入门(看数据从这开始)</h3>
+  <div class="tip"><b>💡 "能监控什么"的活清单:</b>打开 <b>https://new-prometheus.fftaicorp.com → Status → Targets</b> —— 每个 job 就是一路采集,全 UP = 数据都在进(这页本身就是<b>关三</b>)。四层分工正好对应 01 章采集层分组表:</div>
+  <table>
+    <tr><th>层</th><th>Targets 页可见的 job</th><th>指标前缀</th><th>监控什么</th></tr>
+    <tr><td>① 节点系统层</td><td>node-exporter ×6(每节点)</td><td><code>node_*</code></td><td>CPU、内存、磁盘 IO、文件系统、网络流量、负载 —— "K8S 内部 sys"就是这层,<b>默认已在抓</b></td></tr>
+    <tr><td>② 容器层</td><td>kubelet / cAdvisor ×6</td><td><code>container_*</code></td><td>每个容器(=每个 Pod)的 CPU/内存/网络/IO,可按 ns/Pod 细分</td></tr>
+    <tr><td>③ K8s 对象层</td><td>kube-state-metrics</td><td><code>kube_*</code></td><td>Pod/Deployment/Node/PVC 的状态计数 —— 问 apiserver 要对象状态,不看进程本身</td></tr>
+    <tr><td>④ 控制面</td><td>apiserver / etcd / scheduler 等</td><td>各自指标</td><td>控制组件健康度(有则 UP;没出现在列表也不影响①②③)</td></tr>
+  </table>
+  <h4>默认指标全景:按"你关心的东西"对号入座(装完即有,零配置)</h4>
+  <table>
+    <tr><th>你关心的</th><th>默认有?</th><th>指标(前缀)</th><th>一眼查询(Graph 页直接跑)</th></tr>
+    <tr><td>Pod 数量</td><td>✅</td><td><code>kube_pod_info</code></td><td><code>count by (namespace) (kube_pod_info)</code></td></tr>
+    <tr><td>节点 CPU</td><td>✅</td><td><code>node_cpu_seconds_total</code></td><td><code>100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)</code></td></tr>
+    <tr><td>节点内存</td><td>✅</td><td><code>node_memory_*</code></td><td><code>100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)</code></td></tr>
+    <tr><td>节点磁盘空间</td><td>✅</td><td><code>node_filesystem_*</code></td><td><code>100 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} * 100)</code></td></tr>
+    <tr><td>节点磁盘 IO</td><td>✅</td><td><code>node_disk_*</code></td><td><code>rate(node_disk_io_time_seconds_total[5m]) * 100</code>(繁忙度%)</td></tr>
+    <tr><td>Pod/容器 CPU</td><td>✅</td><td><code>container_cpu_usage_seconds_total</code></td><td><code>sum by (pod) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))</code></td></tr>
+    <tr><td>Pod/容器内存</td><td>✅</td><td><code>container_memory_working_set_bytes</code></td><td><code>topk(10, sum by (pod) (container_memory_working_set_bytes{container!=""}))</code></td></tr>
+    <tr><td>PVC 卷用量</td><td>✅</td><td><code>kubelet_volume_stats_*</code></td><td><code>kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100</code></td></tr>
+    <tr><td>Pod 状态/重启/OOM</td><td>✅</td><td><code>kube_pod_*</code></td><td>见 7.11 ②③ 组</td></tr>
+    <tr><td>网卡流量 / 负载</td><td>✅</td><td><code>node_network_* / node_load1</code></td><td>见 7.11 ① 组</td></tr>
+    <tr><td>apiserver/etcd</td><td>✅</td><td><code>apiserver_request_*</code></td><td>见 7.11 ⑥ 组</td></tr>
+    <tr><td>业务应用内部指标(QPS/JVM/自定义)</td><td>❌ 默认无</td><td>—</td><td>需应用暴露 /metrics + PodMonitor 接入(7.11 ⑧)</td></tr>
+  </table>
+  <div class="tip"><b>💡 规模感:</b>6 节点默认带来<b>几千条活跃时间序列</b>(跑 <code>prometheus_tsdb_head_series</code> 看实际数)、指标名几百个 —— 全部来自这四个采集器,数据保留 5d(values 的 retention)。想浏览所有指标名:Grafana Explore → Metrics browser。</div>
+  <h4>PromQL 十分钟入门(Graph 页直接粘贴跑)</h4>
+  <div class="tip"><b>语法三要素:</b><b>指标名</b>(如 <code>node_cpu_seconds_total</code>)+ <b>{标签过滤}</b>(如 <code>{mode="idle"}</code>)+ <b>函数/时间窗</b>(如 <code>rate(...[5m])</code> = 5 分钟增速)。counter 类指标必须套 rate 才有意义;跑完点上方 <b>Graph</b> 标签看曲线,时间范围选 1h。</div>
+  <pre><code># 1) 体检总览:所有采集目标存活(1=活,0=死) —— 第一条学的就是它
+up
+
+# 2) 节点清单:六台都在(release 列看内核版本)
+node_uname_info
+
+# 3) 节点 CPU 使用率 %(5m 均值) —— "K8S 内部 sys"核心查询
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# 4) 节点内存使用率 %
+100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)
+
+# 5) 磁盘使用率 %(排除 tmpfs/overlay;Longhorn 盘报警就看它)
+100 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} * 100)
+
+# 6) 各 Pod 的 CPU(单位:核) —— 容器层
+sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))
+
+# 7) 内存占用 Top10 的 Pod(字节)
+topk(10, sum by (namespace, pod) (container_memory_working_set_bytes{container!=""}))
+
+# 8) 异常 Pod 速查(Pending/Failed/Unknown 计数,按 ns)
+sum by (namespace) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0
+
+# 9) 节点心跳(6 行 = 6 台 Ready;哪台消失哪台出事)
+kube_node_status_condition{condition="Ready", status="true"}</code></pre>
+  <h4>不写查询:Grafana 自带看板路径</h4>
+  <p><b>https://new-grafana.fftaicorp.com</b>(admin/admin123)→ 左侧 Dashboards → Browse → General 里 chart 已装好一组(就是 7.6 values 里 <code>defaultDashboardsEnabled: true</code> 的成果,kiwigrid sidecar 从 ConfigMap 加载的):</p>
+  <table>
+    <tr><th>看板</th><th>看什么</th></tr>
+    <tr><td><b>Node Exporter / Nodes</b></td><td>单节点 sys 全景(CPU/内存/磁盘/网络),顶部 instance 下拉切节点 —— "K8S 内部 sys"首选</td></tr>
+    <tr><td><b>Kubernetes / Compute Resources / Cluster</b></td><td>集群总量:CPU/内存的请求·限额·实际用量</td></tr>
+    <tr><td><b>Kubernetes / Compute Resources / Namespace (Pods)</b></td><td>按 ns 逐 Pod 资源(选 prometheus ns 可自查监控栈本身开销)</td></tr>
+    <tr><td><b>Kubernetes / Persistent Volumes</b></td><td>Longhorn 卷容量/状态(Prometheus 10Gi、AM 1Gi 就在这看)</td></tr>
+  </table>
+  <div class="tip"><b>💡 右上角时间范围旁的刷新默认 off</b> —— 设成 30s 或 5m,看板就变成自动刷新大屏(挂墙值班用)。</div>
+  <h4>Grafana 三板斧:看现成 / Explore 查 / 自建面板</h4>
+  <table>
+    <tr><th>姿势</th><th>路径</th><th>什么时候用</th></tr>
+    <tr><td>① 看现成看板</td><td>Dashboards → Browse → 点开任一板</td><td>日常巡检,零查询</td></tr>
+    <tr><td>② Explore 临时查</td><td>左侧<b>指南针图标</b> → 数据源选 prometheus → 粘 PromQL → Run query</td><td>排查时想看"某一条数据" —— 等于把 Prometheus 的 Graph 页搬进 Grafana,还支持同屏分栏对比两条查询</td></tr>
+    <tr><td>③ 自建面板</td><td>任一看板 →右上 Add → Visualization → 查询框粘 7.11 的语句 → 右侧选图型(Time series/Stat/Gauge)→ Apply → Save</td><td>现成看板没有你要的角度(如"只看 3 台 worker 的内存 Top5")</td></tr>
+  </table>
+  <div class="tip"><b>💡 数据源已自动配好:</b>chart 安装时就创建了 prometheus 数据源(指向 svc/prometheus-kube-prometheus-prometheus)—— <b>Grafana 不存数据,它是"读 Prometheus 的画皮"</b>:看板/Explore 里跑的每条查询,都是实时发给 Prometheus 的 PromQL,结果画成图。所以 7.11 的 35 条语句在两边通用:Prometheus Graph 页验证语句 → Grafana 建面板成图。</div>
+  <div class="tip"><b>告警目前"只进不出":</b>chart 自带上百条告警规则(指标越限 → Prometheus 规则触发 → Alertmanager 收到,在 https://new-alertmanager.fftaicorp.com 的 Alerts 页可见),但 <b>receiver 还没配</b>(不发邮件/webhook) —— 要接通知渠道,后续在 values 的 <code>alertmanager.config</code> 里加 receivers,再 helm upgrade 一次(流程与 7.9 增补 alertmanager 完全同款;现成配置+验证命令见 <b>7.13③</b> —— 钉钉桥 Pod 已 Running,只差这最后一步 upgrade)。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.11</span> PromQL 常用查询速查手册(31 条 · 分 8 组)</h3>
+  <div class="tip"><b>💡 用法:</b>全部可在 Prometheus UI(https://new-prometheus.fftaicorp.com → Graph)或 Grafana 的 <b>Explore</b> 页直接粘贴;时间窗 [5m] 按需改,[1h] 看趋势、[5m] 看当下。这些语句同时是<b>自建 dashboard 和告警规则的原料</b> —— 看板是它的曲线形态,告警是它 + 阈值。</div>
+  <h4>① 节点系统层(sys 体检 · node_*)</h4>
+  <pre><code># CPU 使用率%(整节点)
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+# CPU 每核负载(load1/核数,&gt;1 = 过载)
+node_load1 / count by (instance) (node_cpu_seconds_total{mode="idle"})
+# 内存使用率%
+100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)
+# 磁盘空间使用率%(排除 tmpfs/overlay 伪文件系统)
+100 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} * 100)
+# 磁盘繁忙度%(有 IO 在进行的时间占比,持续 &gt;80 = 瓶颈)
+rate(node_disk_io_time_seconds_total{device!~"loop.*"}[5m]) * 100
+# 磁盘读写吞吐(B/s)
+rate(node_disk_read_bytes_total[5m]) + rate(node_disk_written_bytes_total[5m])
+# 网卡流量(B/s,收+发,排除 lo)
+rate(node_network_receive_bytes_total{device!="lo"}[5m]) + rate(node_network_transmit_bytes_total{device!="lo"}[5m])
+# 开机时长(秒)
+node_time_seconds() - node_boot_time_seconds</code></pre>
+  <h4>② 容器/Pod 层(container_* + kube_*)</h4>
+  <pre><code># 各 Pod CPU(单位:核)
+sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))
+# 各 Pod 内存(字节;工作集 = OOM 判定口径)
+sum by (namespace, pod) (container_memory_working_set_bytes{container!=""})
+# 内存占用 Top10
+topk(10, sum by (namespace, pod) (container_memory_working_set_bytes{container!=""}))
+# 近 1 小时重启过的容器(次数;&gt;0 通常在 CrashLoop)
+increase(kube_pod_container_status_restarts_total[1h]) > 0
+# 哪些容器被 OOM 杀过(=1 表示发生过,内存 limit 太紧)
+kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+# CPU 被限流时间占比%(打了 limits 才有数据;&gt;0 说明 limit 太紧在拖慢容器)
+rate(container_cpu_cfs_throttled_periods_total[5m]) / rate(container_cpu_cfs_periods_total[5m]) * 100</code></pre>
+  <h4>③ K8s 对象健康(kube_*)</h4>
+  <pre><code># NotReady 节点(有结果 = 出事,直接报警级)
+kube_node_status_condition{condition="Ready", status!="true"} == 1
+# 各 ns Pod 数量
+count by (namespace) (kube_pod_info)
+# 异常状态 Pod(Pending/Failed/Unknown,按 ns 计数)
+sum by (namespace) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0
+# 副本没到位的 Deployment(可用 &lt; 期望)
+kube_deployment_status_replicas_available < kube_deployment_spec_replicas</code></pre>
+  <h4>④ 存储/PVC(kubelet 上报,比登节点 df 准)</h4>
+  <pre><code># PVC 使用率%(Prometheus 10Gi / AM 1Gi 盘就盯这条)
+kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100
+# 各 PVC 容量清单(字节)
+kubelet_volume_stats_capacity_bytes
+# PV 状态(正常 Failed,出现 Warn/Failed 要查 Longhorn)
+kube_persistentvolume_status_status</code></pre>
+  <h4>⑤ 集群容量账(调度余量 · 排扩容计划用)</h4>
+  <pre><code># 集群可分配 CPU 总核数
+sum(kube_node_status_allocatable{resource="cpu", unit="core"})
+# 已被 Pod requests 占用的 CPU(核)
+sum(kube_pod_container_resource_requests{resource="cpu"})
+# CPU 分配率%(requests/allocatable;&gt;80% 新 Pod 调度开始吃紧)
+sum(kube_pod_container_resource_requests{resource="cpu"}) / sum(kube_node_status_allocatable{resource="cpu", unit="core"}) * 100
+# 内存分配率%
+sum(kube_pod_container_resource_requests{resource="memory"}) / sum(kube_node_status_allocatable{resource="memory", unit="byte"}) * 100</code></pre>
+  <h4>⑥ API/控制面(apiserver)</h4>
+  <pre><code># apiserver 每秒请求数(按返回码;5xx 突增 = 有组件在报错)
+sum by (code) (rate(apiserver_request_total[5m]))
+# apiserver 写操作延迟 p99(秒;持续 &gt;1s 查控制面压力)
+histogram_quantile(0.99, sum by (le) (rate(apiserver_request_duration_seconds_bucket{verb=~"POST|PUT|PATCH|DELETE"}[5m])))</code></pre>
+  <h4>⑦ 监控栈自查(自己的健康自己盯)</h4>
+  <pre><code># 每路采集耗时秒(哪个 job &gt;10s 就单独排查它)
+scrape_duration_seconds
+# Prometheus 自身内存(字节;接近节点内存就要紧)
+process_resident_memory_bytes{job=~"prometheus-.*"}
+# TSDB 活跃时间序列数(几千序列属正常;陡增 = 有标签爆炸)
+prometheus_tsdb_head_series
+# 死掉的采集目标(复习第一条:有结果就是红)
+up == 0</code></pre>
+  <h4>⑧ 高频误区:up 里只见 kube-system?业务 ns 怎么"加监控"?</h4>
+  <div class="tip"><b>up ≠ 集群 Pod 列表</b> —— 它是"采集目标列表"。默认 ServiceMonitor 只给 K8s 基础设施组件(kubelet/cAdvisor/kube-proxy/coredns/apiserver/etcd)建了抓取,它们恰好全住 kube-system,所以 up 一片 kube-system。业务 Pod <b>本来就不会自动出现在 up 里</b>;而 kube-state-metrics 与 cAdvisor 两层<b>早已覆盖所有 ns</b> —— 验证:<code>count by (namespace) (kube_pod_info)</code> 会列出全部 ns 的 Pod 数,<code>sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))</code> 是全部 ns 的容器 CPU。</div>
+  <pre><code># 只有要抓"业务应用自己的 /metrics"(QPS/JVM/自定义指标)才需要动手 —— 建 PodMonitor:
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: my-app
+  namespace: prometheus
+  labels:
+    release: prometheus      # ⚠️ 关键:Operator 默认按 release label 筛,不带会被无视
+spec:
+  namespaceSelector:
+    any: true                # 抓所有 ns 的目标 Pod(或 matchNames: [某ns])
+  selector:
+    matchLabels:
+      app: my-app            # 选中带该 label 的 Pod
+  podMetricsEndpoints:
+    - port: metrics          # Pod spec 里定义的端口名
+      interval: 30s
+# kubectl apply 后,Targets/up 里多出 podmonitor/... 一行 —— 这才是"添加监控"的正确姿势</code></pre>
+  <div class="tip"><b>💡 三条进阶技巧:</b>① <b>改窗</b>:[5m] 看当下、[1h] 看小时趋势,rate/increase 都可换;② <b>改维</b>:sum by (...) 括号里换 label 就换口径(按 node/namespace/pod 任意切);③ <b>这些语句 = 告警规则本体</b> —— 后续配 receiver 时,规则就是"某条表达式 + for 持续时长 + 阈值",chart 自带的几百条规则(Grafana → Alerting → Alert rules 可查)全是这个套路。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.12</span> 告警链路自测:造一个 error Pod 让它报警</h3>
+  <div class="tip"><b>💡 先做零成本秒验:</b>打开 https://new-alertmanager.fftaicorp.com → Alerts —— 应永远有一条 <b>Watchdog</b> 在 firing。这是 chart 自带的心跳告警(severity=none),专门用来证明"Prometheus 规则引擎 → Alertmanager"链路活着;将来配了 receiver,它也是验证通知渠道活信的标准件。</div>
+  <pre><code># error-pod.yaml —— 启动即崩的测试 Pod(离线友好:用节点已有镜像)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: error-pod-test
+  namespace: default
+spec:
+  restartPolicy: Always              # 无限重启 → 进入 CrashLoopBackOff
+  containers:
+  - name: error
+    image: quay.io/prometheus/prometheus:v2.44.0   # 6 节点都有(7.5 导过);换任意本地镜像也行
+    command: ["/nonexistent"]        # 命令不存在 → 启动即失败,退出码 127
+
+kubectl apply -f error-pod.yaml
+kubectl get pod error-pod-test -w    # 盯 RESTARTS 递增、STATUS 变 CrashLoopBackOff(Ctrl-C 退出观察)</code></pre>
+  <table>
+    <tr><th>在哪看</th><th>看什么</th></tr>
+    <tr><td><code>kubectl get pod -w</code></td><td>RESTARTS 按 10s/20s/40s... 退避递增,STATUS &rarr; CrashLoopBackOff</td></tr>
+    <tr><td>Prometheus UI &rarr; Alerts</td><td>搜 CrashLooping:Inactive &rarr; <b>Pending(黄,等 for 时长)</b> &rarr; <b>Firing(红,已发 AM)</b></td></tr>
+    <tr><td>Alertmanager UI &rarr; Alerts</td><td>出现 <b>KubePodCrashLooping</b>(severity=warning),分组 namespace=default,点开带 pod/container 标签</td></tr>
+  </table>
+  <div class="tip"><b>⏱ 预期时间线:</b>0s 首次崩溃 &rarr; 1~2 min 状态转 CrashLoopBackOff &rarr; 2~6 min 规则 KubePodCrashLooping Pending&rarr;Firing &rarr; AM Alerts 页出现。造完故障不用守着,几分钟后回来刷新 AM 页即可。</div>
+  <pre><code># 测完清理
+kubectl delete -f error-pod.yaml
+# AM 里该告警 1~2 分钟自动消失(或短暂转绿色 resolved)—— 顺手验证了告警的"自愈"半边
+# (receiver 配好后,resolved 恢复通知也会发,这条链路就闭环了)</code></pre>
+  <div class="warn"><b>两个别踩的坑:</b>① 别用不存在的镜像名测 —— 那是 <code>ImagePullBackOff</code>,匹配的告警规则不同且离线环境会一直拉网失败;② 别拿系统组件(Prometheus/Longhorn Pod)制造故障来测 —— 用上面这个一次性测试 Pod,删掉即恢复,零风险。</div>
+  <h4>实测实录(new-k8s · 2026-11-23)</h4>
+  <pre><code># error-pod-test 因镜像 tag 与本地不符,实际走了 ImagePullBackOff 分支(坑①亲测翻车)
+# —— 但告警链路照样完整验证通过,AM Alerts 页实测出现:
+KubePodNotReady       pod=error-pod-test   severity=warning   # 创建后 15 分钟整 firing —— for 15m 精确生效
+KubeContainerWaiting  pod=error-pod-test   container=error    severity=warning
+Watchdog              severity=none        # 心跳常亮 = 规则引擎→AM 链路活</code></pre>
+  <div class="tip"><b>🟡 同屏暴露的"误报三连"(接任何通知渠道前必须先治理,否则 24h 轰炸):</b><code>KubeControllerManagerDown / KubeSchedulerDown / KubeProxyDown</code>(critical) + <code>etcdMembersDown</code>×3 + <code>etcdInsufficientMembers</code>×3 + <code>TargetDown</code>(kube-etcd/kube-proxy/kube-controller-manager/kube-scheduler) —— <b>不是集群真坏</b>,是 kubeadm 默认把 scheduler/controller-manager/etcd 的 metrics 端口绑 127.0.0.1(或 https+cert),Prometheus 抓不到 &rarr; up 缺失被当 Down。治理两选:<b>临时</b> = AM UI &rarr; Silences &rarr; New Silence(matcher 粘正则后<b>回车确认成标签</b>;Duration 填 <code>2160h</code>=90 天,UI 不认 d;Creator/Comment 必填),或命令行一键:<code>kubectl exec -n prometheus alertmanager-0 -c alertmanager -- amtool silence add --author=ops --comment='kubeadm cm/scheduler/etcd metrics 误报' --duration=2160h 'alertname=~"KubeControllerManagerDown|KubeSchedulerDown|KubeProxyDown|etcdMembersDown|etcdInsufficientMembers|TargetDown"'</code>;<b>长期</b> = values 给这三组件配可抓端点(改 staticPod 绑定地址或配 https 抓取),属后续优化。</div>
+
+  <h3><span style="color:var(--blue);font-family:Consolas,monospace">7.13</span> 告警发钉钉群(prometheus-webhook-dingtalk 桥) <span style="color:var(--green);font-size:14px">· ✅ 全链路闭环(2026-11-24:webhook_configs 大小写修复→重 upgrade→钉钉群实收告警卡片,AM→桥→钉钉打通)</span></h3>
+  <div class="tip"><b>💡 为什么需要"桥":</b>Alertmanager 原生只支持 email/webhook/slack/pagerduty/wechat 等,<b>没有钉钉</b> —— 钉钉群机器人只认自家 JSON 格式,AM 发的 webhook JSON 它不认。标准解法 = 部一个 <b>prometheus-webhook-dingtalk</b>(timonwong 版)做翻译:</div>
+  <pre><code>AM(原生 webhook JSON) → prometheus-webhook-dingtalk(:8060,翻译成钉钉 markdown) → 钉钉群机器人(oapi.dingtalk.com)</code></pre>
+  <div class="tip"><b>✅ 前置探测实测(2026-11-23,master):</b><code>curl -m 5 -sI https://oapi.dingtalk.com</code> &rarr; <b>HTTP 200 in 0.25s</b>,DNS 正常、无 proxy 直连(ping 30ms)—— 节点可直连公网钉钉 API。遂选定<b>集群内部署</b>(最优):桥跑进 K8s,AM 用 svc 内部域名调用,不依赖 nginx 机等外部机器;镜像先让 kubelet 直接拉,拉不动再 ctr 补(见②尾注)。</div>
+  <h4>① 钉钉群建机器人(群主/管理员操作)</h4>
+  <p>群设置 &rarr; 智能群助手 &rarr; 添加机器人 &rarr; <b>自定义</b> &rarr; 安全设置选<b>加签</b>(得 secret)或<b>自定义关键词</b>填 <code>告警</code> &rarr; 完成后复制 webhook URL(含 <code>access_token=</code>)。</p>
+  <h4>② 部 webhook-dingtalk(集群内 Deployment + Service,ns=prometheus)</h4>
+  <pre><code>cat > dingtalk-webhook.yaml <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dingtalk-webhook-config
+  namespace: prometheus
+data:
+  config.yml: |
+    targets:
+      ops:
+        url: https://oapi.dingtalk.com/robot/send?access_token=你的token
+        secret: 你的加签secret      # 用"自定义关键词"方式则删这行
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dingtalk-webhook
+  namespace: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dingtalk-webhook
+  template:
+    metadata:
+      labels:
+        app: dingtalk-webhook
+    spec:
+      containers:
+      - name: dingtalk-webhook
+        image: timonwong/prometheus-webhook-dingtalk:v2.1.0   # tag 带 v 前缀(2.1.0 不存在)
+        args:
+        - --config.file=/etc/prometheus-webhook-dingtalk/config.yml
+        ports:
+        - containerPort: 8060
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus-webhook-dingtalk
+      volumes:
+      - name: config
+        configMap:
+          name: dingtalk-webhook-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dingtalk-webhook
+  namespace: prometheus
+spec:
+  selector:
+    app: dingtalk-webhook
+  ports:
+  - port: 8060
+    targetPort: 8060
+EOF
+kubectl apply -f dingtalk-webhook.yaml
+kubectl get pod -n prometheus | grep dingtalk    # 等 Running
+
+# 秒级自测(不等 AM,直打桥的 webhook,钉钉群应立即收到卡片):
+PODIP=$(kubectl get pod -n prometheus -l app=dingtalk-webhook -o jsonpath='{.items[0].status.podIP}')
+curl -s -X POST http://$PODIP:8060/dingtalk/ops/send -H 'Content-Type: application/json' \
+  -d '{"version":"4","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"链路自测告警","severity":"warning"},"annotations":{"summary":"webhook-dingtalk 桥活信"}}]}'
+
+# 实测(2026-11-23):节点直拉 docker hub 与 daocloud 代理均超时(ErrImagePull)→ 走 7.4/7.5 标准离线套路:
+# 开发机: docker pull timonwong/prometheus-webhook-dingtalk:v2.1.0
+#         docker save -o dingtalk-webhook.tar timonwong/prometheus-webhook-dingtalk:v2.1.0
+#         scp dingtalk-webhook.tar root@<master-IP>:/root/k8s-install/pca/
+# master: ctr -n k8s.io images import dingtalk-webhook.tar
+#         kubectl delete pod -n prometheus -l app=dingtalk-webhook    # 重建命中本地镜像</code></pre>
+  <div class="warn"><b>⚠️ 实测两连坑(v2.1.0):</b>① tag 带 <code>v</code> 前缀(<code>2.1.0</code> 不存在 &rarr; not found);<b>② 正统用法是 config 文件,不是 flags</b> —— 无论 <code>--ding.profile</code> 写在 args 还是 command,程序启动都必须读到 config 文件(默认 <code>config.yml</code>),缺文件即报 <code>path 'config.yml' does not exist</code> 无限崩溃(镜像自带 CMD 即 <code>--config.file=/etc/prometheus-webhook-dingtalk/config.yml</code>,目录在镜像里、文件要自己挂 ConfigMap)。webhook 路径仍是 <code>/dingtalk/ops/send</code>(ops = targets 键名),AM 侧 url 不变。顺带记法:改启动参数用 args(替换 CMD),换可执行本体才用 command(替换 ENTRYPOINT)。</div>
+  <h4>②½ 常驻确认 + 这个 Pod 的配置面全景(改什么、去哪改、怎么生效)</h4>
+  <p>桥 Pod 已常驻(2026-11-24 实测 <code>kubectl -n prometheus get pods</code>:<code>dingtalk-webhook-db65d6fc6-b99c4  1/1  Running  4h27m</code>,与监控栈同 ns 共存)。高频问题"<b>这个 dingtalk pod 怎么配置</b>"—— 先定位:它是<b>无状态翻译器</b>,不存任何告警状态,自身全部行为由②里那张 <code>dingtalk-webhook-config</code> ConfigMap 决定;而"让告警流进来"则配在 <b>AlertManager 侧</b>(不在本 Pod)。配置面一共四处,对号入座:</p>
+  <table>
+    <tr><th>想改什么</th><th>改哪里</th><th>怎么生效</th></tr>
+    <tr><td>换机器人 / 换 token / 换加签 secret</td><td>ConfigMap <code>dingtalk-webhook-config</code> → <code>config.yml</code> 的 <code>targets.ops.url</code> / <code>secret</code></td><td><code>kubectl -n prometheus edit configmap dingtalk-webhook-config</code> 后<b>删 Pod 重建</b>(ConfigMap 挂载不会自动热载):<code>kubectl -n prometheus delete pod -l app=dingtalk-webhook</code></td></tr>
+    <tr><td>再加一个群(测试群/领导群分渠道)</td><td>同文件 <code>targets:</code> 下加新键(如 <code>ops2:</code>)+ 该群的 url/secret</td><td>同上;新群路径自动变 <code>/dingtalk/ops2/send</code>,AM 侧加一个 receiver 指过去,即可按 severity/ns 分流</td></tr>
+    <tr><td>消息样式(艾特谁 / 自定义模板)</td><td>同文件 <code>mention:</code> 段 / <code>templates</code> 配置</td><td>同上;默认模板已带 severity/summary/状态色,先用默认够用</td></tr>
+    <tr><td><b>让告警真的流进来(当前剩的最后一步)</b></td><td><b>不在这个 Pod 上</b> —— 在 AlertManager 的 receiver(values 的 <code>alertmanager.config</code>)</td><td>下方 ③:helm upgrade 一次,AM 即开始 POST <code>http://dingtalk-webhook.prometheus.svc:8060/dingtalk/ops/send</code>(集群内 svc 直呼)</td></tr>
+  </table>
+  <pre><code># 看 Pod 当前吃的配置(ConfigMap 里那份 config.yml 全文,token/secret 都在这)
+kubectl -n prometheus get configmap dingtalk-webhook-config -o yaml
+
+# 看 Pod 实时日志 —— ③ 接通后,每条告警都会在这里留下一条 POST ... 200
+kubectl -n prometheus logs deploy/dingtalk-webhook -f --tail=20</code></pre>
+
+  <h4>③ values 加 receiver + upgrade(套路同 7.9 增补 alertmanager)</h4>
+  <pre><code># prom-values-offline.yaml 的 alertmanager: 块下追加(注意:传入 config 后将完全接管默认配置)
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30802
+  config:
+    route:
+      receiver: dingtalk                 # 默认路由进钉钉
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h                # 4h 才重复提醒,防轰炸
+      routes:
+      - matchers: ['severity="none"']    # Watchdog 心跳不发钉钉
+        receiver: null-receiver
+    receivers:
+    - name: dingtalk
+      webhook_configs:       # ★必须 snake_case!写成驼峰 webhookConfigs = 整份配置被拒(实测踩坑,见下方排障实录)
+      - url: http://dingtalk-webhook.prometheus.svc:8060/dingtalk/ops/send   # 集群内 svc 直呼,不走 NodePort/nginx
+    - name: null-receiver
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+helm upgrade prometheus ./kube-prometheus-stack-48.2.0.tgz -n prometheus -f prom-values-offline.yaml</code></pre>
+  <p><b>upgrade 后验证四连</b>(生效链:helm → chart Secret 存好 → <b>operator 校验+编译</b>进 <code>-generated</code> Secret → AM 热加载,StatefulSet 不重启。★中间的校验是隐形关卡:配置不合法 operator 直接拒收,AM 继续吃旧配置):</p>
+  <pre><code># ① 看 chart Secret —— 只证明"存进去了"(helm/values 层 OK),★不等于 AM 已加载!(实测教训)
+kubectl -n prometheus get secret alertmanager-prometheus-kube-prometheus-alertmanager \
+  -o jsonpath='{.data.alertmanager\.yaml}' | base64 -d | grep -B2 -A6 dingtalk
+# 实测输出节选:receivers: - name: dingtalk → url 指 svc:8060;route: receiver: dingtalk
+#              + severity="none" → null-receiver(Watchdog 不进群)
+#
+# ①+ ★看 -generated Secret —— 这才是"编译通过 + AM 真正加载"的判据!(2026-11-24 补)
+#    operator 每轮同步把 chart Secret 校验+编译成 alertmanager.env.yaml 写进 -generated;
+#    AM 进程 --config.file 指的正是它(/proc/1/cmdline 实证:/etc/alertmanager/config_out/alertmanager.env.yaml)。
+#    校验失败时 -generated 永不更新、AM 永远吃旧配置 —— 【①成功而①+失败 = 配置被 operator 拒收】
+kubectl -n prometheus get secret alertmanager-prometheus-kube-prometheus-alertmanager-generated \
+  -o jsonpath='{.data.alertmanager\.env\.yaml}' | base64 -d | grep -B2 -A3 dingtalk
+# (jsonpath 若空,先 -o yaml 看真实键名再取)
+#
+# ①++ operator 日志应无 error(有 error 还会同步拉响 PrometheusOperatorSyncFailed 告警):
+kubectl -n prometheus logs deploy/prometheus-kube-prometheus-operator --tail=20 | grep level=error || echo "operator OK"
+
+# ①备 · 想亲眼看 Pod 内路径(★实测踩坑:config.yml 与 config/alertmanager.yaml 两条"教科书路径"
+#    在本环境容器里都不存在 —— operator 版本不同挂载有差异,别背路径,现查两招):
+kubectl -n prometheus exec alertmanager-prometheus-kube-prometheus-alertmanager-0 \
+  -c alertmanager -- cat /proc/1/cmdline | tr '\0' ' '    # --config.file= 后面即真实路径
+kubectl -n prometheus exec alertmanager-prometheus-kube-prometheus-alertmanager-0 \
+  -c alertmanager -- ls -R /etc/alertmanager              # 或直接列目录找 yaml 文件
+
+# ①* 与路径无关的运行时验证:问 AM 自己(容器内 wget 本地 API,grep 计数 ≥1 即已生效)
+kubectl -n prometheus exec alertmanager-prometheus-kube-prometheus-alertmanager-0 \
+  -c alertmanager -- wget -qO- http://localhost:9093/api/v2/status | grep -c dingtalk
+
+# ①grep 无输出 → 先查 values 真带上了没:helm get values prometheus -n prometheus | grep -A5 dingtalk
+
+# ② AM UI 交叉印证:https://new-alertmanager.fftaicorp.com → Status → Configuration
+#    应看到 route.receiver: dingtalk 与指向 svc 内网域名的 webhook url
+
+# ③ 桥侧实锤:盯 webhook 日志,等第一条真告警(④ 的 error-pod)打进来
+kubectl -n prometheus logs deploy/dingtalk-webhook -f --tail=50
+# 实测(2026-11-24):日志仅见②步 curl 自测的 resp_status=200,属正常 —— 桥只对 AM 真推来的告警才有新日志;
+# 若①已 grep 到 dingtalk 却无 AM 流量:先查 GET /api/v2/alerts —— 全量 receivers:[{"name":"null"}]
+# = AM 还在吃默认配置(配置被拒收,见下方排障实录);receivers 已是 dingtalk 才可能是"全被静默"
+# 怀疑 AM 推了没到 → 看 AM 自己的日志:
+#   kubectl -n prometheus logs alertmanager-prometheus-kube-prometheus-alertmanager-0 \
+#     -c alertmanager --tail=100 | grep -iE "notify|error"</code></pre>
+  <div class="warn"><b>⚠️ 顺序别反:先静默误报,再 upgrade。</b>route 一旦指向 dingtalk,所有未被静默的 firing 告警都会按 <code>group_wait 30s</code> 节奏进群 —— 先按 7.12 实录把 KubeControllerManagerDown 等误报三连静默掉,再动 ③。upgrade 万一改坏(AM 起不来/配置报错):<code>helm history prometheus -n prometheus</code> 查 revision,再 <code>helm rollback prometheus &lt;revision&gt; -n prometheus</code> 一键回 7.9 版本。</div>
+  <h4>④ 验证(复用 7.12 的测试链)—— ✅ 已实测闭环(2026-11-24 群收告警卡片)</h4>
+  <pre><code># 0) 秒级链路自测(★绕过 Prometheus 等待周期,直接向 AM 注入告警)—— 推荐 curl 打 v2 API 主路
+#    (可复现、不依赖 amtool 的 flag 版本差异);四小步:
+# 0-1 探活(期望 200)
+curl -s -o /dev/null -w '%{http_code}\n' http://10.18.51.120:30802/-/ready
+# 0-2 注入 firing —— ★endsAt 必须写零值 0001-01-01T00:00:00Z(= 永久 firing)!
+#    实测教训(2026-11-24):endsAt 写成"当前时间" = 告警一落地就是 resolved,AM 对这种
+#    新到即 resolved 的告警不发通知、很快清出列表 —— 群没卡片、GET 也 grep 不到,
+#    行为完全自洽,别误判成链路断了
+curl -s -X POST http://10.18.51.120:30802/api/v2/alerts -H 'Content-Type: application/json' -d '[{
+  "labels": {"alertname":"DingtalkLinkTest","severity":"warning"},
+  "annotations": {"summary":"AM到钉钉链路秒级自测"},
+  "startsAt": "'$(date -u -d '-1 min' +%Y-%m-%dT%H:%M:%SZ)'",
+  "endsAt": "0001-01-01T00:00:00Z" }]'
+# 0-3 确认已入列表(应见 status: firing / endsAt 零值)
+curl -s http://10.18.51.120:30802/api/v2/alerts | grep -A8 DingtalkLinkTest
+# 0-4 盯桥日志等满 30s(group_wait,别太早 Ctrl+C)→ POST resp_status=200 + 群收 firing 卡片
+kubectl -n prometheus logs deploy/dingtalk-webhook -f --tail=20
+# 0-备 amtool 版(在 AM 容器内跑;★实测坑:--url 不存在报 unknown long flag,
+#    地址 flag 全名 --alertmanager.url 且默认即 localhost:9093,干脆不写)
+kubectl -n prometheus exec alertmanager-prometheus-kube-prometheus-alertmanager-0 -c alertmanager -- \
+  amtool alert add alertname=DingtalkLinkTest severity=warning \
+  --annotation=summary=AM到钉钉链路秒级自测
+# 0b) 收到 firing 卡片后必做收尾:补一条 resolved(既是体验"恢复也通知",也终结测试告警 ——
+#     否则它会按 repeat_interval 4h 一直重发)。v2 API 把 endsAt 置为当前即 resolved,走 svc
+#     的 NodePort 30802 不进 Pod;数分钟内群再收一张"已恢复"卡片
+#     ★实测坑(2026-11-24):节点 IP 别照抄别的章节 —— 04 章旧测试集群(qingfeng)是 10.18.170.34,
+#     本集群(new-k8s-fke)节点是 10.18.51.120~125,以 kubectl get nodes -o wide 为准(抄错=超时不通)
+#     万一 30802 不通:kubectl -n prometheus get svc | grep alertmanager 核对端口;
+#     或 port-forward svc/prometheus-kube-prometheus-alertmanager 9093:9093 后改打 localhost:9093
+curl -s -X POST http://10.18.51.120:30802/api/v2/alerts -H 'Content-Type: application/json' -d '[{
+  "labels": {"alertname":"DingtalkLinkTest","severity":"warning"},
+  "annotations": {"summary":"AM到钉钉链路秒级自测"},
+  "startsAt": "'$(date -u -d '-10 min' +%Y-%m-%dT%H:%M:%SZ)'",
+  "endsAt":   "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'" }]'
+# 0c) 核对状态:GET 回看这条测试告警(应显示 status: resolved / endsAt 已置,过一会儿从列表消失)
+curl -s http://10.18.51.120:30802/api/v2/alerts | grep -A8 DingtalkLinkTest
+
+# 1) 先 Silence 误报三连(见 7.12 实录的 matcher),否则接上即轰炸
+# 2) 确认 Watchdog 不发钉钉(被 null-receiver 路由吃掉)
+# 3) 造 error-pod(7.12)→ 15~30 分钟后钉钉群应收到 KubePodNotReady 卡片
+# 4) kubectl delete -f error-pod.yaml → 群里再收一条 resolved(绿色"已恢复")
+# 5) 全程旁证:kubectl -n prometheus logs deploy/dingtalk-webhook -f,每张卡片对应一条 POST 200
+# 全程走完 = 监控→报警→通知→恢复 闭环(01 章"值班手机响"那一环正式落地)</code></pre>
+  <div class="warn"><b>⚠️ 实测排障实录(2026-11-24,已破案):配置"进了 Secret 却没生效"。</b>①<b>判读法</b>:0-3 的 GET 输出里所有告警(含新注入的 DingtalkLinkTest)都是 <code>receivers:[{"name":"null"}]</code> = AM 实际运行的仍是 chart 默认配置(默认 receiver 名就叫 "null",零通知渠道);铁证配套:<code>PrometheusOperatorSyncFailed(controller=alertmanager)</code> 的 startsAt 恰为 helm upgrade 时刻。②<b>真因(operator 日志一击定位)</b>:<code>kubectl -n prometheus logs deploy/prometheus-kube-prometheus-operator --tail=300 | grep -iB2 -A10 "level=error"</code> → <code>yaml: unmarshal errors: line 26: field webhookConfigs not found in type config.plain</code> —— <b>AM 配置文件字段必须 snake_case:<code>webhook_configs</code></b>(驼峰 <code>webhookConfigs</code> 是 JSON API 的写法);AM 严格解析,一个未知字段 = <b>整份配置拒收</b>。③<b>机制链</b>:chart Secret 只证明"存进去了";operator 每轮同步要把 Secret 校验+编译成 <code>alertmanager.env.yaml</code> 写进 <code>-generated</code> Secret,AM 的 --config.file 指的正是它(<code>cat /proc/1/cmdline</code> 实证 = <code>/etc/alertmanager/config_out/alertmanager.env.yaml</code>)—— 编译失败,-generated 停在旧默认配置,AM 永远吃旧的。④<b>修复</b>:values 里 <code>webhookConfigs:</code> → <code>webhook_configs:</code> → 重新 helm upgrade → operator 日志无 error → -generated 里 grep 到 dingtalk → GET alerts 的 receivers 变 dingtalk → 重跑 ④ 注入测试(注意:排障期间注入的测试告警 endsAt 会漂移、过期即清出,别指望自动补推,修完重注)。⑤<b>修复实证(2026-11-24 闭环)</b>:values 改 snake_case 后重新 upgrade,operator error 消失、-generated 编译产物含 dingtalk、注入测试告警 30s 后<b>钉钉群实收告警卡片</b> —— AM→桥→钉钉全链路打通,本章闭环。</div>
+  <div class="tip"><b>💡 防轰炸三件套(都已在上面 values 里):</b><code>repeat_interval 4h</code>(未处理的告警 4 小时才重发)、<code>group_interval 5m</code>(同组新告警 5 分钟合批)、Watchdog 走 null-receiver(心跳永不进群)。误报治理靠 Silences(7.12)。</div>
+
+  <div class="tip"><b>✅ 本章(07)小结(2026-11-23 实测):</b>离线链路 = <b>线上锚版本 → 开发机下载(tgz+动态提镜像) → save 打包(307M) → scp 分发 6 节点 → ctr 导入 → helm install 本地 tgz</b>,<b>11 Pod 全绿</b>。四大坑:<code>-n k8s.io</code> 不能省、DaemonSet 全节点导、kubeVersion 上限(本次未触发)、<b>Operator 动态生成 StatefulSet 的 config-reloader 镜像是渲染盲区必漏</b>(补导即绿)。进度:7.6/7.7 关一关二已过(三域全通)、关三经 7.12 告警实测旁证(Watchdog+error-pod 两条真告警实证链路)、7.9 三域对外已通、7.10/7.11 查询教学+31 条速查已补、7.12 告警自测实录完成(含误报三连治理预案)、7.13 钉钉桥 Running+自测卡片进群、③ 已破案(2026-11-24):values 里驼峰 <code>webhookConfigs</code>(应为 snake_case <code>webhook_configs</code>)致 operator 校验<b>整份拒收</b>、AM 一直吃 -generated 里的旧默认配置(GET 全量 receivers:[{"name":"null"}] 即此判读;<b>生效判据 = 看 -generated Secret 而非 chart Secret</b>,详见 7.13 排障实录),④ 已闭环(2026-11-24:webhook_configs 修复→重 upgrade→钉钉群实收告警卡片,AM→桥→钉钉全链路打通,排障实录见 7.13)。</div>
 </section>
 
 <footer>

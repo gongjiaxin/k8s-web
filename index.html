@@ -6,14 +6,14 @@
 <title>清风 · K8S Web · Kubernetes 学习中心</title>
 <style>
   :root{
-    --bg:#0b1220; --card:#121a2b; --line:#22304a; --txt:#dbe4f3;
-    --muted:#8fa3c0; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
-    --orange:#f6ad55; --purple:#b794f4; --code:#0d1526;
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --blue:#326ce5; --cyan:#4fd1c5; --green:#48bb78;
+    --orange:#f6ad55; --purple:#b794f4; --code:#161b22;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.7}
   .wrap{max-width:1100px;margin:0 auto;padding:0 24px}
-  header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0e1729,#0b1220);padding:56px 0 40px;text-align:center}
+  header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#161b22,#0d1117);padding:56px 0 40px;text-align:center}
   .logo{width:84px;height:84px;margin:0 auto 18px;border-radius:18px;background:var(--blue);
     display:flex;align-items:center;justify-content:center;font-size:40px;box-shadow:0 8px 30px rgba(50,108,229,.45)}
   h1{font-size:34px;letter-spacing:1px}
@@ -89,21 +89,38 @@
       <span class="lbl">快捷:</span>
       <button data-w="elk">🪵 ELK 日志</button>
       <button data-w="argocd">🦑 ArgoCD</button>
+      <button data-w="workflow">🌪️ Argo Workflows</button>
       <button data-w="ingress">🚪 Ingress</button>
       <button data-w="mysql">🗄️ MySQL</button>
       <button data-w="证书">🔐 证书</button>
       <button data-w="监控">📊 监控</button>
       <button data-w="排障">🧯 排障</button>
       <button data-w="命令">⌨️ 命令</button>
+      <button data-w="helm">⛵ Helm 应用部署</button>
+      <button data-w="cka">🎓 CKA 备考</button>
     </div>
   </div>
   <div class="grid" id="docs">
+
+    <a class="card hot" href="k8s-cka.html" data-k="cka 考试 认证 cncf linux foundation 备考 学习 集群升级 upgrade kubeadm drain uncordon apt-mark unhold 题库 killer.sh 模拟 17题 2小时 实操 官方文档 及格">
+      <div class="icon">🎓</div>
+      <h3>CKA 备考学习(Certified Kubernetes Administrator)</h3>
+      <p>⭐基于实操的认证:17 道题 / 限时 2 小时 / 真实多集群环境解题。五大领域权重图(故障排查 30% 最高)、考试可访问官方文档地址清单;<b>题目 1:集群升级 10 步全流程已精讲</b>(控制平面优先 → drain → 解锁包 → kubeadm upgrade apply → uncordon),题目 2~17 逐题精讲持续更新。</p>
+      <span class="tag">● 置顶 · 持续更新 · 点击进入 →</span>
+    </a>
 
     <a class="card top-issue" href="k8s-issues.html">
       <div class="icon">🚨</div>
       <h3>K8S 使用问题总汇</h3>
       <p>排障一本通:kubeadm 安装失败(Swap/etcd 残留/端口占用)、磁盘满与 DiskPressure 驱逐、挂载失败(NFS/subPath/multi-attach)、权限拒绝(fsGroup/SELinux/RBAC)、拉不下镜像(国内加速/离线导入/imagePullSecrets),外加线上数据库磁盘满的止血与 PVC 在线扩容实战。</p>
       <span class="tag">● 9 大问题 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-monitor.html" data-k="prometheus 普罗米修斯 监控 离线 offline pca 镜像 chart save scp ctr import helm fke-monitor alertmanager grafana 三件套 operator kube-prometheus-stack 下载">
+      <div class="icon">📊</div>
+      <h3>K8S 监控三件套(Prometheus + AlertManager + Grafana)</h3>
+      <p>⭐先装哪一个?先看一张图确认三者关系与依赖:Prometheus 是心脏(采集+TSDB 存储+告警规则评估)→ AlertManager 是嘴(被动收告警,去重分组发钉钉/邮件)→ Grafana 是脸(接数据源画图);04 章 Prometheus Helm 实战(装→验→Ingress 全开放+basic auth)、07 章 kube-prometheus-stack <b>离线安装实战(new-k8s·pca)</b>:线上版本锚点(chart 48.2.0)→开发机下载+镜像动态提取→docker save 307M→scp 分发 6 节点→ctr 导入(6 镜像×6 节点已验证)→Helm 本地包安装,三大坑全收录,全程真实命令输出。</p>
+      <span class="tag">● 04/07 章已上线 · 点击进入 →</span>
     </a>
 
     <a class="card hot" href="elk.html" data-k="elk efk lk 日志 log logging kibana elasticsearch es logstash kafka loggie 采集 收集 存储 保留 ilm 巡检 监控 告警">
@@ -120,25 +137,18 @@
       <span class="tag">● 已上线 · 点击进入 →</span>
     </a>
 
+    <a class="card hot" href="argoworkflows.html" data-k="workflow argo workflows 工作流 跑批 流水线 dag cronworkflow 离线 offline 单点 chart 0.45.28 v3.7.9 ctr import helm 验收 hello-world mini-pipeline nginx nodeport 30274 反代 collecte-batch aurora 单点">
+      <div class="icon">🌪️</div>
+      <h3>Argo Workflows 全档案(线上 fke + new-k8s 离线安装)</h3>
+      <p>⭐与 ArgoCD 一字之差的"另一个 Argo":线上篇(01~08)——定位(Helm release fke,argo ns,v3.7.9 双组件)、与 ArgoCD 全面对比表(谁管部署谁管跑批)、组件架构实景(controller :8080 是 metrics 不是 API)、生产跑批现状(collecte-batch + kubeflow 残留)、aurora-build 归档机制摸底;离线篇(09)——<b>new-k8s 单点部署同款 v3.7.9</b>:开发机下载(chart 0.45.28+镜像+CLI)→5 节点 ctr 导入(含 argocli 缺失补导坑)→Helm values 全文四大坑→验收三关+mini-pipeline→NodePort+nginx 域名反代,已实操上线。</p>
+      <span class="tag">● 01-09 章已上线 · 点击进入 →</span>
+    </a>
+
     <a class="card hot" href="new-k8s.html">
       <div class="icon">🐂</div>
       <h3>new-k8s 集群部署文档(Longhorn UI 对外开放)</h3>
       <p>⭐从 ClusterIP 到安全可访问全流程:NodePort(命名端口 patch 坑)→ NGINX 多节点轮询反代 → htpasswd Basic Auth → 防火墙堵 NodePort 旁路;附 502 分层排查决策树、Longhorn Dashboard 指标速查,以及线上 fke 集群同款隐患(30010 裸奔 447 天)加固方案。</p>
       <span class="tag">● 已上线 · 点击进入 →</span>
-    </a>
-
-    <a class="card hot" href="k8s-mysql-1040.html">
-      <div class="icon">🚨</div>
-      <h3>线上 MySQL 报错实录(Error 1040 · Router 连接打满)</h3>
-      <p>⭐exporter 每 30 秒报 "Too many connections to MySQL Router" + 每 2 分钟 connection refused:时间轴轮询规律 → 七步排查(限额 3000 已配 / processlist 真实连接只有个位数 / 主库日志 0 条打满 / /proc/net/tcp 抓现行)→ 根因 = 3×3000 僵尸连接占满 Router + 探针"永真"致死 Pod 仍在 Service;一次 rollout restart 结案,附后期巡检命令、判读标准与加固清单。</p>
-      <span class="tag">● 已上线 · 点击进入 →</span>
-    </a>
-
-    <a class="card hot" href="k8s-monitor.html">
-      <div class="icon">📊</div>
-      <h3>K8S 监控三件套(Prometheus + AlertManager + Grafana)</h3>
-      <p>⭐先装哪一个?先看一张图确认三者关系与依赖:Prometheus 是心脏(采集+TSDB 存储+告警规则评估)→ AlertManager 是嘴(被动收告警,去重分组发钉钉/邮件)→ Grafana 是脸(接数据源画图);附安装顺序结论表、依赖矩阵(数据流 ≠ 依赖方向)与三误区辟谣;04 章 Prometheus Helm 实战已上线 —— 前置检查→values 裁剪→一键安装→验收三关→Ingress 域名全开放+basic auth 加固,全程真实命令输出。</p>
-      <span class="tag">● 大纲已上线 · 点击进入 →</span>
     </a>
 
     <a class="card hot" href="k8s-oom.html">
@@ -187,6 +197,41 @@
       <div class="icon">🐳</div>
       <h3>Harbor 安装与使用</h3>
       <p>私有镜像仓库:K8S+Helm 部署(独立 PVC)、流量链路实景图(外层NGINX→ingress-nginx→Ingress→Svc→Pod)、日常运维命令、实战推送、Robot 账号对接 CI、标签保留策略,外加 Pending 23h / admission webhook 断链两大排障实录。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-gitlab.html" data-k="gitlab 吉特 lab 代码仓库 git ci cd devops omnibus chart 离线 offline webservice sidekiq gitaly registry root 密码 备份 backup-utility runner 猎狐">
+      <div class="icon">🦊</div>
+      <h3>K8S Helm 部署 GitLab(流程+日常命令)</h3>
+      <p>官方 gitlab/gitlab Chart 全家桶实战:组件构成与选型(webservice/sidekiq/gitaly/registry/内置PG·Redis·MinIO)、版本锚定(chart↔GitLab 大版本对照)、离线准备(镜像 3GB+ 的 save→scp→ctr 四连)、values 全文(longhorn 持久化/复用 ingress-nginx/离线禁 cert-manager)、安装四步与 <b>root 初始密码 24h 红线</b>、nginx 反代入口与首登加固(关公开注册)、backup-utility 备份 + rails-secret 单独备、root 密码重置、6 类排障速查。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-jenkins.html" data-k="jenkins 詹金斯 ci cd devops 流水线 pipeline 构建 jenkins_home 插件 plugin 动态 agent kubernetes lts jdk 离线 预置 initialadminpassword 备份">
+      <div class="icon">🤵</div>
+      <h3>K8S Helm 部署 Jenkins(流程+日常命令)</h3>
+      <p>jenkins/jenkins Chart 实战:Master 常驻 + 动态 Agent 按需起 Pod 架构、LTS 版本锚定、values 全文(插件全锁版本/JCasC 配置即代码/longhorn 持久化 jenkins_home)、安装与 initialAdminPassword 取密、<b>离线插件预置法</b>(jenkins-plugin-cli 开发机预下载)、升级/滚动重启/jenkins_home 备份与灾难恢复、动态 Agent 验证、5 类排障速查。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-rancher.html" data-k="rancher 牛 多集群 管理 面板 dashboard cattle-system cattle fleet webhook bootstrap tls 证书 续期 备份 rancher-backup 纳管 导入">
+      <div class="icon">🐄</div>
+      <h3>K8S Helm 部署 Rancher(流程+日常命令)</h3>
+      <p>rancher stable 渠道 Chart 实战:多集群管理面定位与资源要求、cattle-system 落地、域名+TLS 必配(自备证书 secret tls-rancher-ingress)、bootstrap 引导密码一次取、证书续期三步、rancher-backup Operator 定期备份、下挂集群导入;"想清楚再装"警示(卸载残留)、自签证书一年到期 / rancher-webhook 拦截 apply / agent 不健康等 5 类排障。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-redis.html" data-k="redis 缓存 cache 主从 复制 replication sentinel 哨兵 bitnami bitnamilegacy 迁移 maxmemory oom 慢查询 slowlog 大key bigkeys rdb aof bgsave 密码轮转 servicemonitor 监控">
+      <div class="icon">⚡</div>
+      <h3>K8S Helm 部署 Redis(流程+日常命令)</h3>
+      <p>Bitnami Redis Chart 实战:standalone/主从/哨兵三形态选型(缓存 vs 数据存储定位决断)、<b>bitnamilegacy 镜像迁移坑</b>(2025-08 同 MySQL 篇)、1主1从 values 全文(maxmemory 与 limits 配套防 OOM)、PING/INFO replication 验证法、读副本扩容/密码轮转/slowlog/大 key 扫描、RDB 备份异机取回 + ServiceMonitor 接 07 章监控、5 类排障速查。</p>
+      <span class="tag">● 已上线 · 点击进入 →</span>
+    </a>
+
+    <a class="card hot" href="k8s-pgsql.html" data-k="postgresql pgsql pg 数据库 database bitnami bitnamilegacy 单机 主从 复制 psql pg_dump dumpall 备份 恢复 pvc 扩容 密码 认证 连接数 max_connections servicemonitor 监控">
+      <div class="icon">🐘</div>
+      <h3>K8S Helm 部署 PostgreSQL(流程+日常命令)</h3>
+      <p>Bitnami PostgreSQL Chart 实战:单机/1主1备选型口诀、<b>大版本升级红线</b>(16→17 必须 dump/restore)、bitnamilegacy 镜像迁移坑、values 全文(auth 三要素/longhorn/复制开关)、psql 建库建用户授权/体积/活动连接体检、PVC 在线扩容、pg_dump 与 pg_dumpall 备份恢复全流程(含定时备份思路)、密码不回写坑等 5 类排障。</p>
       <span class="tag">● 已上线 · 点击进入 →</span>
     </a>
 

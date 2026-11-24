@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · K8S Helm 部署 Jenkins · K8S Web</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--muted:#8b949e;--blue:#326ce5;--cyan:#4fd1c5;--green:#48bb78;--orange:#f6ad55;--purple:#b794f4;--code:#161b22;--red:#fc8181}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / Helm 部署 Jenkins</span></div></div>
+<header class="doc wrap">
+  <h1>Helm 部署 Jenkins<small>jenkins/jenkins Chart · LTS 版本锚定 · 离线插件预置 · 动态 Agent · 日常运维命令速查(适配 new-k8s 离线环境)</small></h1>
+</header>
+<div class="wrap">
+<nav class="toc"><b>目录</b><ol>
+  <li><a href="#j1">认识与选型:Master + 动态 Agent</a></li>
+  <li><a href="#j2">版本锚定与离线准备</a></li>
+  <li><a href="#j3">values 配置全文</a></li>
+  <li><a href="#j4">安装与初始密码</a></li>
+  <li><a href="#j5">访问入口与首登</a></li>
+  <li><a href="#j6">日常运维命令速查</a></li>
+  <li><a href="#j7">排障速查</a></li>
+</ol></nav>
+
+<section id="j1">
+  <h2><span class="no">J1</span>认识与选型:Master + 动态 Agent</h2>
+  <p>Jenkins 跑在 K8s 上的正确姿势是 <b>Master 常驻 Pod + Agent 按需起 Pod</b>(Kubernetes plugin 内置):任务来了才拉起 agent 容器,跑完即销毁 —— 不占常驻资源、天然隔离、并发随便开:</p>
+  <pre><code>Jenkins Master(controller,StatefulSet×1,PVC 存 jenkins_home)
+   │  收到 Job → 按 Pod Template 动态创建 agent Pod(maven/jnode/dind 等按需镜像)
+   ├──▶ agent-pod-abc123(Job1:maven 构建)── 跑完销毁
+   └──▶ agent-pod-xyz789(Job2:docker 打包)── 跑完销毁</code></pre>
+  <table>
+    <tr><th>形态</th><th>资源</th><th>适用</th></tr>
+    <tr><td>★ <code>jenkins/jenkins</code> Chart + 动态 Agent(本文)</td><td>Master 2C4G 起步,agent 按需</td><td>标准 CI,构建量大</td></tr>
+    <tr><td>Master + 固定 agent(物理机/虚机)</td><td>—</td><td>构建环境特殊(需 GPU/本地缓存)时补充</td></tr>
+  </table>
+  <div class="tip"><b>💡 与 GitLab CI 的分工(本站生态):</b>GitLab 存代码(见 <a href="k8s-gitlab.html">GitLab 篇</a>),Jenkins 负责复杂流水线(多阶段审批、跨仓库、遗留脚本),二者通过 webhook/多分支流水线协作;纯 GitLab 体系也可只用 gitlab-runner。</div>
+</section>
+<section id="j2">
+  <h2><span class="no">J2</span>版本锚定与离线准备</h2>
+  <pre><code># 开发机:加仓库、锁 LTS 版本、下 tgz
+helm repo add jenkins https://charts.jenkins.io && helm repo update
+helm search repo jenkins/jenkins --versions | head -5
+# Jenkins 版本规则:每 12 周一个 LTS(如 2.462.3);chart 5.x 配 Jenkins 2.4xx —— 锁 LTS 别用 weekly
+helm pull jenkins/jenkins --version 5.8.1               # 得 jenkins-5.8.1.tgz
+
+# 镜像清单(controller 1 个;agent 镜像按构建需要另备 maven/node/dind 等)
+helm template jenkins ./jenkins-5.8.1.tgz -n jenkins -f values-jenkins.yaml \
+  | grep -oP 'image:\s*\K\S+' | tr -d '"' | sort -u
+
+# 离线四连(同 07 章套路):
+docker save -o jenkins-images.tar jenkins/jenkins:2.462.3-jdk17 ...
+scp jenkins-5.8.1.tgz jenkins-images.tar root@10.18.51.120:/root/k8s-install/pca/
+ctr -n k8s.io images import jenkins-images.tar
+helm install jenkins ./jenkins-5.8.1.tgz -n jenkins --create-namespace -f values-jenkins.yaml</code></pre>
+  <div class="warn"><b>⚠️ 离线最大的坑 = 插件:</b>chart 默认在首启时联网下载 <code>installPlugins</code> 列表 —— 离线集群必卡死。解法见 <a href="#j7">J7</a>(开发机 jenkins-plugin-cli 预下载 → 打进 PVC/initContainer 挂载),values 里务必锁死插件版本号。</div>
+</section>
+
+<section id="j3">
+  <h2><span class="no">J3</span>values 配置全文</h2>
+  <pre><code>cat &gt; values-jenkins.yaml &lt;&lt;'EOF'
+controller:
+  image:
+    tag: "2.462.3-jdk17"            # ★锁 LTS
+  serviceType: NodePort
+  nodePort: 32080                   # 快速入口(正式走 ingress 也可)
+  jenkinsUrl: http://jenkins.fftaicorp.com
+  installPlugins:                   # ★全部锁版本(离线预置见 J7)
+    - kubernetes:4285.v50ed5de9a_366
+    - workflow-aggregator:596.v8c21c963d92d
+    - workflow-job:1400.v7fd111b_on65f
+    - credentials-binding:681.vf91669a_32e45
+    - git:5.5.1
+    - configuration-as-code:1836.vccda_4a_122a_a_e
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits:   {cpu: "2",  memory: 4Gi}
+  JCasC:
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "new-k8s CI Server"
+persistence:
+  enabled: true
+  storageClass: longhorn            # ★jenkins_home(任务/凭据/插件)全在这
+  size: 20Gi
+agent:
+  enabled: true                     # 动态 agent(Kubernetes plugin 内置)
+  podName: "default"
+  customJenkinsLabels:
+    - "build"
+EOF</code></pre>
+  <div class="tip"><b>💡 一切配置即代码(JCasC):</b>界面里点出来的设置重启不丢的原因全在 <code>jenkins_home/casc</code>;values 里能写的别去 UI 点,升级/迁移才可复现。</div>
+</section>
+
+<section id="j4">
+  <h2><span class="no">J4</span>安装与初始密码</h2>
+  <pre><code>helm install jenkins ./jenkins-5.8.1.tgz -n jenkins --create-namespace -f values-jenkins.yaml
+kubectl -n jenkins get pods -w              # jenkins-0 1/1 Running 即就绪
+
+# ★初始 admin 密码(装完立刻取,首登后建议改掉)
+kubectl -n jenkins exec jenkins-0 -c jenkins -- cat /var/jenkins_home/secrets/initialAdminPassword
+
+# 预设方式(values 里写死,免"取密码"一步):
+#   controller.admin.username: admin
+#   controller.admin.password: Jenkins-Prod-2026     (生产走 existingSecret)
+
+kubectl -n jenkins get svc                   # jenkins 32080 即 NodePort 入口</code></pre>
+</section>
+
+<section id="j5">
+  <h2><span class="no">J5</span>访问入口与首登</h2>
+  <pre><code># 快速入口:任意节点 IP:32080(NodePort)
+curl -I http://10.18.51.120:32080/login          # 200 即通
+# 正式入口:改 ClusterIP + Ingress + 外层 nginx 反代(套路同 GitLab G5,换域名即可)</code></pre>
+  <ul>
+    <li>首登:admin + <code>initialAdminPassword</code> → 插件选择页<b>离线环境直接点 "Select plugins to install" 的关闭/Skip</b>(联网下载必卡死)。</li>
+    <li>进去第一件事:改 admin 密码(System → Security)。</li>
+  </ul>
+</section>
+
+<section id="j6">
+  <h2><span class="no">J6</span>日常运维命令速查</h2>
+  <pre><code># ── 升级(锁 LTS 同系)/ 滚动重启 ──
+helm upgrade jenkins ./jenkins-5.8.1.tgz -n jenkins -f values-jenkins.yaml
+kubectl -n jenkins rollout status sts jenkins
+kubectl -n jenkins rollout restart sts jenkins
+
+# ── 备份 = 备 jenkins_home(任务/凭据/插件/配置全在这一个 PVC)──
+kubectl -n jenkins get pvc
+kubectl -n jenkins cp jenkins-0:/var/jenkins_home ./jenkins_home_$(date +%F) -c jenkins
+#   (或 Longhorn 卷快照/Retrospect 备份;恢复 = 反向 cp 回去重启)
+
+# ── 状态观察 ──
+kubectl -n jenkins logs jenkins-0 -c jenkins --tail=100
+kubectl top pod -n jenkins
+
+# ── 动态 agent 验证:跑一个任务时盯住 ──
+kubectl -n jenkins get pods -w
+#   build-agent-xxx 起来 → 跑完 Terminating 消失 = 动态调度正常
+
+# ── 凭据/任务都在 PVC 里,灾难恢复 = 新集群 + 原 PVC + 同版本 chart 重新 install ──</code></pre>
+</section>
+
+<section id="j7">
+  <h2><span class="no">J7</span>排障速查(含离线插件预置法)</h2>
+  <h3>离线预置插件(核心坑,开发机做一次)</h3>
+  <pre><code># 1) plugins.txt(与 values 里 installPlugins 一致,全部锁版本)
+cat &gt; plugins.txt &lt;&lt;'EOF'
+kubernetes:4285.v50ed5de9a_366
+workflow-aggregator:596.v8c21c963d92d
+git:5.5.1
+configuration-as-code:1836.vccda_4a_122a_a_e
+EOF
+# 2) 用官方镜像内置的 jenkins-plugin-cli 预下载(开发机有网)
+docker run --rm -v "$PWD:/ref" jenkins/jenkins:2.462.3-jdk17 \
+  jenkins-plugin-cli --plugin-file /ref/plugins.txt -d /ref/plugins
+# 3) 两种落地:
+#    a. 自建镜像 FROM jenkins/jenkins:2.462.3-jdk17 + COPY plugins/ /var/jenkins_home/plugins/(推荐)
+#    b. 直连救急:kubectl -n jenkins cp ./plugins jenkins-0:/var/jenkins_home/ -c jenkins 后重启 StatefulSet</code></pre>
+  <table>
+    <tr><th>症状</th><th>真因</th><th>处置</th></tr>
+    <tr><td>首启卡 Getting Started</td><td>联网下载插件超时</td><td>离线必现 → J7 预置法;已卡的 Pod 删掉重建</td></tr>
+    <tr><td>PVC Pending</td><td>storageClass 拼错/容量超限</td><td><code>kubectl get sc</code> 核对</td></tr>
+    <tr><td>agent Pod 起不来</td><td>默认 ServiceAccount 无权限/镜像缺</td><td>看 agent Pod events;补导镜像或自建 SA+RBAC</td></tr>
+    <tr><td>Webhook 403</td><td>CSRF Crumb 校验</td><td>Git 侧 webhook 加凭证,或 Jenkins 配 "Allow anonymous read"</td></tr>
+    <tr><td>升级后任务全丢</td><td>PVC 没挂上/重建了 PVC</td><td>灾难恢复 = 恢复 jenkins_home 备份</td></tr>
+  </table>
+</section>
+</div>
+<footer>K8S Web · Jenkins on Kubernetes · 配套:<a href="k8s-gitlab.html">GitLab</a> · <a href="harbor.html">Harbor</a> · <a href="k8s-cmd.html">kubectl 速查</a></footer>
+</body>
+</html>

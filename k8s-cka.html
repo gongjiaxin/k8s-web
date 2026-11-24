@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · CKA 备考学习 · K8S Web</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--muted:#8b949e;--blue:#326ce5;--cyan:#4fd1c5;--green:#48bb78;--orange:#f6ad55;--purple:#b794f4;--code:#161b22;--red:#fc8181}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  section,h2[id],h3[id]{scroll-margin-top:72px}
+  .topbar{position:sticky;top:0;z-index:9;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 0}
+  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .topbar a.home{color:var(--cyan);text-decoration:none;font-weight:600}
+  .topbar a.home:hover{text-decoration:underline}
+  .topbar .crumb{color:var(--muted);font-size:13px}
+  header.doc{padding:44px 0 8px}
+  h1{font-size:30px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:8px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:24px 0 8px}
+  .toc b{color:var(--cyan)}
+  .toc ol{margin:8px 0 0 20px;columns:2;column-gap:36px}
+  .toc a{color:var(--txt);text-decoration:none}
+  .toc a:hover{color:var(--blue)}
+  section{padding:34px 0 6px;border-top:1px dashed var(--line);margin-top:30px}
+  section:first-of-type{border-top:none}
+  h2{font-size:22px;margin-bottom:14px}
+  h2 .no{color:var(--blue);margin-right:8px;font-family:Consolas,monospace}
+  h3{font-size:16.5px;margin:18px 0 8px;color:var(--cyan)}
+  h4{font-size:15px;margin:14px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0 8px 22px}
+  li{margin:4px 0}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;color:var(--orange);word-break:break-all}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#c8d6f0;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:rgba(50,108,229,.14);color:var(--cyan);white-space:nowrap}
+  td code{white-space:nowrap}
+  .tip,.warn{border-radius:10px;padding:12px 16px;margin:12px 0;font-size:14px}
+  .tip{background:rgba(72,187,120,.08);border:1px solid rgba(72,187,120,.35)}
+  .warn{background:rgba(252,129,129,.07);border:1px solid rgba(252,129,129,.35)}
+  .tip b{color:var(--green)} .warn b{color:var(--red)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:26px 0;text-align:center;color:var(--muted);font-size:13px}
+  footer a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / CKA 备考学习</span></div></div>
+<header class="doc wrap">
+  <h1>CKA 备考学习(Certified Kubernetes Administrator)<small>基于实操的认证 · 17 道题 / 限时 2 小时 · 真实集群环境解决实际问题 · 题目 1 集群升级已精讲,题目 2~17 逐题持续更新</small></h1>
+</header>
+<div class="wrap">
+<nav class="toc"><b>目录</b><ol>
+  <li><a href="#c1">考试概览:17 道题考什么</a></li>
+  <li><a href="#c2">题目 1:Kubernetes 集群升级(★已精讲)</a></li>
+  <li><a href="#c3">考试期间允许访问的官方文档</a></li>
+  <li><a href="#c4">17 道典型题目清单与备考建议</a></li>
+</ol></nav>
+
+<section id="c1">
+  <h2><span class="no">C1</span>考试概览:17 道题都考什么?</h2>
+  <p>CKA(Certified Kubernetes Administrator)是 <b>CNCF / Linux Foundation</b> 推出的<b>基于实操</b>的认证 —— 不是选择题,而是要求你在<b>真实的 Kubernetes 集群环境中解决实际问题</b>:考试通常包含 <b>17 道题目,限时 2 小时</b>完成。</p>
+  <table>
+    <tr><th>项</th><th>说明</th></tr>
+    <tr><td>认证机构</td><td>CNCF / Linux Foundation</td></tr>
+    <tr><td>考试形式</td><td>全程实操(命令行 + 真实多节点集群),无选择题</td></tr>
+    <tr><td>题量 / 时长</td><td><b>17 题 / 2 小时</b>(平均每题约 7 分钟)</td></tr>
+    <tr><td>考试环境</td><td>内嵌终端 + <b>多个集群</b>(每题可能要求切换 context)</td></tr>
+    <tr><td>题目形态</td><td>题库变体:命名空间、标签、版本号等参数每次变化,<b>核心知识点和解题思路不变</b></td></tr>
+  </table>
+  <h3>五大领域与权重(2025 课程大纲)</h3>
+  <table>
+    <tr><th>领域</th><th>权重</th><th style="width:45%">分布</th></tr>
+    <tr><td>🔴 故障排查</td><td><b>30%</b></td><td><div style="height:10px;border-radius:5px;background:linear-gradient(90deg,var(--red),var(--orange));width:100%"></div></td></tr>
+    <tr><td>🔵 集群架构、安装与配置</td><td><b>25%</b></td><td><div style="height:10px;border-radius:5px;background:linear-gradient(90deg,var(--blue),var(--cyan));width:83%"></div></td></tr>
+    <tr><td>🟢 服务与网络</td><td><b>20%</b></td><td><div style="height:10px;border-radius:5px;background:linear-gradient(90deg,var(--green),var(--cyan));width:67%"></div></td></tr>
+    <tr><td>🟣 工作负载与调度</td><td><b>15%</b></td><td><div style="height:10px;border-radius:5px;background:linear-gradient(90deg,var(--purple),var(--blue));width:50%"></div></td></tr>
+    <tr><td>🟠 存储</td><td><b>10%</b></td><td><div style="height:10px;border-radius:5px;background:linear-gradient(90deg,var(--orange),var(--green));width:33%"></div></td></tr>
+  </table>
+  <p>了解这个分布能帮你更好地分配复习精力:<b>故障排查(30%)+ 集群架构(25%)两项占一半以上</b>,是备考主战场。</p>
+  <div class="tip"><b>💡 关键提示:</b>17 道题是<b>题库变体</b> —— 具体参数(命名空间、标签、版本号)每次考试都会变化,但核心知识点和解题思路不变。<b>切勿死记硬背命令,务必理解原理并熟练操作。</b></div>
+</section>
+<section id="c2">
+  <h2><span class="no">C2</span>题目 1:Kubernetes 集群升级 ★已精讲</h2>
+  <p>这正是<b>集群架构领域的核心考点</b>。考试会要求你将现有集群(如 1.31.0)的<b>主节点升级到指定新版本(如 1.31.1)</b>。</p>
+  <div class="warn"><b>⚠️ 核心原则:控制平面优先,逐个升级。</b>绝对不能先升级工作节点,必须遵循 <b>控制平面 → 工作节点(逐个)</b> 的顺序。考试通常只要求升级主节点。</div>
+
+  <h3>升级流程总览(10 步)</h3>
+  <pre><code>①切上下文 ─▶ ②排水master ─▶ ③SSH+提权 ─▶ ④解锁版本包 ─▶ ⑤装指定版本包
+                                                              │
+⑩验证版本 ◀─ ⑨解除排水 ◀─ ⑧重启kubelet ◀─ ⑦重新锁定包 ◀─ ⑥升级控制平面</code></pre>
+
+  <h3>每步详细命令与说明(考试必练)</h3>
+  <pre><code># ────────── 1. 切换集群上下文 ──────────
+# 考试环境有多个集群,必须先切换到题目要求的集群(如 xk8s)
+kubectl config use-context xk8s
+
+# ────────── 2. 排水主节点 ──────────
+# 将节点标记为不可调度,并驱逐其上的 Pod(除 DaemonSet 管理的 Pod 外)
+kubectl drain master --ignore-daemonsets
+
+# ────────── 3. 登录主节点并提权 ──────────
+# 使用题目提供的 SSH 命令登录,并切换到 root 权限
+ssh master
+sudo -i
+
+# ────────── 4. 解锁版本包 ──────────
+# Ubuntu 系统使用 apt-mark 来管理包版本
+apt-mark unhold kubeadm kubelet kubectl
+
+# ────────── 5. 更新软件源并安装指定版本 ──────────
+# 确保安装与目标版本匹配的包(版本号必须精确到 -1.1 这种完整后缀)
+apt-get update
+apt-get install kubeadm=1.31.1-1.1 kubelet=1.31.1-1.1 kubectl=1.31.1-1.1
+
+# ────────── 6. 升级控制平面组件(★核心步骤)──────────
+# --etcd-upgrade=false 表示不升级 etcd
+kubeadm upgrade apply v1.31.1 --etcd-upgrade=false
+
+# ────────── 7. 重新锁定版本包 ──────────
+# 防止后续意外升级
+apt-mark hold kubeadm kubelet kubectl
+
+# ────────── 8. 重启 kubelet 服务 ──────────
+# 使新的 kubelet 配置生效
+systemctl daemon-reload
+systemctl restart kubelet
+
+# ────────── 9. 退出主节点并解除排水 ──────────
+# 返回到你的考试终端,解除节点的不可调度状态
+exit
+kubectl uncordon master
+
+# ────────── 10. 最终验证 ──────────
+# 检查节点状态,确认版本已更新且节点 Ready
+kubectl get nodes
+# NAME     STATUS   ROLES           AGE   VERSION
+# master   Ready    control-plane   10d   v1.31.1   ← 版本已更新 + Ready 即完成</code></pre>
+
+  <div class="warn"><b>⚠️ 注意:</b>考试环境可能使用不同的包管理器(如 <code>yum</code>)或 Kubernetes 发行版,但<b>核心逻辑和顺序不变</b> —— 切上下文 → drain → 升级 kubeadm/kubelet/kubectl 三件套 → kubeadm upgrade apply → uncordon → 验证。务必在模拟环境中反复练习。</div>
+  <div class="tip"><b>💡 两个高频丢分点:</b>① <code>apt-get install</code> 忘写精确版本号后缀(<code>=1.31.1-1.1</code>)装成最新版,直接污染集群;② 升级完忘了 <code>kubectl uncordon</code>,节点一直 <code>NotReady/SchedulingDisabled</code> —— 最后 <code>kubectl get nodes</code> 看一眼 STATUS 列再交卷。</div>
+</section>
+
+<section id="c3">
+  <h2><span class="no">C3</span>考试期间允许访问的官方文档(★地址必收藏)</h2>
+  <p>考试期间资源访问受到严格限制,以确保公平性。在<b>考试内嵌的浏览器</b>中,仅限访问以下官方资源及其子页面,用于独立完成任务:</p>
+  <table>
+    <tr><th>允许访问的资源</th><th>地址</th><th>主要用途</th></tr>
+    <tr><td>🅢 Kubernetes 官方文档(英文)</td><td><a href="https://kubernetes.io/docs/" target="_blank">https://kubernetes.io/docs/</a></td><td>kubectl 命令参考、Pod 规范、NetworkPolicy 示例、任务手册(Tasks)</td></tr>
+    <tr><td>🅢 Kubernetes 官方文档(中文)</td><td><a href="https://kubernetes.io/zh-cn/docs/" target="_blank">https://kubernetes.io/zh-cn/docs/</a></td><td>中文对照阅读,同域同权</td></tr>
+    <tr><td>🅢 Kubernetes 官方博客</td><td><a href="https://kubernetes.io/blog/" target="_blank">https://kubernetes.io/blog/</a></td><td>版本发布说明 / 变更记录</td></tr>
+    <tr><td>🅢 GitHub Kubernetes 仓库</td><td><a href="https://github.com/kubernetes/kubernetes" target="_blank">https://github.com/kubernetes/kubernetes</a></td><td>官方仓库及其关联页面</td></tr>
+  </table>
+  <div class="warn"><b>❌ 严格禁止的行为:</b>
+    <ul>
+      <li>访问上述列表<b>以外的任何网站</b>(如个人博客、论坛、题库网站);</li>
+      <li>打开浏览器<b>书签或历史记录</b>;</li>
+      <li>使用<b>即时通讯、邮件</b>或任何第三方辅助工具;</li>
+      <li>将考试内容或截图<b>泄露给他人</b>。</li>
+    </ul>
+  </div>
+  <div class="tip"><b>💡 小贴士:</b>考前应熟练掌握 Kubernetes 官方文档的<b>搜索和导航</b> —— 这是考试中唯一可靠的"救生员"。例如:熟悉 kubectl 命令参考、Pod 规范、NetworkPolicy 示例等页面的位置,考前在 <code>kubernetes.io/zh-cn/docs</code> 里把常用页各点开过一遍。</div>
+</section>
+
+<section id="c4">
+  <h2><span class="no">C4</span>17 道典型题目清单与备考建议</h2>
+  <p>根据考生回忆,17 道题通常涵盖以下题型(<b>具体题目组合每次考试都不同</b>,参数随机变体)。本站从题目 1 开始逐题精讲,<b>持续更新</b>:</p>
+  <table>
+    <tr><th>#</th><th>题型(题库变体)</th><th>所属领域</th><th>精讲状态</th></tr>
+    <tr><td>1</td><td><b>集群升级</b>:master 1.31.0 → 1.31.1(drain → kubeadm upgrade → uncordon)</td><td>集群架构 25%</td><td>✅ <a href="#c2">已精讲(见 C2)</a></td></tr>
+    <tr><td>2</td><td>RBAC:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>3</td><td>NetworkPolicy:按命名空间/标签选择性放行入站流量</td><td>服务与网络</td><td>○ 待更新</td></tr>
+    <tr><td>4</td><td>etcd 快照备份与还原(etcdctl snapshot save/restore)</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>5</td><td>Pod 日志排障 / 将容器日志输出到指定文件</td><td>故障排查</td><td>○ 待更新</td></tr>
+    <tr><td>6</td><td>Deployment 滚动更新(指定镜像)与回滚 revision</td><td>工作负载</td><td>○ 待更新</td></tr>
+    <tr><td>7</td><td>Sidecar 容器注入(busybox 持续写日志)</td><td>工作负载</td><td>○ 待更新</td></tr>
+    <tr><td>8</td><td>节点维护:drain 排水 + uncordon 恢复调度</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>9</td><td>PV / PVC 创建与挂载(hostPath / 动态供给)</td><td>存储</td><td>○ 待更新</td></tr>
+    <tr><td>10</td><td>Ingress 部署(域名 + path 路由到指定 Service)</td><td>服务与网络</td><td>○ 待更新</td></tr>
+    <tr><td>11</td><td>Service 调整(类型/端口/扩缩副本)</td><td>服务与网络</td><td>○ 待更新</td></tr>
+    <tr><td>12</td><td>静态 Pod:在指定节点跑 /etc/kubernetes/manifests 下的 Pod</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>13</td><td>kubelet 配置修复(节点 NotReady 排查)</td><td>故障排查</td><td>○ 待更新</td></tr>
+    <tr><td>14</td><td>Secret 创建与挂载(环境变量 / 卷两种姿势)</td><td>存储</td><td>○ 待更新</td></tr>
+    <tr><td>15</td><td>消耗资源最高 Pod 排名(kubectl top --sort-by)</td><td>故障排查</td><td>○ 待更新</td></tr>
+    <tr><td>16</td><td>修复损坏的控制面组件(如 kube-scheduler 不跑)</td><td>故障排查</td><td>○ 待更新</td></tr>
+    <tr><td>17</td><td>ServiceAccount 权限 / Pod 指定 SA 在指定 ns 运行</td><td>集群架构</td><td>○ 待更新</td></tr>
+  </table>
+
+  <h3>🎯 备考建议(5 条)</h3>
+  <ul>
+    <li><b>搭建练习环境:</b>使用 kind、minikube 或 kubeadm 快速搭建本地多节点集群,所有命令都在真实环境中敲一遍;</li>
+    <li><b>官方文档为主:</b>将 Kubernetes 官方文档作为你的"圣经",不要依赖任何第三方题库答案;</li>
+    <li><b>模拟考试是关键:</b>购买 CKA 考试通常会附赠 <b>killer.sh 模拟器</b>权限,务必在考前完成多次模拟,适应节奏和界面;</li>
+    <li><b>时间管理:</b>2 小时 17 题,平均每题 7 分钟 —— 遇到卡壳的题先标记跳过,最后回头处理;</li>
+    <li><b>注意细节:</b>考试要求精确,如命名空间名称、标签、资源命名等,写错可能导致 0 分。</li>
+  </ul>
+  <div class="tip"><b>🎓 祝你备考顺利,一次通过 CKA!</b>练习某个具体题型遇到困难时,回到本站对应章节(题目 1 见 <a href="#c2">C2</a>;kubectl 基础见 <a href="k8s-cmd.html">命令速查</a>,排障思路见 <a href="k8s-issues.html">问题总汇</a>)。题目 2~17 逐题精讲将陆续更新,敬请收藏。</div>
+</section>
+</div>
+<footer>K8S Web · CKA 备考学习 · 配套:<a href="k8s-cmd.html">kubectl 速查</a> · <a href="k8s-issues.html">问题总汇</a> · <a href="ingress.html">Ingress</a></footer>
+</body>
+</html>
