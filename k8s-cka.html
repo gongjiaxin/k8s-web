@@ -57,8 +57,10 @@
 <nav class="toc"><b>目录</b><ol>
   <li><a href="#c1">考试概览:17 道题考什么</a></li>
   <li><a href="#c2">题目 1:Kubernetes 集群升级(★已精讲)</a></li>
+  <li><a href="#q2">题目 2:RBAC 权限绑定(★已精讲)</a></li>
   <li><a href="#c3">考试期间允许访问的官方文档</a></li>
   <li><a href="#c4">17 道典型题目清单与备考建议</a></li>
+  <li><a href="#c5">动手模拟:搭建练习环境(kind/虚机/killer.sh)</a></li>
 </ol></nav>
 
 <section id="c1">
@@ -67,11 +69,49 @@
   <table>
     <tr><th>项</th><th>说明</th></tr>
     <tr><td>认证机构</td><td>CNCF / Linux Foundation</td></tr>
+    <tr><td>考试语言</td><td><b>英文 / 简体中文</b> —— 在 PSI <b>预约考试时选择</b>,与报名渠道无关(中文站 training.linuxfoundation.cn 报名只是付款方式不同,考试全球同一套);预约后不能换、考试中不能切。<b>CKS 仅有英文</b>。技术英语句式重复度高,主流建议选英文 + 当场查官方文档;英文吃力选中文完全可行</td></tr>
     <tr><td>考试形式</td><td>全程实操(命令行 + 真实多节点集群),无选择题</td></tr>
     <tr><td>题量 / 时长</td><td><b>17 题 / 2 小时</b>(平均每题约 7 分钟)</td></tr>
     <tr><td>考试环境</td><td>内嵌终端 + <b>多个集群</b>(每题可能要求切换 context)</td></tr>
     <tr><td>题目形态</td><td>题库变体:命名空间、标签、版本号等参数每次变化,<b>核心知识点和解题思路不变</b></td></tr>
   </table>
+  <h3>分数怎么算:满分 100,及格 66</h3>
+  <table>
+    <tr><th>项</th><th>说明</th></tr>
+    <tr><td>满分</td><td><b>100 分</b></td></tr>
+    <tr><td>及格线</td><td><b>66 分</b>(2020-09 起从 74% 降下来的,沿用至今)</td></tr>
+    <tr><td>单题分值</td><td><b>官方不公布</b> —— 按题目所属领域权重加权分配;题数 15~20 题浮动(常见 17 题),每题分值每次考试都不同,约 <b>4~8 分/题</b>(复杂题如集群升级/etcd 还原偏 8 分,简单题如 top 排序偏 4 分)</td></tr>
+    <tr><td>评分粒度</td><td>以<b>集群最终状态</b>为准,基本"全对才给分" —— 一题多个子要求漏一个可能整题 0 分(命名空间/标签/名字写错 = 0 分)</td></tr>
+    <tr><td>出分</td><td>考后几小时~24h;成绩单只给总分 + 各领域得分条形图,<b>不显示单题对错</b></td></tr>
+    <tr><td>证书有效期</td><td><b>2 年</b>,到期需重考续证</td></tr>
+    <tr><td>附赠权益</td><td><b>1 次免费重考</b>(首次未过可用)+ <b>killer.sh 模拟器 2 次会话</b>(每次 36 小时窗口,可反复重置)</td></tr>
+  </table>
+  <p>以 17 题为例的模拟分配(假设值,帮理解"领域权重摊分"):</p>
+  <table>
+    <tr><th>领域</th><th>领域总分</th><th>题数(假设)</th><th>每题约</th></tr>
+    <tr><td>🔴 故障排查</td><td>30 分</td><td>5 题</td><td>6 分</td></tr>
+    <tr><td>🔵 集群架构、安装与配置</td><td>25 分</td><td>4 题</td><td>~6.25 分</td></tr>
+    <tr><td>🟢 服务与网络</td><td>20 分</td><td>4 题</td><td>5 分</td></tr>
+    <tr><td>🟣 工作负载与调度</td><td>15 分</td><td>2 题</td><td>~7.5 分</td></tr>
+    <tr><td>🟠 存储</td><td>10 分</td><td>2 题</td><td>5 分</td></tr>
+    <tr><td><b>合计</b></td><td><b>100 分</b></td><td><b>17 题</b></td><td>—</td></tr>
+  </table>
+  <div class="tip"><b>💡 66 分的数学底气:</b>按平均 6 分/题算,<b>做对 11~12 题即可及格</b> —— 这就是"卡壳先跳过"策略的依据:把 12 道有把握的题做全对,剩下 5 道全空着也过线。</div>
+
+  <h3>考试界面与操作形态(PSI 安全浏览器)</h3>
+  <table>
+    <tr><th>项</th><th>说明</th></tr>
+    <tr><td>考试客户端</td><td><b>PSI Secure Browser</b> 全屏锁定:摄像头 + 麦克风 + 屏幕监考,考前需 360° 扫描房间</td></tr>
+    <tr><td>界面构成</td><td>左侧 = 题目面板(含 <b>记事本 Notes</b> 代替草稿纸、<b>Flag for Review</b> 标记跳过);右侧 = <b>内嵌终端 + 内嵌官方文档浏览器</b></td></tr>
+    <tr><td>终端形态</td><td>登录的是一台 <b>base 跳板节点</b>,从它 <code>ssh master/worker</code>;<b>可开多个终端标签</b>;vim/nano、tab 补全、kubectl 全可用</td></tr>
+    <tr><td>多集群切换</td><td>每题指定 context,靠 <code>kubectl config use-context xk8s</code> 切换(★先切再做,做错集群 = 白做)</td></tr>
+    <tr><td>复制粘贴</td><td>终端内可用,<b>可从内嵌文档复制 YAML/示例粘进终端</b>(写 NetworkPolicy 别手敲);与考试机外部交换内容禁止</td></tr>
+    <tr><td>网络隔离</td><td>考试集群<b>无外网</b>,终端里 curl 任何外部地址都不通(别浪费时间试);查资料只能用内嵌文档浏览器</td></tr>
+    <tr><td>升级题实操</td><td>真 SSH 到 master 真执行 apt/apt-mark/kubeadm upgrade,评分看<b>集群最终状态</b>(VERSION 变新 + Ready + 已 uncordon);失误可修复 —— drain 错了 uncordon 重来,没有"重置按钮"但一切皆 kubectl</td></tr>
+    <tr><td>考后</td><td><b>题目不回看</b>,成绩单只给总分 + 五领域条形图;交卷后即可自由上网复盘(几小时~24h 出分)</td></tr>
+  </table>
+  <div class="warn"><b>⚠️ 考试期间 vs 考后的访问差异:</b>期间仅限白名单(kubernetes.io 的 docs/blog 含中文 zh-cn、github.com/kubernetes);交卷后随便查 —— 但题目已经拿不到了,复盘全靠记忆。监考违规(看手机/离开摄像头视野/与他人交流)会直接导致成绩作废。</div>
+
   <h3>五大领域与权重(2025 课程大纲)</h3>
   <table>
     <tr><th>领域</th><th>权重</th><th style="width:45%">分布</th></tr>
@@ -145,6 +185,57 @@ kubectl get nodes
   <div class="tip"><b>💡 两个高频丢分点:</b>① <code>apt-get install</code> 忘写精确版本号后缀(<code>=1.31.1-1.1</code>)装成最新版,直接污染集群;② 升级完忘了 <code>kubectl uncordon</code>,节点一直 <code>NotReady/SchedulingDisabled</code> —— 最后 <code>kubectl get nodes</code> 看一眼 STATUS 列再交卷。</div>
 </section>
 
+<section id="q2">
+  <h2><span class="no">C2B</span>题目 2:RBAC —— 权限绑定(RoleBinding)★已精讲</h2>
+  <p>集群架构领域(25%)高频题,几乎必考。先记住一张关系图:</p>
+<pre><code>谁(SA cicd-token)──套上──▶ 绑定(RoleBinding)──写着──▶ 权限(ClusterRole deployment-clusterrole)
+
+权限模板(Role/ClusterRole)  = 能对哪些资源做什么动作
+绑定(RoleBinding/ClusterRoleBinding) = 把权限"发给"谁、在哪生效 ← ★作用域在这里定!</code></pre>
+
+  <h3>考题(中文卷题面为主,英文卷对照保留)</h3>
+  <p><b>【中文卷】</b>创建一个名为 <code>deployment-clusterrole</code> 的 ClusterRole,仅允许对 <code>deployments</code>、<code>statefulsets</code> 和 <code>daemonsets</code> 三种资源执行 <code>create</code>、<code>update</code>、<code>delete</code> 和 <code>watch</code> 操作。在<b>已存在的</b>命名空间 <code>app-team1</code> 中创建一个名为 <code>cicd-token</code> 的 ServiceAccount。将新建的 ClusterRole 绑定给新建的 ServiceAccount,<b>权限仅在命名空间 app-team1 内生效</b>。<br>
+  <b>【英文卷】</b>Create a new ClusterRole named <code>deployment-clusterrole</code>, which only allows to <code>create</code>, <code>update</code>, <code>delete</code> and <code>watch</code> the resources <code>deployments</code>, <code>statefulsets</code> and <code>daemonsets</code>. Create a new ServiceAccount named <code>cicd-token</code> in the existing namespace <code>app-team1</code>. Bind the new ClusterRole to the new ServiceAccount <b>limited to the namespace app-team1</b>.</p>
+  <div class="tip"><b>💡 中文卷注意:</b>资源名/动词/命名空间名(<code>deployments</code>、<code>create</code>、<code>app-team1</code> 等)<b>保持英文原词不翻译</b> —— 它们就是要敲的命令参数,照抄即可;"已存在的(existing)"= 环境预置,直接用勿重建;"仅在 xxx 内生效(limited to the namespace)"= 用 RoleBinding。中英文关键词都认一遍,双保险。</div>
+
+  <h3>模拟环境准备(★仅 kind 造题用)</h3>
+<pre><code>kubectl create ns app-team1    # kind 模拟环境里 ns 不存在,先造出来
+kubectl get ns app-team1       # 真实考试:"existing namespace" = 集群里已建好,直接用,★勿重复创建!</code></pre>
+
+  <h3>解法一:纯命令行三连(最快,推荐)</h3>
+<pre><code># ① 权限模板:4 个动词 × 3 种资源
+kubectl create clusterrole deployment-clusterrole \
+  --verb=create,update,delete,watch --resource=deployments,statefulsets,daemonsets
+
+# ② 身份:在指定 ns 建 SA
+kubectl -n app-team1 create serviceaccount cicd-token
+
+# ③ 绑定(★RoleBinding!引用 ClusterRole 用 --clusterrole=)
+kubectl -n app-team1 create rolebinding cicd-token-rb \
+  --clusterrole=deployment-clusterrole --serviceaccount=app-team1:cicd-token</code></pre>
+
+  <h3>解法二:--dry-run 生成 YAML 再 apply(通用套路)</h3>
+<pre><code>kubectl create clusterrole deployment-clusterrole --verb=create,update,delete,watch \
+  --resource=deployments,statefulsets,daemonsets --dry-run=client -o yaml &gt; cr.yaml
+kubectl apply -f cr.yaml
+# SA、RoleBinding 同理 —— 记不住参数时:先 -h 看帮助,再 --dry-run=client -o yaml 看生成的 YAML</code></pre>
+
+  <div class="warn"><b>⚠️ 送命题:RoleBinding 还是 ClusterRoleBinding?</b>题目出现 "<b>limited to the namespace xxx</b>" → 必须 <b>RoleBinding</b>(权限只在绑定所在的 ns 生效);只有要求全集群生效才用 ClusterRoleBinding。RoleBinding 引用 ClusterRole 完全合法(把大模板裁剪到本 ns 用),所以参数是 <code>--clusterrole=</code>。<b>用错绑定类型 = 整题 0 分</b>。</div>
+
+  <h3>验证三连(评分系统干的事,提前人肉做)</h3>
+<pre><code># 扮演这个 SA 自问三句:给过的?没给的?范围对不对?
+kubectl auth can-i create deployments -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 yes
+kubectl auth can-i list pods         -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 no
+kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app-team1:cicd-token   # 期望 no</code></pre>
+
+  <h3>恢复现场(反复刷题用)</h3>
+<pre><code>kubectl -n app-team1 delete rolebinding cicd-token-rb
+kubectl -n app-team1 delete sa cicd-token
+kubectl delete clusterrole deployment-clusterrole</code></pre>
+
+  <div class="tip"><b>💡 考试要全程手敲吗?</b>不用 —— <b>终端内可复制粘贴,从内嵌官方文档复制 YAML/示例粘进终端也允许</b>(官方鼓励,长 YAML 别手敲);禁止的只是从考试机<b>外部</b>带内容进来。策略:常用命令练成肌肉记忆手敲,长 YAML 从 kubernetes.io 复制后改名改字段。本解法已在 kind v1.31 集群实测通过(yes / no / no 三连验证)。</div>
+</section>
+
 <section id="c3">
   <h2><span class="no">C3</span>考试期间允许访问的官方文档(★地址必收藏)</h2>
   <p>考试期间资源访问受到严格限制,以确保公平性。在<b>考试内嵌的浏览器</b>中,仅限访问以下官方资源及其子页面,用于独立完成任务:</p>
@@ -172,7 +263,7 @@ kubectl get nodes
   <table>
     <tr><th>#</th><th>题型(题库变体)</th><th>所属领域</th><th>精讲状态</th></tr>
     <tr><td>1</td><td><b>集群升级</b>:master 1.31.0 → 1.31.1(drain → kubeadm upgrade → uncordon)</td><td>集群架构 25%</td><td>✅ <a href="#c2">已精讲(见 C2)</a></td></tr>
-    <tr><td>2</td><td>RBAC:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>2</td><td><b>RBAC</b>:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>✅ <a href="#q2">已精讲(见 题目 2)</a></td></tr>
     <tr><td>3</td><td>NetworkPolicy:按命名空间/标签选择性放行入站流量</td><td>服务与网络</td><td>○ 待更新</td></tr>
     <tr><td>4</td><td>etcd 快照备份与还原(etcdctl snapshot save/restore)</td><td>集群架构</td><td>○ 待更新</td></tr>
     <tr><td>5</td><td>Pod 日志排障 / 将容器日志输出到指定文件</td><td>故障排查</td><td>○ 待更新</td></tr>
@@ -199,6 +290,120 @@ kubectl get nodes
     <li><b>注意细节:</b>考试要求精确,如命名空间名称、标签、资源命名等,写错可能导致 0 分。</li>
   </ul>
   <div class="tip"><b>🎓 祝你备考顺利,一次通过 CKA!</b>练习某个具体题型遇到困难时,回到本站对应章节(题目 1 见 <a href="#c2">C2</a>;kubectl 基础见 <a href="k8s-cmd.html">命令速查</a>,排障思路见 <a href="k8s-issues.html">问题总汇</a>)。题目 2~17 逐题精讲将陆续更新,敬请收藏。</div>
+</section>
+
+<section id="c5">
+  <h2><span class="no">C5</span>动手模拟:不动开发机,一次拉起小集群刷题</h2>
+  <p>模拟 17 道题<b>完全不需要重装/破坏开发机</b> —— 三个方案各管一摊,按需组合:</p>
+  <table>
+    <tr><th>方案</th><th>覆盖</th><th>成本</th><th>定位</th></tr>
+    <tr><td>★ ① <b>kind</b>(Kubernetes in Docker)</td><td><b>约 80% 题型</b></td><td>免费镜像 <code>kindest/node</code></td><td>主力刷题场,容器隔离,删了就没了</td></tr>
+    <tr><td>② VirtualBox + Vagrant 虚机 + kubeadm</td><td>升级题、kubelet 修复题</td><td>3 台小虚机 ≈ 6G 内存</td><td>kind 做不了的 systemd/apt 类题</td></tr>
+    <tr><td>③ killer.sh 官方模拟器</td><td>全真(同款 UI/终端/题目)</td><td>买考试送 2 次 ×36h</td><td>考前 1~2 周冲刺</td></tr>
+  </table>
+
+  <h3>方案①:kind 一条命令拉起 1主2从</h3>
+  <table>
+    <tr><th>配置项</th><th>要求</th><th>说明</th></tr>
+    <tr><td>系统</td><td>Win10 2004+ / Win11 64 位</td><td>WSL2 前提</td></tr>
+    <tr><td>BIOS</td><td>开启虚拟化(VT-x / AMD-V)</td><td>任务管理器→性能→CPU 看"虚拟化:已启用"</td></tr>
+    <tr><td>内存</td><td><b>最低 8G,推荐 16G</b></td><td>Docker Desktop 分 6~8G:control-plane ~2G + worker×2 各 ~1G + 开销</td></tr>
+    <tr><td>CPU / 磁盘</td><td>4 核+ / 10G+ 空闲</td><td>kindest/node 镜像约 1G + 运行数据</td></tr>
+  </table>
+  <div class="tip"><b>💡 WSL2 后端的 Resources 页没有 CPU/内存滑块?</b>这是正常现象 —— 新版 Docker Desktop 用 WSL2 后端时,Settings → Resources 显示 "resource limits are managed by Windows",资源配置改由 <code>C:\Users\&lt;你&gt;\.wslconfig</code> 文件管理(管理员 PowerShell 一键写入 + 生效):
+<pre><code>Set-Content "$env:USERPROFILE\.wslconfig" "[wsl2]`nmemory=8GB`nprocessors=4`nswap=2GB"
+wsl --shutdown      # 然后重开 Docker Desktop;验证:任意终端直接执行 wsl free -h(免进 WSL)、wsl nproc
+#                   交互式进入:终端敲 wsl 回车,提示符变 Linux 风格即已进入,exit 退出;首次进 Ubuntu 需设 UNIX 用户名密码
+#                   未装 Ubuntu 时直接 wsl 进入的是 docker-desktop 发行版(提示符含 /mnt/host/c/),同样受 .wslconfig 限制,验证效果相同
+# 16G 物理内存给 8GB;只有 8G 的机器给 4~5GB</code></pre>
+页面上的 Disk image location(磁盘位置)与 Resource Saver(节能模式,有容器运行时不会休眠)保持默认即可。</div>
+  <pre><code># ── 安装顺序(管理员 PowerShell)──
+wsl --install                                  # ① 开启 WSL2,装完重启电脑
+winget install Docker.DockerDesktop            # ② Docker Desktop(WSL2 后端:资源配置用 .wslconfig,见下方 tip)
+#   国内网络:Settings → Docker Engine 加 "registry-mirrors": ["https://docker.m.daocloud.io"]
+winget install Kubernetes.kind                 # ③ kind(★ID 是 Kubernetes.kind,不是 Kind.Kind)
+winget install Kubernetes.kubectl              # ③ kubectl(或 choco install kubernetes-cli)
+kind version &amp;&amp; kubectl version --client     # 重开终端验证
+
+# ── 拉起考试同款集群(固定 1.31 版本,与考试对齐)──
+cat &gt; cka-cluster.yaml &lt;&lt;'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+EOF
+
+kind create cluster --name cka --config cka-cluster.yaml --image kindest/node:v1.31.0
+
+# ── 装两个"考试题依赖"(kind 默认不带)──
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# 生成 patch 文件再打(★PowerShell 会剥掉 -p 参数里 JSON 的双引号 → "The request is invalid";用 --patch-file 绕开)
+'[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' | Out-File -Encoding ascii ms-patch.json
+kubectl patch deploy metrics-server -n kube-system --type json --patch-file ms-patch.json
+
+# ── 验证与日常管理 ──
+kubectl get nodes                               # 3 节点全 Ready = 成功
+docker ps --format '{{.Names}}'                 # cka-control-plane / cka-worker / cka-worker2
+docker exec -it cka-control-plane bash          # ★"登 master":etcd(4)/静态Pod(12)/控制面修复(16)题在这做
+kind get clusters                               # 列出所有 kind 集群
+kind delete cluster --name cka                  # 一键销毁,开发机毫发无损
+
+# ── kind 安装兜底(winget 报"找不到程序包"时:直接下 exe 放 PATH,必成功)──
+mkdir C:\bin -Force
+curl.exe -Lo C:\bin\kind.exe https://kind.sigs.k8s.io/dl/v0.24.0/kind-windows-amd64.exe
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";C:\bin", "User")
+#   重开终端后 kind version 验证;kubectl 版本偏斜:1.37 客户端连 1.31 集群仅 warning 可先用,
+#   真不兼容再降级:curl.exe -Lo kubectl.exe https://dl.k8s.io/release/v1.31.1/bin/windows/amd64/kubectl.exe
+
+# ── winget 显示"已安装"但 kind 仍不识别?(WinGet Links 目录没进 PATH / 宿主程序没重启)──
+Test-Path "$env:LOCALAPPDATA\Microsoft\WinGet\Links\kind.exe"     # True = 装好了,只是 PATH 没刷新
+$env:Path += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"          # 当前窗口立即可用
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";$env:LOCALAPPDATA\Microsoft\WinGet\Links", "User")
+#   ★ 开新终端标签不会刷新 PATH —— 必须整个退出 Windows Terminal / VS Code 再重开!</code></pre>
+  <div class="tip"><b>💡 为什么 kind 就是"一次性小集群":</b>每个"节点"就是一个 Docker 容器(共用 <code>kindest/node</code> 镜像),etcd/API Server 全在 control-plane 容器里 —— 整个集群活在 Docker 里,<code>kind delete</code> 之后连灰都不剩;开发机、现有 kubeconfig、别的集群全部无感。</div>
+
+  <h3>方案②:VirtualBox 虚机 —— 升级题的唯一真练法</h3>
+  <div class="warn"><b>⚠️ kind 的边界:</b>kind 的"节点"是<b>容器</b>,没有 systemd / apt / 真 kubelet 服务 —— 所以 <b>题目 1(集群升级)和题目 13(kubelet 修复)在 kind 里练不了</b>,必须上虚机 + kubeadm。</div>
+  <pre><code># VirtualBox + Vagrant,3 台 Ubuntu 22.04(master 2C2G + worker×2,共 ~6G 内存)
+vagrant up
+#   master 上手动 kubeadm init(装 1.31.0)+ worker join
+#   —— 这一步本身就是"集群架构 25%"的核心考点!
+# 之后按 C2 十步流程全真演练:apt-mark unhold → install 1.31.1 → kubeadm upgrade apply
+vagrant destroy -f    # 用完销毁,开发机毫发无损</code></pre>
+
+  <h3>方案③:killer.sh 官方模拟器(唯一"全真")</h3>
+  <ul>
+    <li>购买 CKA 自动附赠 <b>2 个 session × 36 小时</b>(<a href="https://killer.sh" target="_blank">killer.sh</a>,用 Linux Foundation 账号登录);</li>
+    <li>界面、终端、文档浏览器、题目风格与真实考试<b>同一套系统</b>;</li>
+    <li>session 内可<b>无限次 reset</b> 集群重做,还会给出每题完成度评分;</li>
+    <li>建议留到<b>考前 1~2 周</b>再启用,平时用 kind + 开源题库打底:<a href="https://github.com/dimakis/CKA-Exercises" target="_blank">dimakis/CKA-Exercises</a>(按五大领域分文件夹的练习题库)。</li>
+  </ul>
+
+  <h3>17 题 × 模拟方式对照表(kind 里怎么逐题造场景)</h3>
+  <table>
+    <tr><th>#</th><th>题型</th><th>kind 可练?</th><th>模拟方式</th></tr>
+    <tr><td>1</td><td>集群升级</td><td>❌</td><td><b>虚机 kubeadm</b>(见方案②)—— kind 节点是容器,没有 apt/systemd</td></tr>
+    <tr><td>2</td><td>RBAC</td><td>✅</td><td>直接 <code>kubectl create role/rolebinding</code> 练</td></tr>
+    <tr><td>3</td><td>NetworkPolicy</td><td>✅</td><td>先装 calico,起 nginx + client Pod 造放行场景</td></tr>
+    <tr><td>4</td><td>etcd 快照</td><td>✅</td><td>进 control-plane 容器装 etcdctl(或跑临时 Pod),snapshot save/restore</td></tr>
+    <tr><td>5</td><td>Pod 日志</td><td>✅</td><td>随便起 Pod,logs / 重定向文件</td></tr>
+    <tr><td>6</td><td>滚更/回滚</td><td>✅</td><td>set image → rollout undo --to-revision</td></tr>
+    <tr><td>7</td><td>Sidecar</td><td>✅</td><td>直接编辑 Pod spec 加 sidecar 容器</td></tr>
+    <tr><td>8</td><td>drain/uncordon</td><td>✅</td><td>Node 对象是真的,drain --ignore-daemonsets 直接练</td></tr>
+    <tr><td>9</td><td>PV/PVC</td><td>✅</td><td>hostPath / local PV 都行</td></tr>
+    <tr><td>10</td><td>Ingress</td><td>✅</td><td>kind 官方 ingress addon(extraPortMapping 映射 80/443)</td></tr>
+    <tr><td>11</td><td>Service</td><td>✅</td><td>直接练 ClusterIP/NodePort 互访</td></tr>
+    <tr><td>12</td><td>静态 Pod</td><td>✅</td><td><code>docker exec</code> 进 kind 节点,写 /etc/kubernetes/manifests</td></tr>
+    <tr><td>13</td><td>kubelet 修复</td><td>❌</td><td><b>虚机</b> —— 无真 kubelet systemd 服务</td></tr>
+    <tr><td>14</td><td>Secret</td><td>✅</td><td>create secret + env/卷两种挂载姿势</td></tr>
+    <tr><td>15</td><td>top 排名</td><td>✅</td><td>需装 metrics-server(--kubelet-insecure-tls)</td></tr>
+    <tr><td>16</td><td>控制面修复</td><td>✅</td><td>故意搞坏 kube-scheduler 静态 Pod 清单再修(control-plane 容器内)</td></tr>
+    <tr><td>17</td><td>ServiceAccount</td><td>✅</td><td>直接创建 SA + Pod 指定 serviceAccountName</td></tr>
+  </table>
+  <div class="tip"><b>💡 刷题节奏建议:</b>在 kind 里按上表逐题造场景,<b>每题掐表 7 分钟</b>(模拟真实考试节奏);kind 覆盖不了的 1/13 两题,周末开虚机集中练一轮。都刷熟后再消耗 killer.sh 的 36 小时 session 做全真模拟,性价比最高。</div>
 </section>
 </div>
 <footer>K8S Web · CKA 备考学习 · 配套:<a href="k8s-cmd.html">kubectl 速查</a> · <a href="k8s-issues.html">问题总汇</a> · <a href="ingress.html">Ingress</a></footer>
