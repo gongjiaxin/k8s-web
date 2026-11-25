@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清风 · CKA 模拟考场 · K8S Web</title>
+<style>
+  :root{--top:#1f2733;--desk1:#414549;--desk2:#2b2d31;--panel:#fff;--line:#dadce0;--muted:#5f6368;--accent:#1a73e8;--flagbg:#fef7e0;--flag:#f9ab00;--red:#c5221f}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:"Segoe UI","Microsoft YaHei",-apple-system,Arial,sans-serif;background:var(--desk2);color:#202124;overflow:hidden;display:flex;flex-direction:column;font-size:15px}
+  button{font-family:inherit}
+  /* ── 顶部栏(仿考试顶栏:考试名+计时+进度)── */
+  #topbar{height:52px;flex-shrink:0;background:var(--top);color:#e8eaed;display:flex;align-items:center;gap:12px;padding:0 16px}
+  #topbar .brand{font-weight:600;font-size:14px;letter-spacing:.4px;white-space:nowrap}
+  #topbar .brand small{color:#9aa0a6;font-weight:400;margin-left:8px;font-size:12px}
+  #timer{font:bold 17px Consolas,"Courier New",monospace;color:#8ab4f8;white-space:nowrap;padding:4px 10px;background:#141a24;border-radius:6px}
+  #timer.warn{color:#f28b82;animation:blink 1s step-end infinite}
+  @keyframes blink{50%{opacity:.4}}
+  .tbtn{background:#2b3442;color:#c9ccd1;border:1px solid #3d4757;border-radius:6px;padding:5px 12px;font-size:12.5px;cursor:pointer}
+  .tbtn:hover{background:#38455a}
+  #progress{margin-left:auto;color:#9aa0a6;font-size:13px;white-space:nowrap}
+  #endbtn{background:transparent;color:#f28b82;border:1px solid #7a3b36;border-radius:6px;padding:5px 14px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  #endbtn:hover{background:#3a2422}
+  /* ── 主体:左题目面板 + 右仿桌面 ── */
+  #main{flex:1;display:flex;min-height:0}
+  #qpanel{width:44%;min-width:430px;background:var(--panel);display:flex;flex-direction:column;border-right:1px solid #9aa0a6}
+  #qnav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid var(--line)}
+  .qn{min-width:34px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:5px;background:#fff;font-size:13px;color:#3c4043;cursor:pointer}
+  .qn:hover{border-color:var(--accent)}
+  .qn.cur{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .qn.flag{background:var(--flagbg);border-color:var(--flag)}
+  .qn.flag.cur{background:var(--flag);border-color:var(--flag);color:#3c2f00}
+  #qbody{flex:1;overflow-y:auto;padding:22px 24px;line-height:2;font-size:15.5px}
+  #qbody .qmeta{color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.6px;margin-bottom:14px}
+  #qbody .qmeta .zh{color:var(--accent)}
+  #qbody p{margin:6px 0}
+  #qbody code{background:#f1f3f4;padding:1px 6px;border-radius:4px;font:13.5px Consolas,"Courier New",monospace;color:#174ea6;word-break:break-all}
+  #qbody pre{background:#f8f9fa;border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:12px 0 6px;font:13px/1.8 Consolas,"Courier New",monospace;white-space:pre-wrap;word-break:break-all}
+  #qbody .divider{border-top:1px dashed var(--line);margin:18px 0 10px}
+  #qbody .self{color:var(--muted);font-size:13.5px}
+  #qbody .empty{color:#9aa0a6;text-align:center;padding:60px 20px;font-size:15px;line-height:2.2}
+  #qfoot{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#f8f9fa;border-top:1px solid var(--line);flex-wrap:wrap}
+  .btn{padding:8px 18px;border-radius:5px;border:1px solid var(--line);background:#fff;color:#3c4043;font-size:14px;cursor:pointer}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#1558c0;color:#fff}
+  .btn.flag-on{background:var(--flagbg);border-color:var(--flag);color:#7a5b00}
+  #qfoot .hint{color:#9aa0a6;font-size:12px;margin-left:auto}
+  /* ── 右侧仿 Linux 桌面(终端+Firefox)── */
+  #desk{flex:1;min-width:0;background:linear-gradient(160deg,var(--desk1),var(--desk2));display:flex;flex-direction:column;gap:16px;padding:18px 20px}
+  .win{border-radius:8px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.5);display:flex;flex-direction:column;background:#1b1d21;min-height:0}
+  .wt{height:34px;background:#33363c;display:flex;align-items:center;padding:0 12px;gap:7px;color:#c9ccd1;font-size:12.5px;flex-shrink:0}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+  .wt .ttl{margin-left:8px}
+  #termwin{flex:1.15}
+  #term{flex:1;background:#17181c;color:#e6e6e6;font:13.5px/1.85 "Cascadia Mono",Consolas,"Courier New",monospace;padding:14px 18px;overflow-y:auto;white-space:pre-wrap}
+  #term .c{color:#9aa0a6}
+  #term .p{color:#8ab4f8}
+  #term .cursor{display:inline-block;width:8px;height:15px;background:#e6e6e6;vertical-align:-2px;animation:blink 1.1s step-end infinite}
+  #term{display:flex;flex-direction:column;gap:8px}
+  #cmdpad{flex:1;background:#141519;border:1px solid #2a2d33;border-radius:6px;padding:10px 12px;outline:none;white-space:pre-wrap;word-break:break-all;overflow-y:auto;min-height:120px}
+  #cmdpad:focus{border-color:#3d5a80}
+  .termfoot{display:flex;align-items:center;gap:10px;padding:6px 10px;background:#1f2126;color:#9aa0a6;font-size:12px;flex-shrink:0}
+  .termfoot #savemsg{flex:1}
+  .fbtn{flex:none;color:#8ab4f8;text-decoration:none;font-size:12px;padding:2px 8px;border:1px solid #3d4757;border-radius:5px;background:#2b3442;white-space:nowrap}
+  .fbtn:hover{background:#38455a}
+  #fframe{flex:1;border:0;background:#fff;min-height:0}
+  #fnote{padding:5px 12px;background:#f1f3f4;color:#5f6368;font-size:12px;flex-shrink:0}
+  #ffwin{flex:1}
+  #ff{flex:1;background:#fff;display:flex;flex-direction:column}
+  #faddr{height:40px;background:#f1f3f4;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;flex-shrink:0}
+  #faddr .url{flex:1;height:27px;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;padding:0 14px;font:12.5px Consolas,"Courier New",monospace;color:#3c4043}
+  #fdoc{flex:1;overflow-y:auto;padding:16px 20px;font-size:13.5px;line-height:1.9;color:#3c4043}
+  #fdoc h3{font-size:15px;margin-bottom:8px}
+  #fdoc .tag{display:inline-block;background:#e8f0fe;color:#1967d2;border-radius:4px;padding:0 8px;font-size:12px;margin-right:6px}
+  #fdoc code{background:#f1f3f4;padding:1px 6px;border-radius:4px;font:12.5px Consolas,"Courier New",monospace;color:#174ea6}
+  #fdoc .open{display:inline-block;margin-top:10px;padding:7px 16px;background:var(--accent);color:#fff;border-radius:5px;text-decoration:none;font-size:13px}
+  #fdoc .open:hover{background:#1558c0}
+  /* ── 覆盖层:考前说明 / 结束页 ── */
+  #overlay{position:fixed;inset:0;background:#fff;z-index:99;overflow-y:auto}
+  #ovbox{max-width:780px;margin:0 auto;padding:56px 32px}
+  #ovbox h1{font-size:26px;margin-bottom:6px}
+  #ovbox .sub{color:var(--muted);margin-bottom:28px;font-size:14px}
+  #ovbox h2{font-size:17px;margin:22px 0 10px}
+  #ovbox ol,#ovbox ul{margin:0 0 0 22px}
+  #ovbox li{margin:7px 0;line-height:1.9;font-size:14.5px}
+  #ovbox code{background:#f1f3f4;padding:1px 6px;border-radius:4px;font:13px Consolas,"Courier New",monospace;color:#174ea6}
+  #ovbox .big{display:block;margin:30px auto 0;padding:12px 40px;font-size:16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer}
+  #ovbox .big:hover{background:#1558c0}
+  #ovbox a{color:var(--accent)}
+  #ovbox .foot{margin-top:26px;color:var(--muted);font-size:12.5px;text-align:center}
+
+</style>
+</head>
+<body>
+<div id="topbar">
+  <span class="brand">CKA 模拟考场<small>中文卷 · 仅题面无答案</small></span>
+  <span id="timer">02:00:00</span>
+  <button class="tbtn" id="pbtn" onclick="pauseT()">⏸ 暂停</button>
+  <button class="tbtn" onclick="resetT()">↺ 重置</button>
+  <span id="progress">未开始 · 第 1 / 17 题</span>
+  <button id="endbtn" onclick="endExam()">结束考试</button>
+</div>
+<div id="main">
+  <div id="qpanel">
+    <div id="qnav"></div>
+    <div id="qbody"></div>
+    <div id="qfoot">
+      <button class="btn" id="prevb" onclick="nav(-1)">← 上一题</button>
+      <button class="btn primary" id="nextb" onclick="nav(1)">下一题 →</button>
+      <button class="btn" id="flagb" onclick="toggleFlag()">⚑ 标记本题</button>
+      <span class="hint">卡壳先标记跳过 = 考场生存术(暂停/重置为练习专用,真实考试没有)</span>
+    </div>
+  </div>
+  <div id="desk">
+    <div class="win" id="termwin">
+      <div class="wt"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">student@cka: ~ (终端)</span></div>
+      <div id="term">
+<div class="c">(练习模式)真实考试里,这一侧是你操作的 Linux 桌面 —— 终端可开多个窗口,Firefox 只能访问 kubernetes.io。
+练习时在本机终端敲命令;把你的命令/输出<b>贴进下面这个终端存档</b>(自动保存,刷新不丢)。</div>
+<div id="cmdpad" contenteditable="true" spellcheck="false">student@cka:~$ <span class="cursor"></span></div>
+      </div>
+      <div class="termfoot"><span id="savemsg">💡 在上方终端里敲/贴你的命令,自动保存到本浏览器(localStorage)</span><button class="tbtn" onclick="clearPad()">清空终端</button></div>
+    </div>
+    <div class="win" id="ffwin">
+      <div class="wt"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Firefox — Kubernetes 文档(考试白名单)</span></div>
+      <div id="ff">
+        <div id="faddr"><span>🛡</span><span class="url">https://kubernetes.io/zh-cn/docs/</span><a class="fbtn" href="https://kubernetes.io/zh-cn/docs/" target="_blank" rel="noopener">↗ 新标签打开</a></div>
+        <iframe id="fframe" src="https://kubernetes.io/zh-cn/docs/" title="kubernetes.io 官方文档(考试白名单)" referrerpolicy="no-referrer"></iframe>
+        <div id="fnote">⚠️ 若上方空白:kubernetes.io 拒绝被网页内嵌(浏览器安全策略,非故障)—— 点「↗ 新标签打开」用本机浏览器访问。<b>真实考场上是一个完整的 Firefox 窗口,可直接在里面浏览/搜索/复制。</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="overlay">
+  <div id="ovbox">
+    <h1>CKA 模拟考场</h1>
+    <p class="sub">仿真实考试界面 · 只给题面不给答案 · 打开即坐进考场</p>
+    <h2>考前须知(仿真实考试 Instructions)</h2>
+    <ol>
+      <li>考试:<b>CKA</b>(Certified Kubernetes Administrator)—— 纯实操,无选择题。</li>
+      <li>时长 <b>2 小时</b>,题量 <b>17 题</b>,满分 100,<b>66 分及格</b>(约做对 11~12 题即可过线)。</li>
+      <li><b>任意顺序作答</b>;各题分值不同(约 4~8 分),题面不显示分值。</li>
+      <li>所有操作在<b>真实集群</b>上完成;若题目指定 context,先 <code>kubectl config use-context</code> 切换再动手。</li>
+      <li>允许查阅:终端内 <code>kubectl -h</code>,以及浏览器中的 <b>kubernetes.io 官方文档</b>(中英文均可);终端里可以复制粘贴(含从文档复制)。</li>
+      <li><b>不要修改题目未要求的内容</b>;已存在的对象(命名空间、密码、配置)没让你动就别动。</li>
+      <li>卡壳的题先<b>标记(Flag)</b>跳过去 —— 时间到未做的题同样 0 分,别在一道题上死磕。</li>
+    </ol>
+    <h2>本练习页说明</h2>
+    <ul>
+      <li>目前仅录入 <b>第 1 题(中文卷)</b>,题 2~17 为占位,后续逐题录入。</li>
+      <li>做题请打开你<b>本机的终端</b>(集群 kind-cka 已就绪);右侧桌面窗口只是布局仿真。</li>
+      <li>做完自查:题面底部的「验证三连」= 扮演评分系统人肉验收。</li>
+      <li>交卷前习惯:每题做完 <code>kubectl get</code> 一次,确认对象真的建对(输出前缀=对象类型)。</li>
+    </ul>
+    <button class="big" onclick="startExam()">我已阅读,开始考试(启动 2 小时倒计时)</button>
+    <p class="foot">配套:<a href="k8s-cka.html">CKA 备考学习页(含答案,剧透慎入)</a> · <a href="index.html">返回首页</a></p>
+  </div>
+</div>
+<script>
+var N=17,cur=1,flags={},running=false,remain=7200,tid=null,warned15=false;
+
+function qhtml(n){
+  if(n===1){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 1 题 / 共 17 题</div>'
+      +'<p>创建一个名为 <code>deployment-clusterrole</code> 的 ClusterRole,仅允许对 <code>deployments</code>、<code>statefulsets</code> 和 <code>daemonsets</code> 三种资源执行 <code>create</code>、<code>update</code>、<code>delete</code> 和 <code>watch</code> 操作。</p>'
+      +'<p>在已存在的命名空间 <code>app-team1</code> 中创建一个名为 <code>cicd-token</code> 的 ServiceAccount。</p>'
+      +'<p>将新建的 ClusterRole 绑定给新建的 ServiceAccount,权限仅在命名空间 <code>app-team1</code> 内生效。</p>'
+      +'<div class="divider"></div>'
+      +'<p class="self">验证三连(评分系统干的事,提前人肉做)—— 扮演这个 SA 自问三句:给过的?没给的?范围对不对?</p>'
+      +'<pre>kubectl auth can-i create deployments -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 yes\n'
+      +'kubectl auth can-i list pods         -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 no\n'
+      +'kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app-team1:cicd-token   # 期望 no</pre>';
+  }
+  return '<div class="qmeta">第 '+n+' 题 / 共 17 题</div>'
+    +'<div class="empty">⏳ 本题尚未录入<br>题目 2~17 会陆续补上<br>—— 现在请专注第 1 题 ——</div>';
+}
+
+function render(){
+  var nav=document.getElementById('qnav');nav.innerHTML='';
+  for(var i=1;i<=N;i++){
+    var b=document.createElement('button');
+    b.className='qn'+(i===cur?' cur':'')+(flags[i]?' flag':'');
+    b.textContent=i;
+    b.onclick=(function(k){return function(){cur=k;render()}})(i);
+    nav.appendChild(b);
+  }
+  document.getElementById('qbody').innerHTML=qhtml(cur);
+  var fb=document.getElementById('flagb');
+  fb.className='btn'+(flags[cur]?' flag-on':'');
+  fb.textContent=flags[cur]?'⚑ 已标记本题':'⚑ 标记本题';
+  document.getElementById('prevb').disabled=(cur===1);
+  document.getElementById('nextb').disabled=(cur===N);
+  document.getElementById('progress').textContent=(running?'考试进行中':'已暂停')+' · 第 '+cur+' / '+N+' 题';
+}
+function nav(d){var t=cur+d;if(t>=1&&t<=N){cur=t;render()}}
+function toggleFlag(){flags[cur]=!flags[cur];render()}
+
+function pad(x){return (x<10?'0':'')+x}
+function fmt(s){return pad(~~(s/3600))+':'+pad(~~(s%3600/60))+':'+pad(s%60)}
+function show(){
+  var el=document.getElementById('timer');
+  el.textContent=fmt(Math.max(0,remain));
+  el.className=(remain<=900&&remain>0)?'warn':'';
+}
+function tick(){
+  remain--;show();
+  if(remain===900&&!warned15){warned15=true;alert('剩余 15 分钟 —— 回头检查标记过的题,先保住已有分数')}
+  if(remain<=0){clearInterval(tid);tid=null;running=false;finish('时间到')}
+}
+function startExam(){
+  document.getElementById('overlay').style.display='none';
+  if(!tid&&!running&&remain>0){running=true;tid=setInterval(tick,1000)}
+  render();
+}
+function pauseT(){if(tid){clearInterval(tid);tid=null}running=false;render()}
+function resetT(){if(tid){clearInterval(tid);tid=null}running=false;remain=7200;warned15=false;show()}
+function endExam(){
+  if(confirm('确定结束本次模拟?\n(暂停/重置/结束均为练习专用,真实考试只有一次机会)')){pauseT();finish('你提前交卷了')}
+}
+function finish(reason){
+  var o=document.getElementById('overlay');
+  o.style.display='block';
+  var used=7200-Math.max(0,remain);
+  o.innerHTML='<div id="ovbox"><h1>模拟结束</h1>'
+    +'<p class="sub">'+reason+' · 用时 '+fmt(used)+' · 剩余 '+fmt(Math.max(0,remain))+'</p>'
+    +'<h2>交卷自查(第 1 题)</h2><ul>'
+    +'<li>验证三连的结果是 <b>yes / no / no</b> 吗?</li>'
+    +'<li><code>kubectl get clusterrole deployment-clusterrole</code> 能列出吗?(输出前缀必须是 clusterrole,不是 role)</li>'
+    +'<li>绑定引用的是 ClusterRole、且建在 app-team1 里吗?</li></ul>'
+    +'<p style="color:#5f6368;font-size:13.5px">评分系统只看集群最终状态 —— 对就是对,错就是错,没有过程分。</p>'
+    +'<button class="big" onclick="resetExam()">再考一次(重置计时与标记)</button>'
+    +'<p class="foot">答案与翻车点分析:<a href="k8s-cka.html">CKA 备考学习页(剧透慎入)</a> · <a href="index.html">返回首页</a></p></div>';
+}
+function resetExam(){resetT();flags={};cur=1;startExam()}
+
+/* ── 终端命令存档区(contenteditable + localStorage)── */
+var LSKEY='ckaExamCmds';
+var cmdPad=document.getElementById('cmdpad');
+var DEF='student@cka:~$ <span class="cursor"></span>';
+var _saved=localStorage.getItem(LSKEY);
+if(_saved!==null){cmdPad.innerHTML=_saved}
+var sm=document.getElementById('savemsg'),_st=null;
+cmdPad.addEventListener('input',function(){
+  clearTimeout(_st);
+  _st=setTimeout(function(){
+    try{localStorage.setItem(LSKEY,cmdPad.innerHTML)}catch(e){}
+    var t=new Date();
+    sm.textContent='✓ 已自动保存 '+((t.getHours()<10?'0':'')+t.getHours())+':'+((t.getMinutes()<10?'0':'')+t.getMinutes())+':'+((t.getSeconds()<10?'0':'')+t.getSeconds());
+  },600);
+});
+function clearPad(){
+  if(confirm('清空终端里的命令存档?')){cmdPad.innerHTML=DEF;try{localStorage.setItem(LSKEY,DEF)}catch(e){}sm.textContent='已清空(默认提示已恢复)'}
+}
+
+show();render();
+</script>
+
+
+</body>
+</html>

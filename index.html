@@ -44,6 +44,9 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;max-width:300px}
   .card.top-issue .tag{color:#fc8181}
   .card.top-issue:hover{border-color:rgba(252,129,129,.8);box-shadow:0 8px 26px rgba(252,129,129,.18)}
+  .card.exam{border-color:rgba(79,209,197,.5);background:linear-gradient(90deg,rgba(79,209,197,.10),var(--card))}
+  .card.exam:hover{border-color:rgba(79,209,197,.85);box-shadow:0 8px 26px rgba(79,209,197,.16)}
+  .card.exam .tag{color:var(--green)}
   @keyframes alertPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
   .search{margin:0 0 22px}
   .sbox{position:relative}
@@ -101,6 +104,13 @@
     </div>
   </div>
   <div class="grid" id="docs">
+
+    <a class="card exam" href="k8s-cka-exam.html" data-k="模拟考 考场 exam 考试界面 复刻 倒计时 计时 纯题面 无答案 中文卷 rbac 自测 模考 17题 flag 标记 跳过 交卷">
+      <div class="icon">⏱️</div>
+      <h3>CKA 模拟考场(考试界面复刻 · 纯题面无答案)</h3>
+      <p>🎯仿真实考试界面:考前须知 → <b>2 小时倒计时</b>(剩 15 分钟红警)→ 左侧题目面板 + 右侧终端/文档桌面,17 题题号导航、⚑标记跳过、交卷自查页。<b>只给题面不给答案</b>,打开即坐进考场;现收录第 1 题(中文卷 · RBAC),配合本机 kind 集群真实作答,题 2~17 陆续录入。</p>
+      <span class="tag">● 新上线 · 第 1 题已收录 · 点击进入 →</span>
+    </a>
 
     <a class="card hot" href="k8s-cka.html" data-k="cka 考试 认证 cncf linux foundation 备考 学习 集群升级 upgrade kubeadm drain uncordon apt-mark unhold 题库 killer.sh 模拟 17题 2小时 实操 官方文档 及格">
       <div class="icon">🎓</div>

@@ -202,17 +202,30 @@ kubectl get nodes
 <pre><code>kubectl create ns app-team1    # kind 模拟环境里 ns 不存在,先造出来
 kubectl get ns app-team1       # 真实考试:"existing namespace" = 集群里已建好,直接用,★勿重复创建!</code></pre>
 
-  <h3>解法一:纯命令行三连(最快,推荐)</h3>
-<pre><code># ① 权限模板:4 个动词 × 3 种资源
-kubectl create clusterrole deployment-clusterrole \
-  --verb=create,update,delete,watch --resource=deployments,statefulsets,daemonsets
+  <h3>解法一:纯命令行三连(最快,推荐 —— 每条 = 官方文档模板改参,本地 PS 实测)</h3>
+  <pre><code># ────────── ① 权限模板:4 个动词 × 3 种资源 ──────────
+# 文档模板(RBAC 页"命令行工具"小节,create clusterrole 第 1 条示例):
+#   kubectl create clusterrole pod-reader --verb=get,list,watch --resource=pods
+# 改 3 处:pod-reader→deployment-clusterrole | get,list,watch→题面 4 动词 | pods→题面 3 资源
+PS C:\cka&gt; kubectl create clusterrole deployment-clusterrole --verb=create --verb=update --verb=delete --verb=watch --resource=deployments,statefulsets,daemonsets
+clusterrole.rbac.authorization.k8s.io/deployment-clusterrole created
+# (--verb 重复写与逗号合并 --verb=create,update,delete,watch 完全等价,抄哪种都对;★认准 clusterrole!)
+# (★本题不加 --resource-name:题面限定的是资源"类型"不是具体实例名;加了反而拦掉 create,验证必挂)
 
-# ② 身份:在指定 ns 建 SA
-kubectl -n app-team1 create serviceaccount cicd-token
+# ────────── ② 身份:在指定 ns 建 SA(命令很短,直接手敲)──────────
+PS C:\cka&gt; kubectl -n app-team1 create serviceaccount cicd-token
+serviceaccount/cicd-token created
 
-# ③ 绑定(★RoleBinding!引用 ClusterRole 用 --clusterrole=)
-kubectl -n app-team1 create rolebinding cicd-token-rb \
-  --clusterrole=deployment-clusterrole --serviceaccount=app-team1:cicd-token</code></pre>
+# ────────── ③ 绑定(★RoleBinding!引用 ClusterRole 用 --clusterrole=)──────────
+# 在哪找:与①同一个页面(RBAC 页“命令行工具”小节),页内 Ctrl+F 搜 create rolebinding
+#   → 认准小节标题 kubectl create rolebinding(不带 cluster-),抄第 2 条示例(带 --serviceaccount= 的):
+#     kubectl create rolebinding myapp-view-binding --clusterrole=view --serviceaccount=acme:myapp --namespace=acme
+# 改 4 处:myapp-view-binding→cicd-token-rb(绑定名自起)| view→deployment-clusterrole
+#         acme:myapp→app-team1:cicd-token(冒号=SA所在ns:SA名)| acme→app-team1
+PS C:\cka&gt; kubectl -n app-team1 create rolebinding cicd-token-rb --clusterrole=deployment-clusterrole --serviceaccount=app-team1:cicd-token
+rolebinding.rbac.authorization.k8s.io/cicd-token-rb created</code></pre>
+
+  <div class="warn"><b>⚠️ 实测翻车点:输出 created ≠ 对象建对。</b>① 抄文档认准 <code>create clusterrole</code> 小节 —— 抄成 <code>create role</code> 语法照样合法、照样输出 created,但建出来的是 default ns 里的 Role,题目要的 ClusterRole 根本没诞生(评分 0 分)。秒判输出前缀:<code>clusterrole.rbac.authorization.k8s.io/… created</code> 才算建对,<code>role.rbac… created</code> = 建错(前缀=对象类型,★按↑翻历史重跑时先盯它);自查两连:<code>kubectl get clusterrole deployment-clusterrole</code> 能列出 = 建对;<code>kubectl get role deployment-clusterrole -n default</code> 能列出 = 建错,删掉重跑 cluster 版。② <code>--verb</code> 少打 b 报 <code>unknown flag: --ver</code>(客户端拼写错,集群啥也没发生,改对直接重跑)。③ 报 <code>AlreadyExists</code> = 同名对象已在,先跑下方"恢复现场"。④ 文档里带 <code>--resource-name</code>/<code>subresource</code>/<code>non-resource-url</code>/<code>aggregation-rule</code> 的示例本题全不抄:题面限定的是资源"类型"(deployments),不是具体实例名 —— 加 resourceNames 反而会拦掉 create 动作。</div>
 
   <h3>解法二:--dry-run 生成 YAML 再 apply(通用套路)</h3>
 <pre><code>kubectl create clusterrole deployment-clusterrole --verb=create,update,delete,watch \
