@@ -40,6 +40,10 @@
   #qbody .divider{border-top:1px dashed var(--line);margin:18px 0 10px}
   #qbody .self{color:var(--muted);font-size:13.5px}
   #qbody .empty{color:#9aa0a6;text-align:center;padding:60px 20px;font-size:15px;line-height:2.2}
+  #qbody pre{position:relative}
+  .copybtn{position:absolute;top:6px;right:6px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:5px;padding:2px 9px;font-size:11.5px;color:#3c4043;cursor:pointer;font-family:inherit;z-index:2}
+  .copybtn:hover{border-color:var(--accent);color:var(--accent)}
+  .copybtn.ok{background:#e6f4ea;color:#137333;border-color:#137333}
   #qfoot{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#f8f9fa;border-top:1px solid var(--line);flex-wrap:wrap}
   .btn{padding:8px 18px;border-radius:5px;border:1px solid var(--line);background:#fff;color:#3c4043;font-size:14px;cursor:pointer}
   .btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -63,12 +67,21 @@
   #term{display:flex;flex-direction:column;gap:8px}
   #cmdpad{flex:1;background:#141519;border:1px solid #2a2d33;border-radius:6px;padding:10px 12px;outline:none;white-space:pre-wrap;word-break:break-all;overflow-y:auto;min-height:120px}
   #cmdpad:focus{border-color:#3d5a80}
+  #cmdpad,#cmdpad *{font:13.5px/1.8 "Cascadia Mono",Consolas,"Courier New",monospace !important;color:#e6e6e6 !important;background:none !important;font-weight:normal !important;font-style:normal !important;text-decoration:none !important;letter-spacing:normal !important}
   .termfoot{display:flex;align-items:center;gap:10px;padding:6px 10px;background:#1f2126;color:#9aa0a6;font-size:12px;flex-shrink:0}
   .termfoot #savemsg{flex:1}
   .fbtn{flex:none;color:#8ab4f8;text-decoration:none;font-size:12px;padding:2px 8px;border:1px solid #3d4757;border-radius:5px;background:#2b3442;white-space:nowrap}
   .fbtn:hover{background:#38455a}
   #fframe{flex:1;border:0;background:#fff;min-height:0}
   #fnote{padding:5px 12px;background:#f1f3f4;color:#5f6368;font-size:12px;flex-shrink:0}
+  /* ── 窄屏/手机兜底:切上下布局并放开滚动(PC 宽屏不受影响)── */
+  @media (max-width:900px){
+    body{overflow:auto;height:auto;min-height:100%}
+    #topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px}
+    #main{flex-direction:column}
+    #qpanel{width:100%;min-width:0;min-height:65vh;border-right:none;border-bottom:1px solid #9aa0a6}
+    #desk{min-height:60vh}
+  }
   #ffwin{flex:1}
   #ff{flex:1;background:#fff;display:flex;flex-direction:column}
   #faddr{height:40px;background:#f1f3f4;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;flex-shrink:0}
@@ -153,6 +166,7 @@
     <ul>
       <li>目前仅录入 <b>第 1 题(中文卷)</b>,题 2~17 为占位,后续逐题录入。</li>
       <li>做题请打开你<b>本机的终端</b>(集群 kind-cka 已就绪);右侧桌面窗口只是布局仿真。</li>
+      <li><b>请用 PC 浏览器打开本页并按 F11 全屏</b> —— 真实考试就是全屏锁定环境;窄窗口/手机会自动切为上下布局,与考场宽屏体验有差异。</li>
       <li>做完自查:题面底部的「验证三连」= 扮演评分系统人肉验收。</li>
       <li>交卷前习惯:每题做完 <code>kubectl get</code> 一次,确认对象真的建对(输出前缀=对象类型)。</li>
     </ul>
@@ -173,7 +187,20 @@ function qhtml(n){
       +'<p class="self">验证三连(评分系统干的事,提前人肉做)—— 扮演这个 SA 自问三句:给过的?没给的?范围对不对?</p>'
       +'<pre>kubectl auth can-i create deployments -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 yes\n'
       +'kubectl auth can-i list pods         -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 no\n'
-      +'kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app-team1:cicd-token   # 期望 no</pre>';
+      +'kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app-team1:cicd-token   # 期望 no</pre>'
+      +'<div class="divider"></div>'
+      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;某条报 NotFound = 该项本来就不在,跳过即可):</p>'
+      +'<pre># ── 一键全清(集群级 2 条 + 连 ns 一起端,共 3 条)──\n'
+      +'kubectl delete clusterrole deployment-clusterrole   # 集群级,删 ns 带不走它,必须单删\n'
+      +'kubectl delete clusterrolebinding cicd-token-rb     # 同上,集群级\n'
+      +'kubectl delete ns app-team1                         # ns 一删,sa + rolebinding 全陪葬(约 10 秒)\n'
+      +'# ── 白纸自查(三条全 NotFound = 干净)──\n'
+      +'kubectl get ns app-team1\n'
+      +'kubectl get clusterrole deployment-clusterrole\n'
+      +'kubectl get clusterrolebinding cicd-token-rb\n'
+      +'# ── 下次重刷起点(题目假设 ns 已存在,删过 ns 就要先重建!):\n'
+      +'kubectl create ns app-team1\n'
+      +'# ── 绑定名不同时:ns 里 RB 可 --all;CRB 只能点名,★绝不 --all(删掉系统 cluster-admin = 集群报废!)──</pre>';
   }
   return '<div class="qmeta">第 '+n+' 题 / 共 17 题</div>'
     +'<div class="empty">⏳ 本题尚未录入<br>题目 2~17 会陆续补上<br>—— 现在请专注第 1 题 ——</div>';
@@ -189,12 +216,34 @@ function render(){
     nav.appendChild(b);
   }
   document.getElementById('qbody').innerHTML=qhtml(cur);
+  var pres=document.querySelectorAll('#qbody pre');
+  for(var j=0;j<pres.length;j++){
+    var cb=document.createElement('button');
+    cb.className='copybtn';cb.textContent='⧉';cb.title='一键复制';
+    cb.onclick=function(){copyTxt(this)};
+    pres[j].appendChild(cb);
+  }
   var fb=document.getElementById('flagb');
   fb.className='btn'+(flags[cur]?' flag-on':'');
   fb.textContent=flags[cur]?'⚑ 已标记本题':'⚑ 标记本题';
   document.getElementById('prevb').disabled=(cur===1);
   document.getElementById('nextb').disabled=(cur===N);
   document.getElementById('progress').textContent=(running?'考试进行中':'已暂停')+' · 第 '+cur+' / '+N+' 题';
+}
+function fallbackCopy(txt){
+  var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy')}catch(e){}
+  document.body.removeChild(ta);
+}
+function copyTxt(btn){
+  var clone=btn.parentNode.cloneNode(true);
+  var b=clone.querySelector('.copybtn');if(b){b.parentNode.removeChild(b)}
+  var txt=(clone.innerText||clone.textContent||'').replace(/\u00a0/g,' ');
+  var done=function(){btn.textContent='✓ 已复制';btn.classList.add('ok');setTimeout(function(){btn.textContent='⧉';btn.classList.remove('ok')},1400)};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done,function(){fallbackCopy(txt);done()})
+  }else{fallbackCopy(txt);done()}
 }
 function nav(d){var t=cur+d;if(t>=1&&t<=N){cur=t;render()}}
 function toggleFlag(){flags[cur]=!flags[cur];render()}
@@ -242,8 +291,18 @@ var LSKEY='ckaExamCmds';
 var cmdPad=document.getElementById('cmdpad');
 var DEF='student@cka:~$ <span class="cursor"></span>';
 var _saved=localStorage.getItem(LSKEY);
-if(_saved!==null){cmdPad.innerHTML=_saved}
+if(_saved!==null&&_saved!==DEF){
+  cmdPad.innerHTML=_saved;
+  var _t=cmdPad.innerText.replace(/\u00a0/g,' ');
+  cmdPad.textContent=_t;  /* 归一化:清掉粘贴残留的富文本标签/样式,只留纯文本 */
+  try{localStorage.setItem(LSKEY,cmdPad.innerHTML)}catch(e){}
+}
 var sm=document.getElementById('savemsg'),_st=null;
+cmdPad.addEventListener('paste',function(e){
+  e.preventDefault();
+  var txt=(e.clipboardData||window.clipboardData).getData('text/plain');
+  if(txt){document.execCommand('insertText',false,txt)}  /* 粘贴永远进纯文本 */
+});
 cmdPad.addEventListener('input',function(){
   clearTimeout(_st);
   _st=setTimeout(function(){
