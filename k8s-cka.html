@@ -51,13 +51,14 @@
 <body>
 <div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / CKA 备考学习</span></div></div>
 <header class="doc wrap">
-  <h1>CKA 备考学习(Certified Kubernetes Administrator)<small>基于实操的认证 · 17 道题 / 限时 2 小时 · 真实集群环境解决实际问题 · 题目 1 集群升级已精讲,题目 2~17 逐题持续更新</small></h1>
+  <h1>CKA 备考学习(Certified Kubernetes Administrator)<small>基于实操的认证 · 17 道题 / 限时 2 小时 · 真实集群环境解决实际问题 · 已精讲:题目 1(集群升级)、题目 2(RBAC)、题目 6(滚更/回滚)· 模拟考场已录入 2 题,其余逐题持续更新</small></h1>
 </header>
 <div class="wrap">
 <nav class="toc"><b>目录</b><ol>
   <li><a href="#c1">考试概览:17 道题考什么</a></li>
   <li><a href="#c2">题目 1:Kubernetes 集群升级(★已精讲)</a></li>
   <li><a href="#q2">题目 2:RBAC 权限绑定(★已精讲)</a></li>
+  <li><a href="#q6">题目 6:滚动更新与回滚(★已精讲)</a></li>
   <li><a href="#c3">考试期间允许访问的官方文档</a></li>
   <li><a href="#c4">17 道典型题目清单与备考建议</a></li>
   <li><a href="#c5">动手模拟:搭建练习环境(kind/虚机/killer.sh)</a></li>
@@ -244,9 +245,70 @@ kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app
   <h3>恢复现场(反复刷题用)</h3>
 <pre><code>kubectl -n app-team1 delete rolebinding cicd-token-rb
 kubectl -n app-team1 delete sa cicd-token
-kubectl delete clusterrole deployment-clusterrole</code></pre>
+kubectl delete clusterrole deployment-clusterrole
+kubectl delete clusterrolebinding cicd-token-rb   # ★集群级,漏删它 = SA 重建后"全集群生效"幽灵复活(can-i@default 变 yes)
+# ── 通杀兜底(★清掉所有绑到 cicd-token 的授权,不管绑定叫什么名字/藏在哪个 ns)──
+kubectl get clusterrolebinding -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl delete clusterrolebinding $_.metadata.name }
+kubectl get rolebinding -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl -n $_.metadata.namespace delete rolebinding $_.metadata.name }
+# ── 防残留自查:列出所有绑到 cicd-token 的绑定(应无输出)──
+kubectl get clusterrolebinding,rolebinding -A -o wide | findstr cicd-token</code></pre>
 
   <div class="tip"><b>💡 考试要全程手敲吗?</b>不用 —— <b>终端内可复制粘贴,从内嵌官方文档复制 YAML/示例粘进终端也允许</b>(官方鼓励,长 YAML 别手敲);禁止的只是从考试机<b>外部</b>带内容进来。策略:常用命令练成肌肉记忆手敲,长 YAML 从 kubernetes.io 复制后改名改字段。本解法已在 kind v1.31 集群实测通过(yes / no / no 三连验证)。</div>
+</section>
+
+<section id="q6">
+  <h2><span class="no">C2C</span>题目 6:Deployment 滚动更新与回滚 ★已精讲</h2>
+  <p>工作负载与调度领域(15%)经典题 —— <b>改镜像 → 看滚完 → 按修订号回滚</b>,一条命令链走完。本站 <a href="k8s-cka-exam.html">模拟考场</a>第 2 题即此题(题面 / 验证三连 / 一键审计 / 恢复现场全套),做题去考场,做完回这对照原理。</p>
+  <pre><code>改镜像(set image)─▶ 滚动出Pod(新RS)─▶ 历史自动记 revision
+        ▲                                    │
+        └──── rollout undo --to-revision=N ───┘   ← ★默认 undo 只回上一版,指定版本必带 N</code></pre>
+
+  <h3>考题(与考场页第 2 题同源)</h3>
+  <p>在<b>已存在的</b>命名空间 <code>gitops</code> 中,对 Deployment <code>frontend</code>(当前镜像 <code>nginx:1.25</code>,已有 3 个修订版本)执行:① 将 Deployment 的镜像更新为 <code>nginx:1.26</code>;② 确认本次滚动更新完成;③ 将 Deployment 回滚到修订版本 <code>2</code>;④ 最终运行的镜像应恢复为 <code>nginx:1.24</code>。</p>
+
+  <h3>模拟环境准备(★kind 造题 —— 这段<b>不是答题</b>!是替考试环境预置"已有 3 个修订版本"的现场;真实考试里环境自带、直接从下方"解法"开始)</h3>
+  <pre><code>kubectl create ns gitops
+kubectl -n gitops create deployment frontend --image=nginx:1.23      # rev1(★容器名自动=镜像名 nginx,与 deployment 名无关)
+kubectl -n gitops set image deployment/frontend nginx=nginx:1.24  # rev2 ← 回滚目标(容器名 nginx,写 frontend 必报错)
+kubectl -n gitops set image deployment/frontend nginx=nginx:1.25  # rev3 = 当前
+kubectl -n gitops rollout history deployment/frontend   # 确认 3 个修订,题目从这开始</code></pre>
+
+  <div class="tip"><b>💡 镜像拉得慢/卡 ContainerCreating(kind 国内网络高频坑,★实测):</b><code>set image</code> 后新 Pod 卡 ContainerCreating 十来分钟 = 节点在拉 docker.io 镜像。提速神器 —— 宿主机先拉好,一次性灌进 kind 节点(集群内不再走网络,滚动秒级完成):
+<pre><code>docker pull nginx:1.23; docker pull nginx:1.24; docker pull nginx:1.25; docker pull nginx:1.26
+kind load docker-image nginx:1.23 nginx:1.24 nginx:1.25 nginx:1.26 --name cka   # 集群名不符时 kind get clusters 查</code></pre></div>
+
+  <h3>解法:三条命令(本地 PS 实测通过)</h3>
+  <pre><code># ① 改镜像(★"容器名=镜像",容器名≠deployment 名,变体题两者常不同,先看一眼)
+kubectl -n gitops get deploy frontend -o wide                 # 先看当前镜像
+kubectl -n gitops describe deploy frontend                    # ← 容器名在 Pod Template → Containers: 段(★命令最短好记;本题=nginx,不是 deployment 名!)
+kubectl -n gitops set image deployment/frontend nginx=nginx:1.26     # ★容器名 nginx(=create 时镜像名)
+# ② 等滚动完成(看到 successfully rolled out 再动,别发完命令就走)
+kubectl -n gitops rollout status deployment/frontend
+# ③ 回滚到指定修订(★必须带 --to-revision=2:默认 undo 只回上一版 1.25,回不到 1.24)
+kubectl -n gitops rollout undo deployment/frontend --to-revision=2</code></pre>
+
+  <div class="warn"><b>⚠️ 实测翻车点:</b>① <code>rollout undo</code> 不带 <code>--to-revision</code> = 回到<b>上一版</b>(本题即 1.25)—— 结果镜像不对,<b>整题 0 分</b>;先 <code>rollout history</code> 看清目标修订号再 undo。② <code>set image</code> 的"容器名"写错 → 报 <code>error: unable to find container named "frontend"</code>(<b>★实测高频,就发生在造题这步</b>:create deployment 的默认容器名 = <b>镜像名</b>,本题现场是 <code>nginx</code>,跟 deployment 名 frontend 无关)—— 好在是硬报错、集群啥也没改,<code>get deploy -o jsonpath='{.spec.template.spec.containers[*].name}'</code> 查到真名重跑即可;更危险的是 deployment 名打错却输出 <code>image updated</code> —— 老规矩,看输出前缀认对象。③ 改完镜像不等 <code>rollout status</code> 就 undo,滚动半路改道,最终修订号对不上。④ 本题初始就有 3 个 revision —— 别把"历史里躺着 1.23/1.24"当成自己做错了什么,那是题目预置的。</div>
+
+  <h3>验证三连(评分系统干的事,提前人肉做)</h3>
+  <pre><code>kubectl -n gitops get deploy frontend -o jsonpath='{.spec.template.spec.containers[0].image}'   # 期望 nginx:1.24
+kubectl -n gitops get deploy frontend -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}'   # 期望 5
+kubectl -n gitops rollout history deployment/frontend   # 期望 4 个修订:1/3/4/5(★rev2 被 undo 顶替为 5,消失是正常!)
+kubectl -n gitops rollout history deployment/frontend --revision=5   # ↑ 看指定修订的镜像(Pod Template 里 Image: nginx:1.24)</code></pre>
+
+  <h3>恢复现场(反复刷题用)</h3>
+  <pre><code>kubectl delete ns gitops      # 1 条:deployment / replicaset / pod 全级联陪葬
+# ── 通杀兜底(★扫全集群所有 ns,端掉所有名字=frontend 的 deployment——防之前忘写 -n 建到别的 ns)──
+kubectl get deploy -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'frontend' } | ForEach-Object { kubectl -n $_.metadata.namespace delete deployment $_.metadata.name }
+kubectl get ns gitops         # NotFound = 干净
+kubectl get deploy -A | findstr frontend   # 无输出 = 无落错 ns 的残留
+# ── 下次重刷出题(镜像首次才需 kind load;重刷无需,节点已缓存)──
+kubectl create ns gitops
+kubectl -n gitops create deployment frontend --image=nginx:1.23      # rev1
+kubectl -n gitops set image deployment/frontend nginx=nginx:1.24  # rev2 ← 回滚目标(★容器名 nginx)
+kubectl -n gitops set image deployment/frontend nginx=nginx:1.25  # rev3 = 当前
+kubectl -n gitops rollout history deployment/frontend   # 3 个修订 = 出题完成</code></pre>
+
+  <div class="tip"><b>💡 原理一句话:</b>每次 <code>set image</code> 都会生成一个<b>新 ReplicaSet</b>,旧 RS 保留(副本缩到 0)= revision 历史;<code>undo</code> 不是删除也不是切换,而是把目标 RS 的<b>模板重新应用成新 revision</b>(修订号只增不减)—— 若该模板与某个旧 RS 完全一致(回滚必然如此),控制器会<b>直接复用那个 RS</b> 并把它的 revision 注解改成新号:所以实测 history 显示 <b>1/3/4/5</b>(rev2 被顶替成 5,"消失"是正常现象、不是历史丢了),当前修订号是 <b>5</b> 而不是 2。完整考试化练习(含 6 项一键审计)请进 <a href="k8s-cka-exam.html">模拟考场第 2 题</a>。</div>
 </section>
 
 <section id="c3">
@@ -275,12 +337,12 @@ kubectl delete clusterrole deployment-clusterrole</code></pre>
   <p>根据考生回忆,17 道题通常涵盖以下题型(<b>具体题目组合每次考试都不同</b>,参数随机变体)。本站从题目 1 开始逐题精讲,<b>持续更新</b>:</p>
   <table>
     <tr><th>#</th><th>题型(题库变体)</th><th>所属领域</th><th>精讲状态</th></tr>
-    <tr><td>1</td><td><b>集群升级</b>:master 1.31.0 → 1.31.1(drain → kubeadm upgrade → uncordon)</td><td>集群架构 25%</td><td>✅ <a href="#c2">已精讲(见 C2)</a></td></tr>
-    <tr><td>2</td><td><b>RBAC</b>:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>✅ <a href="#q2">已精讲(见 题目 2)</a></td></tr>
+    <tr><td>1</td><td><b>集群升级</b>:master 1.31.0 → 1.31.1(drain → kubeadm upgrade → uncordon)</td><td>集群架构 25%</td><td>✅ <a href="#c2">已精讲(见 C2)</a> · 考场页未录(kind 练不了,虚机题)</td></tr>
+    <tr><td>2</td><td><b>RBAC</b>:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>✅ <a href="#q2">已精讲(见 题目 2)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 1 题)</a></td></tr>
     <tr><td>3</td><td>NetworkPolicy:按命名空间/标签选择性放行入站流量</td><td>服务与网络</td><td>○ 待更新</td></tr>
     <tr><td>4</td><td>etcd 快照备份与还原(etcdctl snapshot save/restore)</td><td>集群架构</td><td>○ 待更新</td></tr>
     <tr><td>5</td><td>Pod 日志排障 / 将容器日志输出到指定文件</td><td>故障排查</td><td>○ 待更新</td></tr>
-    <tr><td>6</td><td>Deployment 滚动更新(指定镜像)与回滚 revision</td><td>工作负载</td><td>○ 待更新</td></tr>
+    <tr><td>6</td><td>Deployment 滚动更新(指定镜像)与回滚 revision</td><td>工作负载</td><td>✅ <a href="#q6">已精讲(见 题目 6)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 2 题)</a></td></tr>
     <tr><td>7</td><td>Sidecar 容器注入(busybox 持续写日志)</td><td>工作负载</td><td>○ 待更新</td></tr>
     <tr><td>8</td><td>节点维护:drain 排水 + uncordon 恢复调度</td><td>集群架构</td><td>○ 待更新</td></tr>
     <tr><td>9</td><td>PV / PVC 创建与挂载(hostPath / 动态供给)</td><td>存储</td><td>○ 待更新</td></tr>

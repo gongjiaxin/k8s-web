@@ -189,18 +189,106 @@ function qhtml(n){
       +'kubectl auth can-i list pods         -n app-team1 --as=system:serviceaccount:app-team1:cicd-token   # 期望 no\n'
       +'kubectl auth can-i create deployments -n default  --as=system:serviceaccount:app-team1:cicd-token   # 期望 no</pre>'
       +'<div class="divider"></div>'
+      +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell 一次粘贴即可,控制台自动逐行执行;重复粘贴计数自动归零):不只看结果,还查你建的对象 —— "结果碰巧对、过程错"当场抓出来</p>'
+      +'<pre class="audit"># ═══ 第 1 题 · 一键审计:过程 + 结果一起查 ═══\n'
+      +'$ns="app-team1";$sa="cicd-token";$cr="deployment-clusterrole";$asa="system:serviceaccount:app-team1:cicd-token";$global:p=0;$global:f=0\n'
+      +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
+      +'\n'
+      +'$crRaw=kubectl get clusterrole $cr -o json 2>$null;$crj=if($crRaw){$crRaw|ConvertFrom-Json}\n'
+      +"$verbs=if($crj){($crj.rules.verbs|Sort-Object)-join ','};$rsc=if($crj){($crj.rules.resources|Sort-Object)-join ','}\n"
+      +"Chk '① ClusterRole 存在' (!!$crj) ''\n"
+      +"Chk '① verbs=create,delete,update,watch' ($verbs -eq 'create,delete,update,watch') \"实际: $verbs\"\n"
+      +"Chk '① resources=daemonsets,deployments,statefulsets' ($rsc -eq 'daemonsets,deployments,statefulsets') \"实际: $rsc\"\n"
+      +'$saRaw=kubectl -n $ns get sa $sa -o json 2>$null\n'
+      +"Chk '② SA cicd-token 在 app-team1 里存在' (!!$saRaw) ''\n"
+      +'$rbRaw=kubectl -n $ns get rolebinding -o json 2>$null;$rbj=if($rbRaw){$rbRaw|ConvertFrom-Json}\n'
+      +"$goodRB=@($rbj.items|Where-Object{$_.roleRef.name -eq $cr -and @($_.subjects|Where-Object{$_.kind -eq 'ServiceAccount' -and $_.name -eq $sa}).Count -gt 0})\n"
+      +"Chk '③ 存在 RoleBinding(ns内)绑该SA ← 正确姿势' ($goodRB.Count -ge 1) $(if($goodRB.Count){\"绑定名: \"+($goodRB.metadata.name -join ',')}else{'没有!多半建成了 clusterrolebinding,或 subject 用了 --user='})\n"
+      +'$crbRaw=kubectl get clusterrolebinding -o json 2>$null;$crbj=if($crbRaw){$crbRaw|ConvertFrom-Json}\n'
+      +"$badCRB=@($crbj.items|Where-Object{@($_.subjects|Where-Object{($_.kind -eq 'ServiceAccount' -and $_.name -eq $sa -and $_.namespace -eq $ns) -or ($_.kind -eq 'User' -and $_.name -like '*cicd-token*')}).Count -gt 0})\n"
+      +"Chk '③ 不应存在指向该SA的 ClusterRoleBinding(越权)' ($badCRB.Count -eq 0) $(if($badCRB.Count){\"越权: \"+($badCRB.metadata.name -join ',')+\" ← 权限全集群生效!删掉,改用 kubectl -n app-team1 create rolebinding ... --serviceaccount=app-team1:cicd-token\"}else{'干净'})\n"
+      +"$rbBad=@($rbj.items|Where-Object{$_.roleRef.name -eq $cr -and @($_.subjects|Where-Object{$_.kind -eq 'User'}).Count -gt 0})\n"
+      +"Chk '③ 没把SA当User绑(--user=是给人用的)' ($rbBad.Count -eq 0) $(if($rbBad.Count){\"发现: \"+($rbBad.metadata.name -join ',')}else{'干净'})\n"
+      +'\n'
+      +'$r1=kubectl auth can-i create deployments -n $ns --as=$asa\n'
+      +'$r2=kubectl auth can-i list pods -n $ns --as=$asa\n'
+      +'$r3=kubectl auth can-i create deployments -n default --as=$asa\n'
+      +"Chk '④ can-i create deployments@app-team1 = yes' ($r1 -like 'yes*') $r1\n"
+      +"Chk '④ can-i list pods@app-team1 = no' ($r2 -like 'no*') $r2\n"
+      +"Chk '④ can-i create deployments@default = no' ($r3 -like 'no*') $r3\n"
+      +'\n'
+      +"if($global:f -eq 0){Write-Host '★ 全绿:结果对,过程也对 —— 稳了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:结果可能是碰巧对(旧绑定顶包),但过程错了 —— 考场评分看对象,照样扣分!\" -f Red}</pre>"
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q1.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q1.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。手写文件党:PS 的 heredoc 是 <code>@\'…\'@ | Out-File -Encoding utf8 文件名.ps1</code>(结束符 \'@ 必须顶行首)</p>'
+      +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;某条报 NotFound = 该项本来就不在,跳过即可):</p>'
-      +'<pre># ── 一键全清(集群级 2 条 + 连 ns 一起端,共 3 条)──\n'
+      +'<pre># ── 一键全清(具名 3 条 + 通杀兜底 2 条)──\n'
       +'kubectl delete clusterrole deployment-clusterrole   # 集群级,删 ns 带不走它,必须单删\n'
       +'kubectl delete clusterrolebinding cicd-token-rb     # 同上,集群级\n'
       +'kubectl delete ns app-team1                         # ns 一删,sa + rolebinding 全陪葬(约 10 秒)\n'
-      +'# ── 白纸自查(三条全 NotFound = 干净)──\n'
+      +'# ── 通杀兜底(★清掉所有绑到 cicd-token 的授权,不管绑定叫什么名字/藏在哪个 ns)──\n'
+      +"kubectl get clusterrolebinding -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl delete clusterrolebinding $_.metadata.name }\n"
+      +"kubectl get rolebinding -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl -n $_.metadata.namespace delete rolebinding $_.metadata.name }\n"
+      +'# ── 白纸自查(三条全 NotFound + 第四条无输出 = 干净)──\n'
       +'kubectl get ns app-team1\n'
       +'kubectl get clusterrole deployment-clusterrole\n'
       +'kubectl get clusterrolebinding cicd-token-rb\n'
+      +'kubectl get clusterrolebinding,rolebinding -A -o wide | findstr cicd-token   # 无输出 = 无幽灵绑定残留\n'
       +'# ── 下次重刷起点(题目假设 ns 已存在,删过 ns 就要先重建!):\n'
       +'kubectl create ns app-team1\n'
       +'# ── 绑定名不同时:ns 里 RB 可 --all;CRB 只能点名,★绝不 --all(删掉系统 cluster-admin = 集群报废!)──</pre>';
+  }
+  if(n===2){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 2 题 / 共 17 题 · 滚动更新与回滚</div>'
+      +'<p>在已存在的命名空间 <code>gitops</code> 中,对 Deployment <code>frontend</code>(当前镜像 <code>nginx:1.25</code>,已有 3 个修订版本)执行:</p>'
+      +'<p>① 将 Deployment 的镜像更新为 <code>nginx:1.26</code>;</p>'
+      +'<p>② 确认本次滚动更新完成(等待 <code>successfully rolled out</code>);</p>'
+      +'<p>③ 将 Deployment 回滚到修订版本 <code>2</code>(revision 2);</p>'
+      +'<p>④ 最终运行的镜像应恢复为 <code>nginx:1.24</code>。</p>'
+      +'<div class="divider"></div>'
+      +'<p class="self">验证三连(评分系统干的事,提前人肉做)—— 查镜像、查修订号、看历史:★默认 undo 只回上一版(1.26→1.25),想回到 1.24 必须显式 --to-revision</p>'
+      +"<pre>kubectl -n gitops get deploy frontend -o jsonpath='{.spec.template.spec.containers[0].image}'\n"
+      +"   # 期望 nginx:1.24\n"
+      +"kubectl -n gitops get deploy frontend -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}'\n"
+      +"   # 期望 5\n"
+      +"kubectl -n gitops rollout history deployment/frontend\n"
+      +"   # 期望 4 个修订:1/3/4/5(★rev2 被 undo 顶替为 5,消失是正常)\n"
+      +"kubectl -n gitops rollout history deployment/frontend --revision=5\n"
+      +"   # ↑ 看指定修订的镜像(Pod Template 里 Image: nginx:1.24)</pre>"
+      +'<div class="divider"></div>'
+      +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell 一次粘贴即可,控制台自动逐行执行;重复粘贴计数自动归零):不只看结果,还查修订历史 —— "默认 undo 混过去"当场抓出来</p>'
+      +'<pre class="audit"># ═══ 第 2 题 · 一键审计:过程 + 结果一起查 ═══\n'
+      +'$ns="gitops";$dp="frontend";$finalImg="nginx:1.24";$global:p=0;$global:f=0\n'
+      +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
+      +'\n'
+      +'$dpRaw=kubectl -n $ns get deploy $dp -o json 2>$null;$dpj=if($dpRaw){$dpRaw|ConvertFrom-Json}\n'
+      +"$img=if($dpj){$dpj.spec.template.spec.containers[0].image};$rev=if($dpj){$dpj.metadata.annotations.'deployment.kubernetes.io/revision'}\n"
+      +"$ready=if($dpj){[int]$dpj.status.readyReplicas};$want=if($dpj){[int]$dpj.spec.replicas}\n"
+      +"Chk '① Deployment gitops/frontend 存在' (!!$dpj) ''\n"
+      +"Chk '① 副本全部就绪(滚动已完成)' ($ready -eq $want -and $want -gt 0) \"ready: $ready / desired: $want\"\n"
+      +"Chk '② 最终镜像 = nginx:1.24' ($img -eq $finalImg) \"实际: $img\"\n"
+      +"Chk '③ 修订号 = 5(改镜像→4,回滚→5)' ($rev -eq '5') \"实际: $rev\"\n"
+      +"$hist=@(kubectl -n $ns rollout history deploy/$dp 2>$null)\n"
+      +"$revLines=@($hist | Where-Object {$_ -match '^\\s*\\d'})\n"
+      +"Chk '③ 历史完整(4 个 revision:1/3/4/5,rev2 已被顶替)' ($revLines.Count -ge 4) \"revision 行数: $($revLines.Count)\"\n"
+      +'\n'
+      +"if($global:f -eq 0){Write-Host '★ 全绿:结果对,过程也对 —— 稳了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方红字修正 —— 最常见:忘了 --to-revision=2,默认 undo 只回到 1.25\" -f Red}</pre>"
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q2.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q2.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
+      +'<div class="divider"></div>'
+      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;报 NotFound = 该项本来就不在,跳过即可):</p>'
+      +'<pre># ── 一键全清(删 ns 1 条 + 通杀兜底 1 条)──\n'
+      +'kubectl delete ns gitops   # deployment/replicaset/pod/revision 历史全陪葬\n'
+      +"kubectl get deploy -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'frontend' } | ForEach-Object { kubectl -n $_.metadata.namespace delete deployment $_.metadata.name }\n"
+      +'# ── 白纸自查(NotFound + 无输出 = 干净)──\n'
+      +'kubectl get ns gitops        # NotFound = 干净\n'
+      +'kubectl get deploy -A | findstr frontend   # 无输出 = 无落错 ns 的 frontend 残留\n'
+      +'# ── 下次重刷起点(造出 rev1=1.23、rev2=1.24、rev3=1.25 三个修订,当前停在 rev3)──\n'
+      +'kubectl create ns gitops\n'
+      +'kubectl -n gitops create deployment frontend --image=nginx:1.23\n'
+      +'kubectl -n gitops set image deployment/frontend nginx=nginx:1.24   # ★容器名 nginx(=create 时镜像名),写 frontend 必报 unable to find container\n'
+      +'kubectl -n gitops set image deployment/frontend nginx=nginx:1.25\n'
+      +'kubectl -n gitops rollout history deployment/frontend   # 应看到 3 个修订,题目从"改成 1.26"开始</pre>';
   }
   return '<div class="qmeta">第 '+n+' 题 / 共 17 题</div>'
     +'<div class="empty">⏳ 本题尚未录入<br>题目 2~17 会陆续补上<br>—— 现在请专注第 1 题 ——</div>';
@@ -229,6 +317,19 @@ function render(){
   document.getElementById('prevb').disabled=(cur===1);
   document.getElementById('nextb').disabled=(cur===N);
   document.getElementById('progress').textContent=(running?'考试进行中':'已暂停')+' · 第 '+cur+' / '+N+' 题';
+}
+function dlAudit(){
+  var el=document.querySelector('#qbody pre.audit');
+  if(!el){alert('当前题还没有审计脚本');return}
+  var clone=el.cloneNode(true);
+  var b=clone.querySelector('.copybtn');if(b){b.parentNode.removeChild(b)}
+  var txt=(clone.innerText||'').replace(/\u00a0/g,' ');
+  var blob=new Blob(['\ufeff'+txt],{type:'text/plain;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='cka-audit-q'+cur+'.ps1';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);document.body.removeChild(a)},600);
 }
 function fallbackCopy(txt){
   var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
