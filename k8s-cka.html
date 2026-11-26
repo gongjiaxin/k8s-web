@@ -51,14 +51,17 @@
 <body>
 <div class="topbar"><div class="wrap"><a class="home" href="index.html">← 返回首页</a><span class="crumb">K8S Web / 文档 / CKA 备考学习</span></div></div>
 <header class="doc wrap">
-  <h1>CKA 备考学习(Certified Kubernetes Administrator)<small>基于实操的认证 · 17 道题 / 限时 2 小时 · 真实集群环境解决实际问题 · 已精讲:题目 1(集群升级)、题目 2(RBAC)、题目 6(滚更/回滚)· 模拟考场已录入 2 题,其余逐题持续更新</small></h1>
+  <h1>CKA 备考学习(Certified Kubernetes Administrator)<small>基于实操的认证 · 17 道题 / 限时 2 小时 · 真实集群环境解决实际问题 · 已精讲:题目 1(集群升级)、题目 2(RBAC)、题目 3(NetworkPolicy)、题目 5(Pod 日志)、题目 6(滚更/回滚)、题目 8(节点维护)· 模拟考场已录入 12 题,其余逐题持续更新</small></h1>
 </header>
 <div class="wrap">
 <nav class="toc"><b>目录</b><ol>
   <li><a href="#c1">考试概览:17 道题考什么</a></li>
   <li><a href="#c2">题目 1:Kubernetes 集群升级(★已精讲)</a></li>
   <li><a href="#q2">题目 2:RBAC 权限绑定(★已精讲)</a></li>
+  <li><a href="#q3">题目 3:NetworkPolicy 网络隔离(★已精讲)</a></li>
+  <li><a href="#q5">题目 5:Pod 日志收集(logs/--previous)(★已精讲)</a></li>
   <li><a href="#q6">题目 6:滚动更新与回滚(★已精讲)</a></li>
+  <li><a href="#q8">题目 8:节点维护 drain / cordon / uncordon(★已精讲)</a></li>
   <li><a href="#c3">考试期间允许访问的官方文档</a></li>
   <li><a href="#c4">17 道典型题目清单与备考建议</a></li>
   <li><a href="#c5">动手模拟:搭建练习环境(kind/虚机/killer.sh)</a></li>
@@ -256,6 +259,206 @@ kubectl get clusterrolebinding,rolebinding -A -o wide | findstr cicd-token</code
   <div class="tip"><b>💡 考试要全程手敲吗?</b>不用 —— <b>终端内可复制粘贴,从内嵌官方文档复制 YAML/示例粘进终端也允许</b>(官方鼓励,长 YAML 别手敲);禁止的只是从考试机<b>外部</b>带内容进来。策略:常用命令练成肌肉记忆手敲,长 YAML 从 kubernetes.io 复制后改名改字段。本解法已在 kind v1.31 集群实测通过(yes / no / no 三连验证)。</div>
 </section>
 
+<section id="q3">
+  <h2><span class="no">C2D</span>题目 3:NetworkPolicy —— 网络隔离"先全封,再放行" ★已精讲</h2>
+  <p>服务与网络领域(20%)经典题。前两题 RBAC 管"谁能调 API",这题管"谁能连流量"——<b>思路大反转:RBAC 是给权限,NetworkPolicy 是先全封、再放行</b>。本站 <a href="k8s-cka-exam.html">模拟考场</a>第 12 题即此题(题面 / 验证三连 / 一键审计 / 恢复现场全套)。</p>
+  <pre><code>被管控 Pod(backend,app=backend)一旦被 NetworkPolicy 选中:
+  入方向 ──▶ 默认全拒(★没有规则 = 拒绝,不是放行!)
+  放行规则(ingress.from)──▶ 同 ns 且 app=frontend ──▶ 仅 TCP 80
+  出方向 ──▶ policyTypes 不写 Egress 就不管</code></pre>
+
+  <h3>考题(中文卷题面为主,英文卷对照保留)</h3>
+  <p><b>【中文卷】</b>在已存在的命名空间 <code>secure</code> 中,运行着 Deployment <code>backend</code>(镜像 <code>nginx:1.25</code>,标签 <code>app=backend</code>,容器端口 80)和 Service <code>backend</code>。创建一个名为 <code>allow-frontend-only</code> 的 NetworkPolicy,满足:① 只允许<b>同一命名空间内</b>标签为 <code>app=frontend</code> 的 Pod 访问 <code>backend</code> 的 TCP 80 端口;② 除此以外,拒绝所有其他入方向流量(包括来自其他命名空间的);③ 不限制出方向流量。<br>
+  <b>【英文卷】</b>Create a NetworkPolicy named <code>allow-frontend-only</code> in the existing namespace <code>secure</code>. A Deployment <code>backend</code>(label <code>app=backend</code>)and a Service <code>backend</code> are running there. The policy must allow ingress traffic <b>only from Pods in the same namespace</b> with label <code>app=frontend</code> to the backend Pods on TCP port 80; all other ingress traffic must be denied; egress traffic is not affected.</p>
+
+  <h3>模拟环境准备(★仅 kind 造题用 —— 本题有一个"CNI 前置":★本机集群已装 Calico,第 0 步自查通过即零成本直接做)</h3>
+  <pre><code># ── 第 0 步:CNI 自查(★本机集群建群时就装了 Calico —— calico-node DaemonSet 一直在跑)──
+kubectl -n kube-system get ds | findstr calico        # 有 calico-node = 支持 NetworkPolicy,下面"重装段"整个跳过,直接出题五条
+# ── (仅当上面无输出才需要:kind 默认 kindnet 不支持 NP —— 重装集群 + Calico,只做一次)──
+kind delete cluster --name cka
+@'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+networking:
+  disableDefaultCNI: true        # 禁用 kindnet,podSubnet 对齐 Calico 默认地址池
+  podSubnet: 192.168.0.0/16
+'@ | kind create cluster --name cka --config=-
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.2/manifests/calico.yaml
+kubectl -n kube-system wait --for=condition=ready pod -l k8s-app=calico-node --timeout=300s
+kubectl get nodes                                          # 全部 Ready = CNI 生效
+docker pull busybox:1.36                                   # ★集群重装 = kind load 的镜像清零,全部重 load!
+kind load docker-image busybox:1.36 nginx:1.23 nginx:1.24 nginx:1.25 nginx:1.26 --name cka
+# (第 1/2 题要重刷时:先跑各自题的"重刷出题"段,环境从零造)
+
+# ── 出题五条(约 1 分钟)──
+kubectl create ns secure
+kubectl -n secure create deployment backend --image=nginx:1.25
+kubectl -n secure expose deployment backend --port=80     # 造出 DNS 名 backend
+kubectl -n secure run client-ok --image=busybox:1.36 --labels=app=frontend --restart=Never -- sleep 3600   # 合法访客
+kubectl -n secure run client-no --image=busybox:1.36 --labels=app=hacker  --restart=Never -- sleep 3600   # 非法访客
+kubectl -n secure get pods -o wide                         # 4 个 Pod 全 Running = 出题完成</code></pre>
+
+  <h3>解法:NetworkPolicy 没有命令式 —— 唯一出路是 YAML(官方文档复制改)</h3>
+  <pre><code># 考场路径:右侧 Firefox → kubernetes.io → 搜 NetworkPolicy → Network Policies 概念页
+# → 复制页面里的 NetworkPolicy 示例 → 粘成 np.yaml → 改 6 处:名字 / namespace / 两层选择器 / policyTypes / 端口
+# 本地直接写(已对齐题面,存为 C:\cka\np.yaml,UTF-8):
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-only
+  namespace: secure
+spec:
+  podSelector:                    # ① 管谁:被选中的 Pod 立刻"默认全封"
+    matchLabels:
+      app: backend
+  policyTypes: ["Ingress"]        # ② 只管入方向(不写 Egress = 出流量自由)
+  ingress:
+  - from:
+    - podSelector:                # ③ 放行谁:★只写 podSelector、不带 namespaceSelector = 仅同 ns!
+      matchLabels:
+        app: frontend
+    ports:
+    - protocol: TCP               # ④ 只放这个端口(漏写 ports = 全端口放行)
+      port: 80
+
+PS C:\cka&gt; kubectl apply -f np.yaml
+networkpolicy.networking.k8s.io/allow-frontend-only created   # ★前缀 = 对象类型:networkpolicy 才算建对</code></pre>
+
+  <div class="warn"><b>⚠️ 实测翻车点:</b>① <b>kind 默认 kindnet 不支持 NetworkPolicy</b> —— 策略照常 apply 成功、但<b>完全不生效</b>(client-no 也通,全假绿)!先自查 <code>kubectl -n kube-system get ds | findstr calico</code>,有输出 = CNI 就绪,没有 = 跑上方"环境准备"重装。② <code>from</code> 里画蛇添足写了 <code>namespaceSelector: {}</code>(空 = 全部 ns)→ 跨 ns 也放行,题面②被破坏;<b>只写 podSelector 本身就是"仅同 ns"</b>。③ 顶层 <code>podSelector</code>(管谁)与 <code>from.podSelector</code>(放谁进)是<b>两层不同选择器</b>,写反 = 封错对象、放错人。④ 漏 <code>ports</code> = 对 app=frontend 放行所有端口(行为测试发现不了,从严别漏)。⑤ 题面"已存在(existing)"的 backend/Service 千万别动,你只加 NetworkPolicy。⑥ YAML 缩进必须 2 空格,<code>policyTypes</code> 用中括号一行或 <code>- Ingress</code> 逐行写都合法;文件存 UTF-8(记事本另存选 UTF-8)。</div>
+
+  <h3>验证三连(评分系统干的事,提前人肉做 —— 行为测试,光看 YAML 不算数)</h3>
+  <pre><code># 合法访客(同 ns + app=frontend)→ 期望:吐出 nginx 欢迎页 HTML
+kubectl -n secure exec client-ok -- wget -qO- -T 2 http://backend
+# 非法访客(同 ns 但标签不对)→ 期望:卡 2 秒后 wget: download failed(被 DROP)
+kubectl -n secure exec client-no -- wget -qO- -T 2 http://backend
+# 跨 ns 访客(default ns)→ 期望:同样超时失败(★from 没带 namespaceSelector 的铁证)
+kubectl -n default run tmpchk --image=busybox:1.36 --restart=Never --rm -i -- wget -qO- -T 2 http://backend.secure.svc.cluster.local</code></pre>
+
+  <h3>恢复现场(反复刷题用)</h3>
+  <pre><code>kubectl delete ns secure   # np/deploy/svc/client Pod 全级联陪葬(1 条)
+# ── 通杀兜底(★扫全集群所有 ns,端掉所有名字=allow-frontend-only 的 NetworkPolicy——防 YAML 忘写 namespace 建到 default)──
+kubectl get networkpolicy -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'allow-frontend-only' } | ForEach-Object { kubectl -n $_.metadata.namespace delete networkpolicy $_.metadata.name }
+kubectl get ns secure                                   # NotFound = 干净
+kubectl get networkpolicy -A | findstr allow-frontend-only   # 无输出 = 无落错 ns 的残留
+# ── 下次重刷出题(镜像已 load 过,免重 load;第 0 步先确认 Calico 在)──
+kubectl create ns secure
+kubectl -n secure create deployment backend --image=nginx:1.25
+kubectl -n secure expose deployment backend --port=80
+kubectl -n secure run client-ok --image=busybox:1.36 --labels=app=frontend --restart=Never -- sleep 3600
+kubectl -n secure run client-no --image=busybox:1.36 --labels=app=hacker  --restart=Never -- sleep 3600
+kubectl -n secure get pods -o wide                      # 4 个 Pod 全 Running = 出题完成</code></pre>
+
+  <div class="tip"><b>💡 原理一句话:</b>NetworkPolicy 是<b>白名单模型</b> —— Pod 一被策略选中,入方向默认全拒,规则只负责"开孔"(谁、什么端口);没被任何策略选中的 Pod 完全不受影响。它管<b>数据面流量</b>(Pod↔Pod),不管 API 面(那是 RBAC 的地盘);对经 Service 的流量照样生效(流量最终落到后端 Pod IP)。完整考试化练习(含 9 项一键审计,首项就查 Calico)进 <a href="k8s-cka-exam.html">模拟考场第 12 题</a>。</div>
+</section>
+
+<section id="q5">
+  <h2><span class="no">C2E</span>题目 5:Pod 日志收集 —— logs / --previous / 重定向 ★已精讲</h2>
+  <p>故障排查领域(30%,<b>权重最高</b>)里最"白给"的题 —— 但丢分基本都丢在 <b>--previous</b>。本站 <a href="k8s-cka-exam.html">模拟考场</a>第 3 题即此题(题面 / 验证三连 / 一键审计 / 恢复现场全套),做题去考场,做完回这对照原理。</p>
+  <pre><code>容器日志(kubectl logs 只读 stdout/stderr 落盘的那份)──┬─ 当前这一世:logs logger
+                                                          └─ ★上一世(已死):logs logger --previous ← 重启过才有,判分就卡这条!
+落盘 ──▶ &gt;(创建/覆盖) 与 &gt;&gt;(追加)──▶ 两段日志按"先旧后新"合入同一个文件</code></pre>
+
+  <h3>考题(与考场页第 3 题同源)</h3>
+  <p><b>【中文卷】</b>命名空间 <code>pod-log</code> 中的 Pod <code>logger</code> 正在运行,其容器<b>曾重启过一次</b>(CrashLoopBackOff 后自愈)。请将该 Pod 的<b>全部日志</b>(含重启前那一世容器的日志)按"先旧后新"的顺序保存到 <code>C:\cka\logger-all.log</code>(考试真实环境是集群节点上的 <code>/opt/...</code>,做法完全一样,只是文件落点不同)。<br>
+  <b>【英文卷】</b>A Pod <code>logger</code> is running in namespace <code>pod-log</code>, and its container <b>restarted once</b>. Save <b>all logs of this Pod</b>(including the previous container instance, old lines first)to <code>/opt/logger-all.log</code>.</p>
+
+  <h3>环境准备(apply 一段 YAML + 等一次自愈,约 40 秒;零集群改动,kindnet 即可)</h3>
+  <pre><code># ⓪ 镜像(★实测:本机 kind 节点能直连外网自拉 —— busybox 才 4MB,Pod 创建后自己就拉了,本段可整个跳过!
+#    仅当 Pod 卡 ImagePullBackOff 才需手动灌):
+docker pull busybox:1.36
+kind load docker-image busybox:1.36 --name cka
+# ⚠ 若 kind load 报 "ctr: content digest … not found"(Docker Desktop 默认开 containerd 存储的连环坑,★实测五连败:重跑✗/单平台重拉✗/docker cp✗/文件重定向✗/tar 缺非本机平台层):
+#   正解 = Docker Desktop Settings → General → 取消 "Use containerd for pulling and storing images" → Apply & Restart,重 pull + load
+#   生效标志:pull 显示 "Downloaded newer image"(而非 "Image is up to date");若 kind 失联:docker start cka-control-plane cka-worker cka-worker2
+#   验证(节点里才有 ctr,宿主机没有):docker exec cka-worker ctr -n k8s.io images ls | findstr busybox(三节点各查一遍)
+# ── 出题(构造一个"死一次再自愈"的 Pod:第一世打 OLD-crash-line 后 exit 3 崩掉;重启后常驻打 LIVE)──
+# ★标记文件必须放 emptyDir!容器重启 = 可写层重置,/tmp 里的东西全丢 —— 标记放 /tmp 会每世都崩、无限 CrashLoop(★出题脚本实测翻过)
+kubectl create ns pod-log
+$y = @"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: logger
+  namespace: pod-log
+  labels:
+    app: logger
+spec:
+  containers:
+  - name: logger
+    image: busybox:1.36
+    command: ["sh", "-c"]
+    args:
+      - "if [ -f /bootmark/booted ]; then echo LIVE-1; echo LIVE-2; while true; do sleep 5; echo LIVE-tick; done; else touch /bootmark/booted; echo OLD-crash-line; exit 3; fi"
+    volumeMounts:
+    - name: boot
+      mountPath: /bootmark
+  volumes:
+  - name: boot
+    emptyDir: {}
+"@
+$y | kubectl apply -f -
+Start-Sleep 30
+kubectl -n pod-log get pod logger -o wide      # STATUS=Running 且 RESTARTS=1 = 出题完成(还不是就再等 15s)</code></pre>
+  <div class="tip"><b>💡 出题原理:</b>"打卡文件" <code>/bootmark/booted</code> 放在 <b>emptyDir 卷</b>里 —— emptyDir 的生命周期 = Pod,容器重启<b>保留</b>(★而容器自己的可写层 —— 含 /tmp —— 每次重启<b>重置</b>:标记放 /tmp 的话每世都走崩溃分支、Pod 无限 CrashLoop,出题脚本实测翻过这个坑)。所以第一世(没文件 → 打 OLD 行 + 崩)和第二世(有文件 → LIVE 常驻)日志内容不同,<code>--previous</code> 才抓得到"上一世"的真凭实据。考试里的 Pod 也是官方脚本故意崩一次造出来的,同款。</div>
+
+  <h3>解法(答案):两条命令按序落盘(本题主考点 = --previous + 重定向,不用翻文档)</h3>
+  <pre><code># ① 先收"上一世"(必须 --previous;容器没重启过会报:previous container ... not found)
+kubectl -n pod-log logs logger --previous &gt;  C:\cka\logger-all.log
+# ② 再收"当前世"(★必须是 &gt;&gt; 追加 —— 写成 &gt; 会把①刚写的内容整段冲掉!)
+kubectl -n pod-log logs logger           &gt;&gt; C:\cka\logger-all.log
+# 自查:OLD-crash-line 在前、LIVE-1 在后 = 结构对了
+Get-Content C:\cka\logger-all.log
+# 若 C:\cka 不存在:先 mkdir C:\cka(重定向不会自建目录,会直接报错)</code></pre>
+
+  <div class="warn"><b>⚠️ 实测翻车点:</b>① <b>忘 --previous</b> —— 题面说"全部日志"就是专坑这个,文件里只有当前世一半,判分直接扣;② 第二条写成 <code>&gt;</code> 而非 <code>&gt;&gt;</code> —— ①的成果当场蒸发,永远只剩最后一段;③ 手贱加 <code>-f / --follow</code> —— 终端被挂死,两小时考试被一条命令冻住(Ctrl+C 解);④ 报 <code>previous container not found</code> = 容器还没重启过(RESTARTS=0,出题没完成),等 15 秒再试;⑤ 多容器 Pod 必须 <code>-c 容器名</code> 指定(本题单容器,不用);⑥ 考试真实环境文件落在<b>集群节点</b>的 /opt 下(SSH 到节点落盘),本地模拟落 C:\cka —— 命令内核一模一样,别纠结落点;⑦ PowerShell 的 <code>&gt;</code> 默认写出 UTF-16 编码,Get-Content 能正常读回、判分无碍;若想纯 UTF-8,写法 <code>| Out-File -Encoding utf8 C:\cka\logger-all.log</code>(两个命令都要换)。</div>
+
+  <h3>验证三连(评分系统干的事,提前人肉做)</h3>
+  <pre><code>kubectl -n pod-log get pod logger -o jsonpath='{.status.containerStatuses[0].restartCount}'   # 期望:1(重启过,--previous 才有料)
+kubectl -n pod-log logs logger --previous      # 期望:能看到 OLD-crash-line(上一世真凭实据)
+Get-Content C:\cka\logger-all.log | findstr "OLD-crash-line LIVE-1"   # 期望:两行都命中,且 OLD 在前</code></pre>
+
+  <h3>恢复现场(反复刷题用)</h3>
+  <pre><code>kubectl delete ns pod-log                      # Pod 陪葬(1 条)
+Remove-Item C:\cka\logger-all.log              # 顺手删成果文件(重刷时 &gt; 会覆盖,不删也行)
+# ── 通杀兜底(★扫全集群所有 ns,端掉所有名字=logger 的 Pod —— 防 -n 忘带建错地方)──
+kubectl get pod -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'logger' } | ForEach-Object { kubectl -n $_.metadata.namespace delete pod $_.metadata.name }
+# ── 白纸自查(NotFound + 无输出 + False = 干净)──
+kubectl get ns pod-log                         # NotFound = 干净
+kubectl get pod -A | findstr logger            # 无输出 = 无落错 ns 的残留
+Test-Path C:\cka\logger-all.log                # False = 文件已清
+# ── 出题 / 重刷出题(首次也跑这段;节点能自拉镜像则免灌;标记必须 emptyDir —— /tmp 会随重启丢)──
+kubectl create ns pod-log
+$y = @"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: logger
+  namespace: pod-log
+  labels:
+    app: logger
+spec:
+  containers:
+  - name: logger
+    image: busybox:1.36
+    command: ["sh", "-c"]
+    args:
+      - "if [ -f /bootmark/booted ]; then echo LIVE-1; echo LIVE-2; while true; do sleep 5; echo LIVE-tick; done; else touch /bootmark/booted; echo OLD-crash-line; exit 3; fi"
+    volumeMounts:
+    - name: boot
+      mountPath: /bootmark
+  volumes:
+  - name: boot
+    emptyDir: {}
+"@
+$y | kubectl apply -f -
+Start-Sleep 30
+kubectl -n pod-log get pod logger -o wide      # STATUS=Running 且 RESTARTS=1 = 出题完成</code></pre>
+
+  <div class="tip"><b>💡 原理一句话:</b>kubelet 把每个容器的 stdout/stderr 落到节点目录,容器死了日志文件还在 —— <code>logs</code> 读当前这份、<code>--previous</code> 切到上一份,是"这一世/上一世"的维度,不是 <code>--since</code> 那种时间窗。完整考试化练习(7 项一键审计,连"旧在前新在后"的顺序都查)进 <a href="k8s-cka-exam.html">模拟考场第 3 题</a>。</div>
+</section>
+
 <section id="q6">
   <h2><span class="no">C2C</span>题目 6:Deployment 滚动更新与回滚 ★已精讲</h2>
   <p>工作负载与调度领域(15%)经典题 —— <b>改镜像 → 看滚完 → 按修订号回滚</b>,一条命令链走完。本站 <a href="k8s-cka-exam.html">模拟考场</a>第 2 题即此题(题面 / 验证三连 / 一键审计 / 恢复现场全套),做题去考场,做完回这对照原理。</p>
@@ -267,7 +470,11 @@ kubectl get clusterrolebinding,rolebinding -A -o wide | findstr cicd-token</code
   <p>在<b>已存在的</b>命名空间 <code>gitops</code> 中,对 Deployment <code>frontend</code>(当前镜像 <code>nginx:1.25</code>,已有 3 个修订版本)执行:① 将 Deployment 的镜像更新为 <code>nginx:1.26</code>;② 确认本次滚动更新完成;③ 将 Deployment 回滚到修订版本 <code>2</code>;④ 最终运行的镜像应恢复为 <code>nginx:1.24</code>。</p>
 
   <h3>模拟环境准备(★kind 造题 —— 这段<b>不是答题</b>!是替考试环境预置"已有 3 个修订版本"的现场;真实考试里环境自带、直接从下方"解法"开始)</h3>
-  <pre><code>kubectl create ns gitops
+  <pre><code># ⓪ 一次性(kind 离线集群,四档 nginx 不先灌,做题时新 Pod 会卡 ContainerCreating 十来分钟;末尾 💡tip 有提速原理):
+#   (若 kind load 报 "ctr: content digest … not found" → 修法见 题目 5 的 ⓪ ⚠,通用)
+docker pull nginx:1.23; docker pull nginx:1.24; docker pull nginx:1.25; docker pull nginx:1.26
+kind load docker-image nginx:1.23 nginx:1.24 nginx:1.25 nginx:1.26 --name cka
+kubectl create ns gitops
 kubectl -n gitops create deployment frontend --image=nginx:1.23      # rev1(★容器名自动=镜像名 nginx,与 deployment 名无关)
 kubectl -n gitops set image deployment/frontend nginx=nginx:1.24  # rev2 ← 回滚目标(容器名 nginx,写 frontend 必报错)
 kubectl -n gitops set image deployment/frontend nginx=nginx:1.25  # rev3 = 当前
@@ -311,6 +518,67 @@ kubectl -n gitops rollout history deployment/frontend   # 3 个修订 = 出题�
   <div class="tip"><b>💡 原理一句话:</b>每次 <code>set image</code> 都会生成一个<b>新 ReplicaSet</b>,旧 RS 保留(副本缩到 0)= revision 历史;<code>undo</code> 不是删除也不是切换,而是把目标 RS 的<b>模板重新应用成新 revision</b>(修订号只增不减)—— 若该模板与某个旧 RS 完全一致(回滚必然如此),控制器会<b>直接复用那个 RS</b> 并把它的 revision 注解改成新号:所以实测 history 显示 <b>1/3/4/5</b>(rev2 被顶替成 5,"消失"是正常现象、不是历史丢了),当前修订号是 <b>5</b> 而不是 2。完整考试化练习(含 6 项一键审计)请进 <a href="k8s-cka-exam.html">模拟考场第 2 题</a>。</div>
 </section>
 
+<section id="q8">
+  <h2><span class="no">C2F</span>题目 8:节点维护 —— cordon / drain / uncordon ★已精讲</h2>
+  <p>集群架构领域经典题,也是日常运维的真实动作:<b>cordon = 拉警戒线(只拒新客),drain = 清场(优雅驱逐),uncordon = 解除</b> —— 一条链三步,考试常考前两步并要求"保持不可调度"。本站 <a href="k8s-cka-exam.html">模拟考场</a>第 4 题即此题(题面 / 验证三连 / 一键审计 / 恢复现场全套),做题去考场,做完回这对照原理。</p>
+  <pre><code>cordon ─▶ 节点 SchedulingDisabled(新 Pod 不来,老 Pod 不动)
+   │
+   ▼
+drain ──▶ 自动 cordon + Eviction API 优雅驱逐 ──▶ 节点清空 → 可安全下线维护
+   │           ├─ Deployment 等(受控制器管)→ 在其他节点重建,服务不中断
+   │           └─ 裸 Pod(无控制器)→ 驱逐后不复存在(所以默认拒绝,要 --force)
+   ▼
+uncordon ─▶ 恢复调度(★维护完必做,忘了后面题全调不上)</code></pre>
+
+  <h3>考题(与考场页第 4 题同源)</h3>
+  <p>节点 <code>cka-worker</code> 需要下线维护:① 将其设为<b>不可调度</b>;② 驱逐其上<b>所有 Pod</b>(允许删除 emptyDir 数据、忽略 DaemonSet;节点上有不受控制器管理的裸 Pod,需 <code>--force</code> 显式确认);③ 完成后<b>保持不可调度</b>状态。</p>
+
+  <h3>模拟环境准备(★kind 造题 —— 造一个"钉在 cka-worker 上的裸 Pod"给 drain 驱逐;真实考试环境自带,直接从"解法"开始)</h3>
+  <pre><code>kubectl create ns drain-test
+$y = @"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  namespace: drain-test
+spec:
+  nodeName: cka-worker          # ★直接钉死节点,绕过调度器,保证一定在 worker 上
+  containers:
+  - name: web
+    image: nginx:1.25
+"@
+$y | kubectl apply -f -
+Start-Sleep 15
+kubectl -n drain-test get pod web -o wide      # 在 cka-worker 上 Running = 出题完成</code></pre>
+
+  <div class="tip"><b>💡 为什么用 nodeName:</b><code>kubectl run</code> 不能指定节点、调度器又随机;写死 <code>nodeName: cka-worker</code> 让 Pod 跳过调度直接落在目标节点 —— 题目要 drain 谁,就先往谁身上放东西。</div>
+
+  <h3>解法(答案):三条命令(本地 PS 实测通过)</h3>
+  <pre><code>kubectl cordon cka-worker
+kubectl drain cka-worker --ignore-daemonsets --delete-emptydir-data --force
+kubectl get nodes        # 期望:cka-worker = Ready,SchedulingDisabled</code></pre>
+
+  <div class="tip"><b>💡 三个 flag 的含义(记不住不用背 —— 先敲短的,报错会告诉你加哪个):</b><code>--ignore-daemonsets</code> = DaemonSet 的 Pod(kube-proxy/CNI)每节点一份、驱逐了会在原地重建,跳过它们;<code>--delete-emptydir-data</code> = 用 emptyDir 的 Pod 一删数据就没,显式授权"可丢";<code>--force</code> = 裸 Pod(无控制器)驱逐后不会在别处复活,drain 默认拒绝,显式授权"可删"。考试开卷:<code>kubectl drain --help</code> 或官方文档 "Safely Drain a Node" 页都有。</div>
+
+  <div class="warn"><b>⚠️ 实测翻车点:</b>① drain 不带 <code>--ignore-daemonsets</code> 直接报错拒绝(<b>必带</b>,kind/kubeadm 集群都有 DaemonSet);② 漏 <code>--delete-emptydir-data</code> → 报 <code>cannot delete Pods with local storage</code>(kube-system 里就有用 emptyDir 的);③ 节点上有裸 Pod 却漏 <code>--force</code> → 报 <code>cannot delete Pods not managed by ...</code>,drain 半途中止;④ 题目要求"保持不可调度",做完手贱 <code>uncordon</code> 了 —— 审计直接挂;⑤ 反过来:进下一题 / 恢复现场时<b>忘了 uncordon</b>,后面所有 Pod 都调不上 worker(排 Pending 先看 <code>kubectl get nodes</code> 有没有 SchedulingDisabled);⑥ drain 是<b>优雅驱逐</b>(Eviction API),不是 delete —— 别图快直接 <code>delete pod</code> 绕过,考试看的是动作是否标准;⑦ cordon 只影响<b>新</b> Pod,已在跑的完全不动 —— 别以为 cordon 完节点上就空了。</div>
+
+  <h3>验证三连(评分系统干的事,提前人肉做)</h3>
+  <pre><code>kubectl get nodes                                    # 期望:cka-worker 的 STATUS=Ready,SchedulingDisabled
+kubectl get pods -A --field-selector spec.nodeName=cka-worker   # 期望:只剩 DaemonSet 的 Pod(kube-proxy/kindnet 等)
+kubectl -n drain-test get pod web                    # 期望:NotFound(裸 Pod 驱逐后不复存在)
+# 进阶:带 OWNER 列,一眼分清谁管的(DaemonSet 会跳过 / ReplicaSet 别处重建 / <none> 是裸 Pod);drain 后 OWNER 应清一色 DaemonSet
+kubectl get pods -A --field-selector spec.nodeName=cka-worker -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,OWNER:.metadata.ownerReferences[0].kind'</code></pre>
+
+  <h3>恢复现场(反复刷题用 —— ★第一条 uncordon 必跑)</h3>
+  <pre><code>kubectl uncordon cka-worker                       # ★恢复可调度(忘了它,后面所有题的 Pod 都调不上 worker!)
+kubectl delete ns drain-test
+# ── 白纸自查 ──
+kubectl get nodes                                # 三个都 Ready、无 SchedulingDisabled = 干净
+kubectl get ns drain-test                        # NotFound = 干净</code></pre>
+
+  <div class="tip"><b>💡 原理一句话:</b>cordon 改的是节点 <code>spec.unschedulable</code>(调度器跳过它);drain 先自动 cordon,再对每个 Pod 调 <b>Eviction API</b>(遵守 graceful period、尊重 PDB)—— 受控制器管的 Pod 在别处重建、裸 Pod 一去不返,所以 drain 对"删了回不来"的东西一律要你显式授权。完整考试化练习(含 7 项一键审计)进 <a href="k8s-cka-exam.html">模拟考场第 4 题</a>。</div>
+</section>
+
 <section id="c3">
   <h2><span class="no">C3</span>考试期间允许访问的官方文档(★地址必收藏)</h2>
   <p>考试期间资源访问受到严格限制,以确保公平性。在<b>考试内嵌的浏览器</b>中,仅限访问以下官方资源及其子页面,用于独立完成任务:</p>
@@ -339,12 +607,12 @@ kubectl -n gitops rollout history deployment/frontend   # 3 个修订 = 出题�
     <tr><th>#</th><th>题型(题库变体)</th><th>所属领域</th><th>精讲状态</th></tr>
     <tr><td>1</td><td><b>集群升级</b>:master 1.31.0 → 1.31.1(drain → kubeadm upgrade → uncordon)</td><td>集群架构 25%</td><td>✅ <a href="#c2">已精讲(见 C2)</a> · 考场页未录(kind 练不了,虚机题)</td></tr>
     <tr><td>2</td><td><b>RBAC</b>:为指定用户/SA 创建限定权限的 Role + RoleBinding</td><td>集群架构</td><td>✅ <a href="#q2">已精讲(见 题目 2)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 1 题)</a></td></tr>
-    <tr><td>3</td><td>NetworkPolicy:按命名空间/标签选择性放行入站流量</td><td>服务与网络</td><td>○ 待更新</td></tr>
+    <tr><td>3</td><td>NetworkPolicy:按命名空间/标签选择性放行入站流量</td><td>服务与网络</td><td>✅ <a href="#q3">已精讲(见 题目 3)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 12 题)</a></td></tr>
     <tr><td>4</td><td>etcd 快照备份与还原(etcdctl snapshot save/restore)</td><td>集群架构</td><td>○ 待更新</td></tr>
-    <tr><td>5</td><td>Pod 日志排障 / 将容器日志输出到指定文件</td><td>故障排查</td><td>○ 待更新</td></tr>
+    <tr><td>5</td><td>Pod 日志排障 / 将容器日志输出到指定文件</td><td>故障排查</td><td>✅ <a href="#q5">已精讲(见 题目 5)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 3 题)</a></td></tr>
     <tr><td>6</td><td>Deployment 滚动更新(指定镜像)与回滚 revision</td><td>工作负载</td><td>✅ <a href="#q6">已精讲(见 题目 6)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 2 题)</a></td></tr>
     <tr><td>7</td><td>Sidecar 容器注入(busybox 持续写日志)</td><td>工作负载</td><td>○ 待更新</td></tr>
-    <tr><td>8</td><td>节点维护:drain 排水 + uncordon 恢复调度</td><td>集群架构</td><td>○ 待更新</td></tr>
+    <tr><td>8</td><td><b>节点维护</b>:cordon 禁调度 + drain 驱逐(三个 flag)+ uncordon 恢复</td><td>集群架构</td><td>✅ <a href="#q8">已精讲(见 题目 8)</a> · 🎯 <a href="k8s-cka-exam.html">考场页已录入(第 4 题)</a></td></tr>
     <tr><td>9</td><td>PV / PVC 创建与挂载(hostPath / 动态供给)</td><td>存储</td><td>○ 待更新</td></tr>
     <tr><td>10</td><td>Ingress 部署(域名 + path 路由到指定 Service)</td><td>服务与网络</td><td>○ 待更新</td></tr>
     <tr><td>11</td><td>Service 调整(类型/端口/扩缩副本)</td><td>服务与网络</td><td>○ 待更新</td></tr>
