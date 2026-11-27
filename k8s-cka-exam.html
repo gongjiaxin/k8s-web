@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -26,8 +26,13 @@
   #main{flex:1;display:flex;min-height:0}
   #qpanel{width:44%;min-width:430px;background:var(--panel);display:flex;flex-direction:column;border-right:1px solid #9aa0a6}
   #qnav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid var(--line)}
+  #qlegend{display:flex;gap:18px;padding:4px 14px 8px;background:#f8f9fa;font-size:12px;color:var(--muted)}
+  #qlegend .lg-done{color:#137333;font-weight:600}#qlegend .lg-learn{color:#b06000;font-weight:600}#qlegend .lg-todo{color:#9aa0a6}
   .qn{min-width:34px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:5px;background:#fff;font-size:13px;color:#3c4043;cursor:pointer}
   .qn:hover{border-color:var(--accent)}
+  /* 学习进度三色:done=已掌握(绿) learn=正在学(橙) 默认=未学;cur 当前题优先覆盖 */
+  .qn.done{background:#e6f4ea;border-color:#34a853;color:#137333;font-weight:600}
+  .qn.learn{background:#fef7e0;border-color:#f9ab00;color:#b06000;font-weight:600}
   .qn.cur{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
   .qn.flag{background:var(--flagbg);border-color:var(--flag)}
   .qn.flag.cur{background:var(--flag);border-color:var(--flag);color:#3c2f00}
@@ -120,6 +125,7 @@
 <div id="main">
   <div id="qpanel">
     <div id="qnav"></div>
+    <div id="qlegend"><span class="lg-done">■</span> 已掌握(审计满分)　<span class="lg-learn">■</span> 正在学　<span class="lg-todo">■</span> 未学 / 待录入</div>
     <div id="qbody"></div>
     <div id="qfoot">
       <button class="btn" id="prevb" onclick="nav(-1)">← 上一题</button>
@@ -221,25 +227,25 @@ function qhtml(n){
       +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q1.ps1(免粘贴,一条命令跑)</button>'
       +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q1.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。手写文件党:PS 的 heredoc 是 <code>@\'…\'@ | Out-File -Encoding utf8 文件名.ps1</code>(结束符 \'@ 必须顶行首)</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;某条报 NotFound = 该项本来就不在,跳过即可):</p>'
-      +'<pre># ── 一键全清(具名 3 条 + 通杀兜底 2 条)──\n'
-      +'kubectl delete clusterrole deployment-clusterrole   # 集群级,删 ns 带不走它,必须单删\n'
-      +'kubectl delete clusterrolebinding cicd-token-rb     # 同上,集群级\n'
-      +'kubectl delete ns app-team1                         # ns 一删,sa + rolebinding 全陪葬(约 10 秒)\n'
+      +'<p class="self">恢复现场 = 就地重置(★不删 ns —— 避开 Terminating 卡顿;ns 里 sa/rolebinding 点名删,cluster 级两条必删;照抄可跑):</p>'
+      +'<pre># ── 一键重置(2>$null = 该项本来就不在时不报错)──\n'
+      +'kubectl delete clusterrole deployment-clusterrole 2>$null   # 集群级,删 ns 也带不走它,必须单删\n'
+      +'kubectl delete clusterrolebinding cicd-token-rb 2>$null     # 同上,集群级(★若做题时错用了 CRB,它会让 SA 全集群生效)\n'
+      +'kubectl -n app-team1 delete rolebinding,sa --all 2>$null    # ns 内:绑定 + SA 全清(ns 保留不删)\n'
       +'# ── 通杀兜底(★清掉所有绑到 cicd-token 的授权,不管绑定叫什么名字/藏在哪个 ns)──\n'
-      +"kubectl get clusterrolebinding -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl delete clusterrolebinding $_.metadata.name }\n"
-      +"kubectl get rolebinding -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl -n $_.metadata.namespace delete rolebinding $_.metadata.name }\n"
-      +'# ── 白纸自查(三条全 NotFound + 第四条无输出 = 干净)──\n'
-      +'kubectl get ns app-team1\n'
+      +"kubectl get clusterrolebinding -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl delete clusterrolebinding $_.metadata.name 2>$null }\n"
+      +"kubectl get rolebinding -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.subjects.name -contains 'cicd-token' } | ForEach-Object { kubectl -n $_.metadata.namespace delete rolebinding $_.metadata.name 2>$null }\n"
+      +'# ── 白纸自查(前三条 NotFound + 第四条无输出 = 干净;ns 保持 Active 是正常的)──\n'
       +'kubectl get clusterrole deployment-clusterrole\n'
       +'kubectl get clusterrolebinding cicd-token-rb\n'
+      +'kubectl -n app-team1 get sa,rolebinding            # No resources found = 干净\n'
       +'kubectl get clusterrolebinding,rolebinding -A -o wide | findstr cicd-token   # 无输出 = 无幽灵绑定残留\n'
-      +'# ── 下次重刷起点(题目假设 ns 已存在,删过 ns 就要先重建!):\n'
-      +'kubectl create ns app-team1\n'
+      +'# ── 出题 / 重刷出题(首次也跑这段;本题零造题 —— ns 存在即可,其余资源由答案创建)──\n'
+      +'kubectl create ns app-team1 2>$null                 # 已存在会报 AlreadyExists,忽略\n'
       +'# ── 绑定名不同时:ns 里 RB 可 --all;CRB 只能点名,★绝不 --all(删掉系统 cluster-admin = 集群报废!)──</pre>';
   }
-  if(n===2){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 2 题 / 共 17 题 · 滚动更新与回滚</div>'
+  if(n===5){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 5 题 / 共 17 题 · 滚动更新与回滚</div>'
       +'<p>在已存在的命名空间 <code>gitops</code> 中,对 Deployment <code>frontend</code>(当前镜像 <code>nginx:1.25</code>,已有 3 个修订版本)执行:</p>'
       +'<p>① 将 Deployment 的镜像更新为 <code>nginx:1.26</code>;</p>'
       +'<p>② 确认本次滚动更新完成(等待 <code>successfully rolled out</code>);</p>'
@@ -257,7 +263,7 @@ function qhtml(n){
       +"   # ↑ 看指定修订的镜像(Pod Template 里 Image: nginx:1.24)</pre>"
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell 一次粘贴即可,控制台自动逐行执行;重复粘贴计数自动归零):不只看结果,还查修订历史 —— "默认 undo 混过去"当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 2 题 · 一键审计:过程 + 结果一起查 ═══\n'
+      +'<pre class="audit"># ═══ 第 5 题 · 一键审计:过程 + 结果一起查 ═══\n'
       +'$ns="gitops";$dp="frontend";$finalImg="nginx:1.24";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -273,25 +279,24 @@ function qhtml(n){
       +"Chk '③ 历史完整(4 个 revision:1/3/4/5,rev2 已被顶替)' ($revLines.Count -ge 4) \"revision 行数: $($revLines.Count)\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:结果对,过程也对 —— 稳了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方红字修正 —— 最常见:忘了 --to-revision=2,默认 undo 只回到 1.25\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q2.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q2.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q5.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q5.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;报 NotFound = 该项本来就不在,跳过即可):</p>'
-      +'<pre># ── 一键全清(删 ns 1 条 + 通杀兜底 1 条)──\n'
-      +'kubectl delete ns gitops   # deployment/replicaset/pod/revision 历史全陪葬\n'
-      +"kubectl get deploy -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'frontend' } | ForEach-Object { kubectl -n $_.metadata.namespace delete deployment $_.metadata.name }\n"
-      +'# ── 白纸自查(NotFound + 无输出 = 干净)──\n'
-      +'kubectl get ns gitops        # NotFound = 干净\n'
-      +'kubectl get deploy -A | findstr frontend   # 无输出 = 无落错 ns 的 frontend 残留\n'
-      +'# ── 下次重刷起点(造出 rev1=1.23、rev2=1.24、rev3=1.25 三个修订,当前停在 rev3)──\n'
-      +'kubectl create ns gitops\n'
+      +'<p class="self">恢复现场 = 就地重置(★不删 ns —— 避开 Terminating 卡顿;先删 deploy 再强删残留 Pod,全部秒级):</p>'
+      +'<pre># ── 一键重置(2>$null = 没有也不报错)──\n'
+      +'kubectl -n gitops delete deployment frontend 2>$null\n'
+      +'kubectl -n gitops delete pods --all --force --grace-period=0 2>$null\n'
+      +'# ── 白纸自查(资源为空 = 干净;ns 保持 Active 是正常的)──\n'
+      +'kubectl -n gitops get deploy,pods        # No resources found = 干净\n'
+      +'# ── 出题 / 重刷出题(首次也跑这段:造出 rev1=1.23、rev2=1.24、rev3=1.25 三个修订,当前停在 rev3)──\n'
+      +'kubectl create ns gitops 2>$null          # 已存在会报 AlreadyExists,忽略\n'
       +'kubectl -n gitops create deployment frontend --image=nginx:1.23\n'
       +'kubectl -n gitops set image deployment/frontend nginx=nginx:1.24   # ★容器名 nginx(=create 时镜像名),写 frontend 必报 unable to find container\n'
       +'kubectl -n gitops set image deployment/frontend nginx=nginx:1.25\n'
       +'kubectl -n gitops rollout history deployment/frontend   # 应看到 3 个修订,题目从"改成 1.26"开始</pre>';
   }
-  if(n===12){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 12 题 / 共 17 题 · NetworkPolicy 网络隔离</div>'
+  if(n===4){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 4 题 / 共 17 题 · NetworkPolicy 网络隔离</div>'
       +'<p>在已存在的命名空间 <code>secure</code> 中,运行着 Deployment <code>backend</code>(标签 <code>app=backend</code>,容器端口 80)和 Service <code>backend</code>。创建一个名为 <code>allow-frontend-only</code> 的 NetworkPolicy,满足:</p>'
       +'<p>① 只允许<b>同一命名空间内</b>标签为 <code>app=frontend</code> 的 Pod 访问 <code>backend</code> 的 TCP 80 端口;</p>'
       +'<p>② 除上述流量外,拒绝所有其他入方向流量(包括来自其他命名空间的);</p>'
@@ -304,7 +309,7 @@ function qhtml(n){
       +"   # 期望:超时被拒(跨 ns;一次性 Pod,跑完自动删)</pre>"
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell 一次粘贴即可,控制台自动逐行执行;重复粘贴计数自动归零):查 YAML 结构 6 项 + 行为 3 项 —— "from 画蛇添足 / ports 漏写 / kindnet 假绿"当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 12 题 · 一键审计:YAML + 行为一起查(共 9 项)═══\n'
+      +'<pre class="audit"># ═══ 第 4 题 · 一键审计:YAML + 行为一起查(共 9 项)═══\n'
       +'$ns="secure";$npn="allow-frontend-only";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -332,25 +337,25 @@ function qhtml(n){
       +"Chk '⑧ 行为:跨 ns 访问被拒' ($LASTEXITCODE -ne 0) \"exit: $LASTEXITCODE\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:结果对,过程也对 —— 稳了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方红字修正 —— 最常见:from 画蛇添足写了 namespaceSelector / kindnet 假绿(重装 Calico)\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q12.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q12.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q4.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q4.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;报 NotFound = 该项本来就不在,跳过即可):</p>'
-      +'<pre># ── 一键全清(删 ns 1 条 + 通杀兜底 1 条)──\n'
-      +'kubectl delete ns secure   # np/deploy/svc/client Pod 全陪葬\n'
-      +"kubectl get networkpolicy -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'allow-frontend-only' } | ForEach-Object { kubectl -n $_.metadata.namespace delete networkpolicy $_.metadata.name }\n"
-      +'# ── 白纸自查(NotFound + 无输出 = 干净)──\n'
-      +'kubectl get ns secure                                        # NotFound = 干净\n'
-      +'kubectl get networkpolicy -A | findstr allow-frontend-only   # 无输出 = 无落错 ns 的残留\n'
-      +'# ── 下次重刷出题(镜像已 load,免重 load;★第 0 步先确认 Calico:kubectl -n kube-system get ds | findstr calico)──\n'
-      +'kubectl create ns secure\n'
+      +'<p class="self">恢复现场 = 就地重置(★不删 ns —— 先删策略/deploy 再强删 Pod,全部秒级,避开 Terminating 卡顿):</p>'
+      +'<pre># ── 一键重置(2>$null = 没有也不报错)──\n'
+      +'kubectl -n secure delete networkpolicy allow-frontend-only 2>$null\n'
+      +'kubectl -n secure delete deployment backend 2>$null\n'
+      +'kubectl -n secure delete pods --all --force --grace-period=0 2>$null\n'
+      +'# ── 白纸自查(资源为空 = 干净;ns 保持 Active 是正常的)──\n'
+      +'kubectl -n secure get networkpolicy,deploy,pods      # No resources found = 干净\n'
+      +'# ── 出题 / 重刷出题(首次也跑这段;镜像节点能自拉;★第 0 步先确认 Calico 独占、无 kindnet:kubectl -n kube-system get ds)──\n'
+      +'kubectl create ns secure 2>$null\n'
       +'kubectl -n secure create deployment backend --image=nginx:1.25\n'
       +'kubectl -n secure expose deployment backend --port=80\n'
       +'kubectl -n secure run client-ok --image=busybox:1.36 --labels=app=frontend --restart=Never -- sleep 3600\n'
       +"kubectl -n secure run client-no --image=busybox:1.36 --labels=app=hacker  --restart=Never -- sleep 3600   # 两个 client 都 Running = 出题完成</pre>';\n"
   }
-  if(n===3){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 3 题 / 共 17 题 · Pod 日志收集</div>'
+  if(n===6){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 6 题 / 共 17 题 · Pod 日志收集</div>'
       +'<p>命名空间 <code>pod-log</code> 中的 Pod <code>logger</code> 正在运行,其容器<b>曾重启过一次</b>(CrashLoopBackOff 后自愈)。请将该 Pod 的<b>全部日志</b>(含重启前那一世容器的日志)按"先旧后新"的顺序保存到 <code>C:\\cka\\logger-all.log</code>(考试真实环境是集群节点上的 <code>/opt/...</code>,做法完全一样,只是文件落点不同)。</p>'
       +'<p class="self">★首次做题:先滚到本页最底「恢复现场 → 出题 / 重刷出题」,跑那段 YAML 造题(约 40 秒,RESTARTS=1 即成),再回来按题面做题。</p>'
       +'<div class="divider"></div>'
@@ -361,7 +366,7 @@ function qhtml(n){
       +'Get-Content C:\\cka\\logger-all.log | findstr "OLD-crash-line LIVE-1"   # 期望:两行都命中,且 OLD 在前</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell 一次粘贴即可;重复粘贴计数自动归零):7 项 —— "忘 --previous / 第二条写成 &gt; 冲掉 / 顺序颠倒"当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 3 题 · 一键审计:文件 + 内容 + 顺序(共 7 项)═══\n'
+      +'<pre class="audit"># ═══ 第 6 题 · 一键审计:文件 + 内容 + 顺序(共 7 项)═══\n'
       +'$ns="pod-log";$pod="logger";$file="C:\\cka\\logger-all.log";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -381,20 +386,18 @@ function qhtml(n){
       +"Chk '⑦ 顺序:旧在前(OLD 行号 &lt; LIVE-1 行号)' ($oldL -and $l1L -and ($oldL -lt $l1L)) \"OLD@$oldL LIVE-1@$l1L\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:结果对,过程也对 —— 稳了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方红字修正 —— 最常见:忘 --previous / 第二条写成 &gt; 把前一段冲掉\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q3.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q3.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q6.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后:PS 里 cd 到下载目录(一般 <code>cd ~\\Downloads</code>),执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q6.ps1</code> —— 文件自带 UTF-8 BOM(中文不乱码);Bypass 只对这一次生效,不改系统任何设置。</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用 —— 照抄可跑;报 NotFound = 该项本来就不在,跳过即可):</p>'
-      +'<pre># ── 一键全清(删 ns 1 条 + 通杀兜底 1 条)──\n'
-      +'kubectl delete ns pod-log                      # Pod 陪葬\n'
-      +'Remove-Item C:\\cka\\logger-all.log              # 顺手删成果文件\n'
-      +"kubectl get pod -A -o json | ConvertFrom-Json | ForEach-Object { $_.items } | Where-Object { $_.metadata.name -eq 'logger' } | ForEach-Object { kubectl -n $_.metadata.namespace delete pod $_.metadata.name }\n"
-      +'# ── 白纸自查(NotFound + 无输出 + False = 干净)──\n'
-      +'kubectl get ns pod-log                         # NotFound = 干净\n'
-      +'kubectl get pod -A | findstr logger            # 无输出 = 无落错 ns 的残留\n'
+      +'<p class="self">恢复现场 = 就地重置(★不删 ns,强删 Pod 秒级完成 —— 避开 Terminating 卡顿):</p>'
+      +'<pre># ── 一键重置(强删 Pod + 删成果文件;没有也不报错)──\n'
+      +'kubectl -n pod-log delete pod logger --force --grace-period=0 2>$null\n'
+      +'Remove-Item C:\\cka\\logger-all.log -ErrorAction SilentlyContinue\n'
+      +'# ── 白纸自查 ──\n'
+      +'kubectl -n pod-log get pod logger             # NotFound = 干净\n'
       +'Test-Path C:\\cka\\logger-all.log                # False = 文件已清\n'
       +'# ── 出题 / 重刷出题(首次也跑这段;节点能自拉镜像则免灌;★标记必须 emptyDir —— /tmp 会随容器重启丢)──\n'
-      +'kubectl create ns pod-log\n'
+      +'kubectl create ns pod-log 2>$null\n'
       +'$y = @"\n'
       +'apiVersion: v1\n'
       +'kind: Pod\n'
@@ -419,10 +422,10 @@ function qhtml(n){
       +'"@\n'
       +'$y | kubectl apply -f -\n'
       +'Start-Sleep 30\n'
-      +'kubectl -n pod-log get pod logger -o wide      # STATUS=Running 且 RESTARTS=1 = 出题完成</pre>';
+      +'kubectl -n pod-log get pod logger -o wide      # STATUS=Running 且 RESTARTS=1 = 出题完成;★若卡 ContainerCreating 超 30s 且 IP=none → describe 看 Events(calico Unauthorized = 重启 calico-node,见学习页翻车点⑧)</pre>';
   }
-  if(n===4){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 4 题 / 共 17 题 · 节点维护:drain / cordon / uncordon</div>'
+  if(n===7){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 7 题 / 共 17 题 · 节点维护:drain / cordon / uncordon</div>'
       +'<p>节点 <code>cka-worker</code> 需要下线维护:① 将其设为<b>不可调度</b>;② 驱逐其上<b>所有 Pod</b>(允许删除 emptyDir 数据、忽略 DaemonSet;★节点上有<b>不受控制器管理的裸 Pod</b>,drain 会拒绝删它们 —— 需 <code>--force</code> 显式确认);③ 完成后<b>保持不可调度</b>状态。</p>'
       +'<p class="self">💡 flag 记不住不用背(考试开卷):先敲 <code>kubectl drain cka-worker</code>,报错会明说该加哪个 —— DaemonSet 报错对应 --ignore-daemonsets、local storage 报错对应 --delete-emptydir-data、"not managed by ..." 对应 --force;或 <code>kubectl drain --help</code> / 官方文档 "Safely Drain a Node" 页。</p>'
       +'<p class="self">★首次做题:先滚到本页最底「恢复现场 → 出题」,跑那段造一个在 cka-worker 上的 Pod(约 30 秒),再回来按题面做。</p>'
@@ -433,7 +436,7 @@ function qhtml(n){
       +'kubectl -n drain-test get pod web                    # 期望:NotFound(已被驱逐)</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):7 项 —— 漏 cordon / 漏 drain / 误删 DaemonSet / 误动其他节点,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 4 题 · 一键审计:节点维护状态(共 7 项)═══\n'
+      +'<pre class="audit"># ═══ 第 7 题 · 一键审计:节点维护状态(共 7 项)═══\n'
       +'$node="cka-worker";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -453,18 +456,18 @@ function qhtml(n){
       +"Chk '⑦ 节点仍 Ready(只是禁调度,没下线)' ($st -match '^cka-worker\\s+Ready') \"实际: $st\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:维护动作标准 —— cordon+drain 一步没错!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:漏 --ignore-daemonsets 直接报错 / drain 完忘了这是维护态又 uncordon 了\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q4.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q4.ps1</code>(自带 UTF-8 BOM,中文不乱码;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q7.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q7.ps1</code>(自带 UTF-8 BOM,中文不乱码;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用 —— ★第一条 uncordon 必跑,忘了它后面所有题的 Pod 都调不上去!):</p>'
-      +'<pre># ── 一键全清 ──\n'
-      +'kubectl uncordon cka-worker                       # ★恢复可调度\n'
-      +'kubectl delete ns drain-test\n'
+      +'<p class="self">恢复现场 = 就地重置(★第一条 uncordon 必跑,忘了它后面所有题的 Pod 都调不上去!不删 ns,强删 Pod 秒级):</p>'
+      +'<pre># ── 一键重置(2>$null = 没有也不报错)──\n'
+      +'kubectl uncordon cka-worker 2>$null                 # ★恢复可调度\n'
+      +'kubectl -n drain-test delete pod web --force --grace-period=0 2>$null\n'
       +'# ── 白纸自查 ──\n'
       +'kubectl get nodes                                # 三个都 Ready、无 SchedulingDisabled = 干净\n'
-      +'kubectl get ns drain-test                        # NotFound = 干净\n'
+      +'kubectl -n drain-test get pod web                # NotFound = 干净(ns 保持 Active 是正常的)\n'
       +'# ── 出题 / 重刷出题(首次也跑这段:造一个在 cka-worker 上的裸 Pod 给 drain 驱逐 —— 裸 Pod 无控制器,drain 时必须 --force)──\n'
-      +'kubectl create ns drain-test\n'
+      +'kubectl create ns drain-test 2>$null\n'
       +'$y = @"\n'
       +'apiVersion: v1\n'
       +'kind: Pod\n'
@@ -479,19 +482,20 @@ function qhtml(n){
       +'"@\n'
       +'$y | kubectl apply -f -\n'
       +'Start-Sleep 15\n'
-      +'kubectl -n drain-test get pod web -o wide       # Running 在 cka-worker 上 = 出题完成</pre>';
+      +'kubectl -n drain-test get pod web -o wide       # Running 在 cka-worker 上 = 出题完成;★卡 ContainerCreating 超 30s/IP none → describe 看 Events(calico Unauthorized = 重启 calico-node,见学习页题目 5 翻车点⑧)</pre>';
   }
-  if(n===5){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 5 题 / 共 17 题 · ServiceAccount + 最小权限 RBAC</div>'
-      +'<p>在命名空间 <code>sa-test</code> 中:① 创建 ServiceAccount <code>app-sa</code>;② 创建 Role <code>pod-reader</code>,允许对 <code>pods</code> 执行 <code>get、list、watch</code>;③ 创建 RoleBinding <code>app-sa-pod-reader</code> 把 Role 绑给该 SA;④ 验证最小权限:该 SA <b>能 list pods、不能 delete pods</b>。</p>'
+  if(n===2){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 2 题 / 共 17 题 · ServiceAccount + 最小权限 RBAC</div>'
+      +'<p>在命名空间 <code>sa-test</code> 中:① 创建 ServiceAccount <code>app-sa</code>;② 创建 Role <code>pod-reader</code>,允许对 <code>pods</code> 执行 <code>get、list、watch</code>;③ 创建 RoleBinding <code>app-sa-pod-reader</code> 把 Role 绑给该 SA;④ 验证最小权限:该 SA <b>能 list pods、不能 delete pods</b>;⑤ 创建 Pod <code>sa-pod</code>(busybox:1.36,sleep 3600)<b>以该 SA 身份运行</b>(<code>serviceAccountName: app-sa</code>)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">验证三连 —— ★一 yes 一 no 才算对(yes/yes = 权限给多了,CKA 一样算错)</p>'
       +'<pre>kubectl -n sa-test get sa,role,rolebinding        # 期望:三个对象都在\n'
       +'kubectl auth can-i list pods -n sa-test --as=system:serviceaccount:sa-test:app-sa     # 期望:yes\n'
-      +'kubectl auth can-i delete pods -n sa-test --as=system:serviceaccount:sa-test:app-sa    # 期望:no</pre>'
+      +'kubectl auth can-i delete pods -n sa-test --as=system:serviceaccount:sa-test:app-sa    # 期望:no\n'
+      +"kubectl -n sa-test get pod sa-pod -o jsonpath='{.spec.serviceAccountName}'   # 期望:app-sa(Pod 真用上了这个 SA)</pre>"
       +'<div class="divider"></div>'
-      +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):7 项 —— 漏绑定 / verbs 给多 / can-i 不符,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 5 题 · 一键审计:SA + RBAC 三件套 + 最小权限(共 7 项)═══\n'
+      +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):8 项 —— 漏绑定 / verbs 给多 / can-i 不符 / Pod 没用 SA,当场抓出来</p>'
+      +'<pre class="audit"># ═══ 第 2 题 · 一键审计:SA + RBAC 三件套 + 最小权限(共 8 项)═══\n'
       +'$ns="sa-test";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -509,21 +513,23 @@ function qhtml(n){
       +"Chk '⑥ SA 能 list pods(can-i = yes)' ($yes -match 'yes') \"实际: $yes\"\n"
       +"$no=kubectl auth can-i delete pods -n $ns --as=system:serviceaccount:sa-test:app-sa 2>$null\n"
       +"Chk '⑦ SA 不能 delete pods(can-i = no,最小权限)' ($no -match 'no') \"实际: $no(若 yes = verbs 给多了)\"\n"
+      +"$sp=kubectl -n $ns get pod sa-pod -o json 2>$null | ConvertFrom-Json\n"
+      +"Chk '⑧ Pod sa-pod Running 且以 app-sa 身份运行(serviceAccountName)' ($sp -and $sp.spec.serviceAccountName -eq 'app-sa' -and $sp.status.phase -eq 'Running') \"saName: $($sp.spec.serviceAccountName) / phase: $($sp.status.phase)\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:SA/Role/Binding 三件套齐,权限刚好不多不少!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:RoleBinding 的 --serviceaccount 写成 app-sa(漏 ns 前缀)/ Role verbs 多给了 delete\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q5.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q5.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q2.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q2.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
-      +'<p class="self">恢复现场(反复刷题用):</p>'
-      +'<pre># ── 一键全清(ns 删了三件套陪葬)──\n'
-      +'kubectl delete ns sa-test\n'
+      +'<p class="self">恢复现场 = 就地重置(★不删 ns,避开 Terminating 卡顿;Role/Binding/SA 点名删,全部秒级):</p>'
+      +'<pre># ── 一键重置(2>$null = 没有也不报错)──\n'
+      +'kubectl -n sa-test delete pod,rolebinding,role,sa --all --force --grace-period=0 2>$null   # 四件全清(ns 保留)\n'
       +'# ── 白纸自查 ──\n'
-      +'kubectl get ns sa-test                        # NotFound = 干净\n'
-      +'# ── 出题 / 重刷出题(首次也跑这段;其余资源由答案创建,题面即要求你建)──\n'
-      +'kubectl create ns sa-test</pre>';
+      +'kubectl -n sa-test get pod,sa,role,rolebinding   # No resources found = 干净\n'
+      +'# ── 出题 / 重刷出题(首次也跑这段;本题零造题 —— ns 存在即可,其余由答案创建)──\n'
+      +'kubectl create ns sa-test 2>$null</pre>';
   }
-  if(n===6){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 6 题 / 共 17 题 · Service 修正(type / targetPort)</div>'
+  if(n===8){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 8 题 / 共 17 题 · Service 修正(type / targetPort)</div>'
       +'<p>命名空间 <code>svc-test</code> 中 Deployment <code>web</code>(nginx:1.25,容器监听 80)已运行,其 Service <code>web</code> 配置有误(<code>port 80 → targetPort 8080</code>,而后端根本不监听 8080)。要求:① 把 <code>targetPort</code> 修正为 <code>80</code>;② 类型改为 <code>NodePort</code>;③ 修完在集群内访问 <code>http://web.svc-test.svc.cluster.local</code> 应返回 nginx 欢迎页。</p>'
       +'<p class="self">★首次做题:先滚到本页最底「恢复现场 → 出题」跑 3 条命令造出现场(约 40 秒),再回来按题面做。</p>'
       +'<div class="divider"></div>'
@@ -534,7 +540,7 @@ function qhtml(n){
       +'kubectl -n default run tmp --image=busybox:1.36 --restart=Never --rm -i -- wget -qO- -T 5 http://web.svc-test.svc.cluster.local   # 期望:吐出 nginx 欢迎页 HTML</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):6 项 —— 只改 type 不改 targetPort(通不了)/ 改错 port,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 6 题 · 一键审计:Service 配置 + 真实连通(共 6 项)═══\n'
+      +'<pre class="audit"># ═══ 第 8 题 · 一键审计:Service 配置 + 真实连通(共 6 项)═══\n'
       +'$ns="svc-test";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -549,8 +555,8 @@ function qhtml(n){
       +"Chk '⑥ 集群内访问 web:80 返回 nginx 欢迎页' ($html -match 'nginx') '不通 = targetPort 没改对 / Endpoints 为空(约 15 秒跑完)'\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:Service 修得干净利落,流量真通了!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:只改了 type 没改 targetPort(③④)\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q6.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q6.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q8.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q8.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用):</p>'
       +'<pre># ── 一键全清 ──\n'
@@ -564,8 +570,8 @@ function qhtml(n){
       +'Start-Sleep 30\n'
       +'kubectl -n svc-test get deploy,svc             # 都在 = 出题完成(此时 svc 不通,等你来修)</pre>';
   }
-  if(n===7){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 7 题 / 共 17 题 · Secret 创建 + envFrom 注入</div>'
+  if(n===3){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 3 题 / 共 17 题 · Secret 创建 + envFrom 注入</div>'
       +'<p>在命名空间 <code>secret-test</code> 中:① 创建 Secret <code>db-creds</code>(generic),含 <code>username=admin</code>、<code>password=S3cret</code> 两个键;② 创建 Pod <code>secret-pod</code>(busybox:1.36,<code>sleep 3600</code>),用 <b>envFrom</b> 把该 Secret 整体注入为环境变量;③ 进容器执行 <code>echo $PASSWORD</code> 应输出 <code>S3cret</code>。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">验证三连 —— 核心:容器里真能 echo 出明文(base64 只是存储编码,注入时自动解码)</p>'
@@ -575,7 +581,7 @@ function qhtml(n){
       +"kubectl -n secret-test exec secret-pod -- sh -c 'echo $USERNAME'           # 期望:admin</pre>"
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):6 项 —— 键名拼错 / 没 envFrom / 明文对不上,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 7 题 · 一键审计:Secret 内容 + 注入 + 容器内验证(共 6 项)═══\n'
+      +'<pre class="audit"># ═══ 第 3 题 · 一键审计:Secret 内容 + 注入 + 容器内验证(共 6 项)═══\n'
       +'$ns="secret-test";$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -593,8 +599,8 @@ function qhtml(n){
       +"Chk '⑥ 容器内 $PASSWORD = S3cret' ($env -match 'S3cret') \"实际: $env\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:Secret 建得对、注得进、容器里读得出!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:--from-literal 的键名写成 pass/user(题面要 password/username)\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q7.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q7.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q3.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q3.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用):</p>'
       +'<pre># ── 一键全清 ──\n'
@@ -604,8 +610,8 @@ function qhtml(n){
       +'# ── 出题 / 重刷出题(首次也跑这段;Secret 与 Pod 由答案创建,题面即要求你建)──\n'
       +'kubectl create ns secret-test</pre>';
   }
-  if(n===8){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 8 题 / 共 17 题 · PV / PVC(hostPath 5Gi)</div>'
+  if(n===9){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 9 题 / 共 17 题 · PV / PVC(hostPath 5Gi)</div>'
       +'<p>① 创建 PV <code>pv-log</code>:容量 <code>5Gi</code>、访问模式 <code>ReadWriteOnce</code>、hostPath <code>/data/log</code>(type: <code>DirectoryOrCreate</code>);② 在 default 命名空间创建 PVC <code>pvc-log</code>:请求 <code>5Gi / RWO</code>,绑定到 pv-log(两边 storageClassName 都留空即可匹配);③ 创建 Pod <code>log-writer</code>(busybox:1.36):把 PVC 挂到 <code>/output</code>,启动时向 <code>/output/log.txt</code> 写入 <code>pv-ok</code> 并常驻 sleep;④ 验证:exec 进 Pod <code>cat /output/log.txt</code> 能看到 <code>pv-ok</code>。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">验证三连 —— 核心:PV/PVC 互相 Bound 且指名对方,文件真能落盘读回</p>'
@@ -614,7 +620,7 @@ function qhtml(n){
       +'kubectl exec log-writer -- cat /output/log.txt  # 期望:pv-ok</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):7 项 —— 容量/模式/路径写错、PVC 没绑上、文件没落盘,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 8 题 · 一键审计:PV/PVC 绑定 + 落盘验证(共 7 项)═══\n'
+      +'<pre class="audit"># ═══ 第 9 题 · 一键审计:PV/PVC 绑定 + 落盘验证(共 7 项)═══\n'
       +'$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -632,8 +638,8 @@ function qhtml(n){
       +"Chk '⑦ /output/log.txt 内容 = pv-ok' ($cat -match 'pv-ok') \"实际: $cat\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:PV/PVC/Provision 一条链全通,数据真落盘!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:PV 没 Bound(PVC 还 Pending)/ 容量或模式对不上\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q8.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q8.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q9.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q9.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用):</p>'
       +'<pre># ── 一键全清(Pod → PVC → PV,顺序别反;PVC 在 PV 前,否则 PV 卡 Released)──\n'
@@ -644,8 +650,8 @@ function qhtml(n){
       +'kubectl get pv,pvc                              # 无输出 = 干净\n'
       +'# ── 出题 / 重刷出题(首次也跑这段;本题为零出题 —— PV/PVC/Pod 全由答案创建,直接按题面做)──</pre>';
   }
-  if(n===9){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 9 题 / 共 17 题 · etcd 快照备份</div>'
+  if(n===10){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 10 题 / 共 17 题 · etcd 快照备份</div>'
       +'<p>对 <code>cka-control-plane</code> 上的 etcd 执行快照:① 用 <code>etcdctl snapshot save</code> 把快照存到 <code>/var/lib/etcd/etcd-snapshot.db</code>(真实考试环境节点路径是 <code>/data/etcd-snapshot.db</code> —— kind 的 etcd Pod 只挂了 /var/lib/etcd,命令内核一模一样,只是落点不同);② 用 <code>etcdctl snapshot status</code> 校验快照可读。证书三件套在 <code>/etc/kubernetes/pki/etcd/</code>(ca.crt / server.crt / server.key),endpoint <code>https://127.0.0.1:2379</code>,命令要带 <code>ETCDCTL_API=3</code>。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">验证三连 —— 核心:文件在节点上落盘、非空,且 status 能读出 hash/revision</p>'
@@ -655,7 +661,7 @@ function qhtml(n){
       +'kubectl get nodes                                                     # 期望:集群照常(快照只读,不影响运行)</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):5 项 —— 漏证书 / 存到临时目录 / 快照无效,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 9 题 · 一键审计:etcd 快照文件 + 有效性(共 5 项)═══\n'
+      +'<pre class="audit"># ═══ 第 10 题 · 一键审计:etcd 快照文件 + 有效性(共 5 项)═══\n'
       +'$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -670,8 +676,8 @@ function qhtml(n){
       +"Chk '⑤ 未误存到临时目录(/tmp 会随容器重启丢)' (-not $tm) '/tmp 里的快照 = 考试 0 分'\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:快照落盘、可读、位置对 —— 备满分!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:漏 --cacert/--cert/--key 报 context deadline / 存错路径\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q9.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q9.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q10.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q10.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用):</p>'
       +'<pre># ── 一键全清 ──\n'
@@ -680,8 +686,8 @@ function qhtml(n){
       +'docker exec cka-control-plane ls /var/lib/etcd/etcd-snapshot.db 2>$null   # 无输出 = 干净\n'
       +'# ── 出题 / 重刷出题(首次也跑这段;本题为零出题 —— etcd 集群自带,直接按题面做)──</pre>';
   }
-  if(n===10){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 10 题 / 共 17 题 · 静态 Pod(static manifest)</div>'
+  if(n===11){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 11 题 / 共 17 题 · 静态 Pod(static manifest)</div>'
       +'<p>在 <code>cka-control-plane</code> 节点上配置静态 Pod <code>static-web</code>(镜像 <code>nginx:1.25</code>,containerPort 80):manifest 放到节点的 <code>/etc/kubernetes/manifests/static-web.yaml</code>(kubelet 会自动把它跑起来,并在 apiserver 里建一个同名镜像 Pod)。验证:<code>kubectl get pods</code> 能看到 <code>static-web-cka-control-plane</code> Running。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">验证三连 —— 核心:manifest 在节点上、镜像 Pod 在 apiserver 里、且无控制器 owner(纯 kubelet 起的)</p>'
@@ -691,7 +697,7 @@ function qhtml(n){
       +"kubectl get pod static-web-cka-control-plane -o jsonpath='{.metadata.ownerReferences}'   # 期望:空(静态 Pod 无控制器)</pre>"
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):6 项 —— 用 kubectl apply 建成了普通 Pod / 放错目录 / 写错名字,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 10 题 · 一键审计:静态 Pod 文件 + 镜像 Pod + 特征(共 6 项)═══\n'
+      +'<pre class="audit"># ═══ 第 11 题 · 一键审计:静态 Pod 文件 + 镜像 Pod + 特征(共 6 项)═══\n'
       +'$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -706,8 +712,8 @@ function qhtml(n){
       +"Chk '⑥ 镜像 = nginx:1.25' ($pod -and $pod.spec.containers[0].image -eq 'nginx:1.25') \"实际: $($pod.spec.containers[0].image)\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:静态 Pod 三件套(节点文件+镜像 Pod+无 owner)全对!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— 最常见:用 kubectl apply 建了普通 Pod(②⑤连挂)/ manifest 没放到 manifests 目录\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q10.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q10.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q11.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q11.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场(反复刷题用):</p>'
       +'<pre># ── 一键全清(删节点上的 manifest,kubelet 会自动把镜像 Pod 也收走)──\n'
@@ -717,8 +723,8 @@ function qhtml(n){
       +'kubectl get pod static-web-cka-control-plane  # NotFound = 干净\n'
       +'# ── 出题 / 重刷出题(首次也跑这段;本题为零出题 —— manifest 由答案写入,直接按题面做)──</pre>';
   }
-  if(n===11){
-    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 11 题 / 共 17 题 · 控制面修复(kube-apiserver 不启)</div>'
+  if(n===12){
+    return '<div class="qmeta"><span class="zh">【中文卷】</span>第 12 题 / 共 17 题 · 控制面修复(kube-apiserver 不启)</div>'
       +'<p><code>cka-control-plane</code> 的 kube-apiserver 出问题了:<code>kubectl</code> 突然连不上集群(<i>The connection to the server … was refused / timeout</i>)。apiserver 是<b>静态 Pod</b>(manifest 在节点 <code>/etc/kubernetes/manifests/</code>),请排查并修复,让 <code>kubectl get nodes</code> 恢复正常。提示:kubectl 不可用时,用 <code>docker exec</code> 进节点看容器状态与 manifest。</p>'
       +'<p class="self">★首次做题:先滚到本页最底「恢复现场 → 出题」跑破坏命令(把 apiserver 镜像 tag 改坏,约 20 秒后 kubectl 就连不上了 = 题面生效),再回来排查。</p>'
       +'<div class="divider"></div>'
@@ -728,7 +734,7 @@ function qhtml(n){
       +'docker exec cka-control-plane grep image: /etc/kubernetes/manifests/kube-apiserver.yaml   # 期望:tag 正常(v1.xx.x),无 BROKEN 字样</pre>'
       +'<div class="divider"></div>'
       +'<p class="self">一键审计(点 ⧉ 复制 → 整段粘到 PowerShell;重复粘贴计数自动归零):5 项 —— apiserver 还没起 / manifest 没改回 / 节点 NotReady,当场抓出来</p>'
-      +'<pre class="audit"># ═══ 第 11 题 · 一键审计:控制面恢复状态(共 5 项)═══\n'
+      +'<pre class="audit"># ═══ 第 12 题 · 一键审计:控制面恢复状态(共 5 项)═══\n'
       +'$global:p=0;$global:f=0\n'
       +"function Chk($n,$pass,$d){ if($pass){$s='[PASS]';$global:p++}else{$s='[FAIL]';$global:f++}; Write-Host ('{0,-46} {1}  {2}' -f $n,$s,$d) }\n"
       +'\n'
@@ -743,8 +749,8 @@ function qhtml(n){
       +"Chk '⑤ 镜像 tag 形如 vX.Y.Z(版本号完整,与控制面一致)' ($tag -match '^v[0-9]+\\.[0-9]+\\.[0-9]+$') \"tag: $tag\"\n"
       +'\n'
       +"if($global:f -eq 0){Write-Host '★ 全绿:控制面修复完成,集群满血复活!' -f Green}else{Write-Host \"★ 有 $($global:f) 处 [FAIL]:对照上方修正 —— ③④ 连挂 = manifest 没改回(docker exec 进节点 grep image 看)\" -f Red}</pre>"
-      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q11.ps1(免粘贴,一条命令跑)</button>'
-      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q11.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
+      +'<button class="btn" style="margin:6px 0 0" onclick="dlAudit()">⬇ 下载 cka-audit-q12.ps1(免粘贴,一条命令跑)</button>'
+      +'<p class="self">下载后 cd 到下载目录,执行 <code>powershell -ExecutionPolicy Bypass -File .\\cka-audit-q12.ps1</code>(自带 UTF-8 BOM;Bypass 仅本次生效)。</p>'
       +'<div class="divider"></div>'
       +'<p class="self">恢复现场 = 出题(破坏可逆:只动一个 tag,答案就是改回):</p>'
       +'<pre># ── 出题 / 重刷出题(首次也跑这段:人为破坏 apiserver 镜像 tag → 拉不到镜像,apiserver 起不来)──\n'
@@ -759,11 +765,13 @@ function qhtml(n){
     +'<div class="empty">⏳ 本题尚未录入<br>题目 2~17 会陆续补上<br>—— 现在请专注第 1 题 ——</div>';
 }
 
+// ── 学习进度三色:done=已掌握(审计满分) learn=正在学 —— 改这两个数组即可更新题号颜色 ──
+var DONE=[1,5,6,7],LEARNING=[2];
 function render(){
   var nav=document.getElementById('qnav');nav.innerHTML='';
   for(var i=1;i<=N;i++){
     var b=document.createElement('button');
-    b.className='qn'+(i===cur?' cur':'')+(flags[i]?' flag':'');
+    b.className='qn'+(DONE.indexOf(i)>=0?' done':'')+(LEARNING.indexOf(i)>=0?' learn':'')+(i===cur?' cur':'')+(flags[i]?' flag':'');
     b.textContent=i;
     b.onclick=(function(k){return function(){cur=k;render()}})(i);
     nav.appendChild(b);
